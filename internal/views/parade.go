@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/matt-wright86/mardi-gras/internal/data"
 	"github.com/matt-wright86/mardi-gras/internal/ui"
 )
@@ -370,28 +371,21 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool) string {
 	if selected {
 		cursor := ui.ItemCursor.Render(ui.Cursor + " ")
 		row := cursor + line
+		// Pad to fill inner width, then apply highlight
 		rowWidth := lipgloss.Width(row)
-		padLen := innerWidth - rowWidth
-		if padLen < 0 {
-			padLen = 0
+		if padLen := innerWidth - rowWidth; padLen > 0 {
+			row += strings.Repeat(" ", padLen)
 		}
-		row += strings.Repeat(" ", padLen) // explicitly pad otherwise layout breaks on resize
-		content := ui.ItemSelectedBg.Render(row)
-		// strictly truncate block
-		content = truncate(content, innerWidth)
+		content := ui.ItemSelectedBg.Render(ansi.Truncate(row, innerWidth, ""))
 		return leftBorder + " " + content + " " + rightBorder
 	}
 
 	// Non-selected: pad with leading space for alignment (matching cursor indent)
 	row := "  " + line
-	rowWidth := lipgloss.Width(row)
-	padLen := innerWidth - rowWidth
-	if padLen < 0 {
-		padLen = 0
+	if padLen := innerWidth - lipgloss.Width(row); padLen > 0 {
+		row += strings.Repeat(" ", padLen)
 	}
-	row += strings.Repeat(" ", padLen)
-	content := lipgloss.NewStyle().Render(row)
-	content = truncate(content, innerWidth)
+	content := ansi.Truncate(row, innerWidth, "")
 	return leftBorder + " " + content + " " + rightBorder
 }
 
