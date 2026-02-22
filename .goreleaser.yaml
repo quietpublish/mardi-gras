@@ -29,6 +29,7 @@ brews:
   - repository:
       owner: matt-wright86
       name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: "https://github.com/matt-wright86/mardi-gras"
     description: "Terminal UI for Beads issue tracking — your issues deserve a parade"
     license: "MIT"
