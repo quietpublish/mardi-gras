@@ -74,6 +74,10 @@ type Model struct {
 	// Issue creation form
 	creating   bool
 	createForm components.CreateForm
+
+	// Command palette
+	showPalette bool
+	palette     components.Palette
 }
 
 // New creates a new app model from loaded issues.
@@ -183,6 +187,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_, err := data.CreateIssue(title, issueType, priority)
 			return mutateResultMsg{issueID: title, action: "created", err: err}
 		}
+	}
+
+	// Handle palette result
+	if result, ok := msg.(components.PaletteResult); ok {
+		m.showPalette = false
+		if !result.Cancelled {
+			return m.executePaletteAction(result.Action)
+		}
+		return m, nil
+	}
+
+	// Forward all messages to palette when active
+	if m.showPalette {
+		if km, ok := msg.(tea.KeyMsg); ok && km.String() == "ctrl+c" {
+			return m, tea.Quit
+		}
+		var cmd tea.Cmd
+		m.palette, cmd = m.palette.Update(msg)
+		return m, cmd
 	}
 
 	// Forward all messages to create form when active
@@ -558,6 +581,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.creating = true
 		m.createForm = components.NewCreateForm(m.width, m.height)
 		return m, m.createForm.Init()
+
+	case ":", "ctrl+k":
+		m.showPalette = true
+		m.palette = components.NewPalette(m.width, m.height, m.buildPaletteCommands())
+		return m, m.palette.Init()
 	}
 
 	// Navigation keys depend on active pane
@@ -779,6 +807,103 @@ func (m Model) createAndSwitchBranch() (tea.Model, tea.Cmd) {
 		}
 		return mutateResultMsg{issueID: issueCopy.ID, action: action}
 	}
+}
+
+// buildPaletteCommands returns the context-aware list of palette commands.
+func (m Model) buildPaletteCommands() []components.PaletteCommand {
+	cmds := []components.PaletteCommand{
+		{Name: "Set status: in_progress", Desc: "Mark issue as rolling", Key: "1", Action: components.ActionSetInProgress},
+		{Name: "Set status: open", Desc: "Mark issue as lined up", Key: "2", Action: components.ActionSetOpen},
+		{Name: "Close issue", Desc: "Mark issue as closed", Key: "3", Action: components.ActionCloseIssue},
+		{Name: "Set priority: P1 high", Desc: "Urgent work", Key: "!", Action: components.ActionSetPriorityHigh},
+		{Name: "Set priority: P2 medium", Desc: "Normal priority", Key: "@", Action: components.ActionSetPriorityMedium},
+		{Name: "Set priority: P3 low", Desc: "Can wait", Key: "#", Action: components.ActionSetPriorityLow},
+		{Name: "Set priority: P4 backlog", Desc: "Someday maybe", Key: "$", Action: components.ActionSetPriorityBacklog},
+		{Name: "Copy branch name", Desc: "Copy git branch to clipboard", Key: "b", Action: components.ActionCopyBranch},
+		{Name: "Create git branch", Desc: "Checkout new branch for issue", Key: "B", Action: components.ActionCreateBranch},
+		{Name: "New issue", Desc: "Create a new beads issue", Key: "N", Action: components.ActionNewIssue},
+		{Name: "Toggle focus mode", Desc: "Show only my work + top priority", Key: "f", Action: components.ActionToggleFocus},
+		{Name: "Toggle closed issues", Desc: "Show/hide past the stand", Key: "c", Action: components.ActionToggleClosed},
+		{Name: "Filter", Desc: "Fuzzy filter the parade list", Key: "/", Action: components.ActionFilter},
+		{Name: "Help", Desc: "Show keybinding help", Key: "?", Action: components.ActionHelp},
+		{Name: "Quit", Desc: "Exit Mardi Gras", Key: "q", Action: components.ActionQuit},
+	}
+
+	if m.claudeAvail {
+		cmds = append(cmds,
+			components.PaletteCommand{Name: "Launch agent", Desc: "Start Claude agent on issue", Key: "a", Action: components.ActionLaunchAgent},
+			components.PaletteCommand{Name: "Kill agent", Desc: "Stop agent working on issue", Key: "A", Action: components.ActionKillAgent},
+		)
+	}
+
+	if m.gtEnv.Available {
+		cmds = append(cmds,
+			components.PaletteCommand{Name: "Sling with formula", Desc: "Sling shiny formula to polecat", Key: "s", Action: components.ActionSlingFormula},
+			components.PaletteCommand{Name: "Nudge agent", Desc: "Nudge agent working on issue", Key: "n", Action: components.ActionNudgeAgent},
+		)
+	}
+
+	return cmds
+}
+
+// executePaletteAction maps a palette action to an existing method.
+func (m Model) executePaletteAction(action components.PaletteAction) (tea.Model, tea.Cmd) {
+	switch action {
+	case components.ActionSetInProgress:
+		return m.quickAction(data.StatusInProgress, "in_progress")
+	case components.ActionSetOpen:
+		return m.quickAction(data.StatusOpen, "open")
+	case components.ActionCloseIssue:
+		return m.closeSelectedIssue()
+	case components.ActionSetPriorityHigh:
+		return m.setPriority(data.PriorityHigh)
+	case components.ActionSetPriorityMedium:
+		return m.setPriority(data.PriorityMedium)
+	case components.ActionSetPriorityLow:
+		return m.setPriority(data.PriorityLow)
+	case components.ActionSetPriorityBacklog:
+		return m.setPriority(data.PriorityBacklog)
+	case components.ActionCopyBranch:
+		return m.copyBranchName()
+	case components.ActionCreateBranch:
+		return m.createAndSwitchBranch()
+	case components.ActionNewIssue:
+		m.creating = true
+		m.createForm = components.NewCreateForm(m.width, m.height)
+		return m, m.createForm.Init()
+	case components.ActionToggleFocus:
+		m.focusMode = !m.focusMode
+		m.rebuildParade()
+		label := "Focus mode ON"
+		if !m.focusMode {
+			label = "Focus mode OFF"
+		}
+		toast, cmd := components.ShowToast(label, components.ToastInfo, toastDuration)
+		m.toast = toast
+		return m, cmd
+	case components.ActionToggleClosed:
+		m.parade.ToggleClosed()
+		m.syncSelection()
+		return m, nil
+	case components.ActionFilter:
+		m.filtering = true
+		m.filterInput.Focus()
+		return m, textinput.Blink
+	case components.ActionLaunchAgent:
+		return m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	case components.ActionKillAgent:
+		return m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'A'}})
+	case components.ActionSlingFormula:
+		return m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	case components.ActionNudgeAgent:
+		return m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	case components.ActionHelp:
+		m.showHelp = true
+		return m, nil
+	case components.ActionQuit:
+		return m, tea.Quit
+	}
+	return m, nil
 }
 
 // diffIssues compares new issues against the previous snapshot and returns the count of changes.
@@ -1027,6 +1152,10 @@ func (m Model) View() string {
 		if overlay != "" {
 			screen = overlayStrings(screen, overlay)
 		}
+	}
+
+	if m.showPalette {
+		return m.palette.View()
 	}
 
 	if m.showHelp {

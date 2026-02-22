@@ -28,6 +28,7 @@ type Footer struct {
 // ParadeBindings are the default keybindings for the parade view.
 var ParadeBindings = []FooterBinding{
 	{Key: "?", Desc: "help"},
+	{Key: ":", Desc: "palette"},
 	{Key: "/", Desc: "filter"},
 	{Key: "j/k", Desc: "navigate"},
 	{Key: "1/2/3", Desc: "status"},
