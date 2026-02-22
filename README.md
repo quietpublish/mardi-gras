@@ -35,17 +35,31 @@ If you're going to stare at your tasks every day, they should at least make you 
 
 ## Install
 
+### Homebrew (macOS / Linux)
+
+```bash
+brew install matt-wright86/homebrew-tap/mardi-gras
+```
+
+### Go
+
 ```bash
 go install github.com/matt-wright86/mardi-gras/cmd/mg@latest
 ```
 
-Or build from source:
+> **Note**: Make sure `~/go/bin` is on your `PATH`. macOS ships a `/usr/bin/mg` (micro-emacs) that will shadow the binary otherwise.
+
+### From source
 
 ```bash
 git clone https://github.com/matt-wright86/mardi-gras.git
 cd mardi-gras
 make build
 ```
+
+### GitHub Releases
+
+Pre-built binaries for Linux, macOS, and Windows are available on the [Releases](https://github.com/matt-wright86/mardi-gras/releases) page.
 
 ## Usage
 
@@ -60,6 +74,9 @@ mg --path /path/to/.beads/issues.jsonl
 mg --block-types blocks,discovered-from
 # or via environment variable
 MG_BLOCK_TYPES=blocks,parent-child mg
+
+# Check version
+mg --version
 ```
 
 Mardi Gras reads your `.beads/issues.jsonl` directly — no daemon, no database, no config file. It polls for changes automatically, so if an agent updates an issue while you're watching, the parade reshuffles in real time.
@@ -201,11 +218,11 @@ No promises. Just dreams. PRs welcome.
 
 ## Contributing
 
-Mardi Gras is early. The parade route is laid, the floats are rolling, but there's plenty of room for more krewes.
+Mardi Gras is early. The parade route is laid, the floats are rolling, but there's plenty of room for more krewes. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and guidelines.
 
 ## License
 
-MIT
+[MIT](LICENSE)
 
 ---
 
