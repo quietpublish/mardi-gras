@@ -7,7 +7,6 @@ var (
 	// Header
 	HeaderStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(BrightGold).
 			Background(DimPurple).
 			Padding(0, 1)
 
@@ -19,26 +18,22 @@ var (
 	BeadStyleGold   = lipgloss.NewStyle().Foreground(Gold)
 	BeadStyleGreen  = lipgloss.NewStyle().Foreground(Green)
 
-	// Section headers in parade list
+	// Section headers in parade list (used for title text color within borders)
 	SectionRolling = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(StatusRolling).
-			PaddingLeft(1)
+			Foreground(StatusRolling)
 
 	SectionLinedUp = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(StatusLinedUp).
-			PaddingLeft(1)
+			Foreground(StatusLinedUp)
 
 	SectionStalled = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(StatusStalled).
-			PaddingLeft(1)
+			Foreground(StatusStalled)
 
 	SectionPassed = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(StatusPassed).
-			PaddingLeft(1)
+			Foreground(StatusPassed)
 
 	// Issue items in the list
 	ItemNormal = lipgloss.NewStyle().

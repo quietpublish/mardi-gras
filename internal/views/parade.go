@@ -14,21 +14,28 @@ type paradeSection struct {
 	Title  string
 	Symbol string
 	Style  lipgloss.Style
+	Color  lipgloss.Color
 	Status data.ParadeStatus
 }
 
 var sections = []paradeSection{
-	{Title: "ROLLING", Symbol: ui.SymRolling, Style: ui.SectionRolling, Status: data.ParadeRolling},
-	{Title: "LINED UP", Symbol: ui.SymLinedUp, Style: ui.SectionLinedUp, Status: data.ParadeLinedUp},
-	{Title: "STALLED", Symbol: ui.SymStalled, Style: ui.SectionStalled, Status: data.ParadeStalled},
-	{Title: "PAST THE STAND", Symbol: ui.SymPassed, Style: ui.SectionPassed, Status: data.ParadePastTheStand},
+	{Title: "Rolling", Symbol: ui.SymRolling, Style: ui.SectionRolling, Color: ui.StatusRolling, Status: data.ParadeRolling},
+	{Title: "Lined Up", Symbol: ui.SymLinedUp, Style: ui.SectionLinedUp, Color: ui.StatusLinedUp, Status: data.ParadeLinedUp},
+	{Title: "Stalled", Symbol: ui.SymStalled, Style: ui.SectionStalled, Color: ui.StatusStalled, Status: data.ParadeStalled},
+	{Title: "Past the Stand", Symbol: ui.SymPassed, Style: ui.SectionPassed, Color: ui.StatusPassed, Status: data.ParadePastTheStand},
 }
 
-// ParadeItem is a renderable entry — either a section header or an issue.
+// ParadeItem is a renderable entry — a section header, footer, or issue.
 type ParadeItem struct {
 	IsHeader bool
+	IsFooter bool
 	Section  paradeSection
 	Issue    *data.Issue
+}
+
+// isSelectable returns true if this item can receive the cursor.
+func (item ParadeItem) isSelectable() bool {
+	return !item.IsHeader && !item.IsFooter
 }
 
 // Parade is the grouped issue list view.
@@ -61,9 +68,9 @@ func NewParade(issues []data.Issue, width, height int, blockingTypes map[string]
 	}
 	p.rebuildItems()
 	if len(p.Items) > 0 {
-		// Move cursor to first non-header item
+		// Move cursor to first selectable item
 		for i, item := range p.Items {
-			if !item.IsHeader {
+			if item.isSelectable() {
 				p.Cursor = i
 				p.SelectedIssue = item.Issue
 				break
@@ -82,28 +89,31 @@ func (p *Parade) rebuildItems() {
 			continue
 		}
 
+		// Header (top border)
+		p.Items = append(p.Items, ParadeItem{IsHeader: true, Section: sec})
+
 		// Closed section: show collapsed count or expanded list
 		if sec.Status == data.ParadePastTheStand {
-			p.Items = append(p.Items, ParadeItem{IsHeader: true, Section: sec})
 			if p.ShowClosed {
 				for i := range issues {
-					p.Items = append(p.Items, ParadeItem{Issue: &issues[i]})
+					p.Items = append(p.Items, ParadeItem{Issue: &issues[i], Section: sec})
 				}
 			}
-			continue
+		} else {
+			for i := range issues {
+				p.Items = append(p.Items, ParadeItem{Issue: &issues[i], Section: sec})
+			}
 		}
 
-		p.Items = append(p.Items, ParadeItem{IsHeader: true, Section: sec})
-		for i := range issues {
-			p.Items = append(p.Items, ParadeItem{Issue: &issues[i]})
-		}
+		// Footer (bottom border)
+		p.Items = append(p.Items, ParadeItem{IsFooter: true, Section: sec})
 	}
 }
 
-// MoveUp moves the cursor up, skipping headers.
+// MoveUp moves the cursor up, skipping headers and footers.
 func (p *Parade) MoveUp() {
 	for i := p.Cursor - 1; i >= 0; i-- {
-		if !p.Items[i].IsHeader {
+		if p.Items[i].isSelectable() {
 			p.Cursor = i
 			p.SelectedIssue = p.Items[i].Issue
 			p.ensureVisible()
@@ -112,10 +122,10 @@ func (p *Parade) MoveUp() {
 	}
 }
 
-// MoveDown moves the cursor down, skipping headers.
+// MoveDown moves the cursor down, skipping headers and footers.
 func (p *Parade) MoveDown() {
 	for i := p.Cursor + 1; i < len(p.Items); i++ {
-		if !p.Items[i].IsHeader {
+		if p.Items[i].isSelectable() {
 			p.Cursor = i
 			p.SelectedIssue = p.Items[i].Issue
 			p.ensureVisible()
@@ -135,7 +145,7 @@ func (p *Parade) ToggleClosed() {
 	p.clampScroll()
 	// Restore cursor to the same issue if possible
 	for i, item := range p.Items {
-		if !item.IsHeader && item.Issue.ID == selectedID {
+		if item.isSelectable() && item.Issue.ID == selectedID {
 			p.Cursor = i
 			p.SelectedIssue = item.Issue
 			p.ensureVisible()
@@ -144,7 +154,7 @@ func (p *Parade) ToggleClosed() {
 	}
 	// Fallback to first selectable item
 	for i, item := range p.Items {
-		if !item.IsHeader {
+		if item.isSelectable() {
 			p.Cursor = i
 			p.SelectedIssue = item.Issue
 			p.ensureVisible()
@@ -208,10 +218,13 @@ func (p *Parade) View() string {
 
 	for idx, item := range visible {
 		globalIdx := p.ScrollOffset + idx
-		if item.IsHeader {
-			lines = append(lines, p.renderSectionHeader(item.Section))
-		} else {
-			lines = append(lines, p.renderIssue(item.Issue, globalIdx == p.Cursor))
+		switch {
+		case item.IsHeader:
+			lines = append(lines, p.renderBorderTop(item.Section))
+		case item.IsFooter:
+			lines = append(lines, p.renderBorderBottom(item.Section))
+		default:
+			lines = append(lines, p.renderIssue(item, globalIdx == p.Cursor))
 		}
 	}
 
@@ -227,25 +240,69 @@ func (p *Parade) View() string {
 	return lipgloss.NewStyle().Width(p.Width).Render(content)
 }
 
-func (p *Parade) renderSectionHeader(sec paradeSection) string {
+// renderBorderTop builds a top border line: ╭─ ● Rolling (2) ────────╮
+func (p *Parade) renderBorderTop(sec paradeSection) string {
 	count := len(p.Groups[sec.Status])
-	label := fmt.Sprintf("%s %s", sec.Title, sec.Symbol)
+	borderStyle := lipgloss.NewStyle().Foreground(sec.Color)
 
+	// Build the title content
+	var titleText string
 	if sec.Status == data.ParadePastTheStand {
 		toggle := ui.Collapsed
 		if p.ShowClosed {
 			toggle = ui.Expanded
 		}
-		label = fmt.Sprintf("%s %s (%d issues)", toggle, sec.Title, count)
+		titleText = fmt.Sprintf("%s %s %s (%d)", toggle, sec.Symbol, sec.Title, count)
 		if !p.ShowClosed {
-			label += "  [press c to expand]"
+			titleText += " press c"
 		}
+	} else {
+		titleText = fmt.Sprintf("%s %s (%d)", sec.Symbol, sec.Title, count)
 	}
 
-	return sec.Style.Width(p.Width).Render(label)
+	coloredTitle := sec.Style.Render(titleText)
+	titleWidth := lipgloss.Width(coloredTitle)
+
+	// ╭─ <title> ─────────────╮
+	prefix := borderStyle.Render(ui.BoxTopLeft + ui.BoxHorizontal + " ")
+	suffix := borderStyle.Render(" " + ui.BoxTopRight)
+
+	// Fill remaining width with ─ (account for space after title)
+	prefixW := lipgloss.Width(prefix)
+	suffixW := lipgloss.Width(suffix)
+	fillLen := p.Width - prefixW - titleWidth - 1 - suffixW // -1 for space before fill
+	if fillLen < 1 {
+		fillLen = 1
+	}
+	fill := borderStyle.Render(" " + strings.Repeat(ui.BoxHorizontal, fillLen))
+
+	return prefix + coloredTitle + fill + suffix
 }
 
-func (p *Parade) renderIssue(issue *data.Issue, selected bool) string {
+// renderBorderBottom builds a bottom border line: ╰────────────────────╯
+func (p *Parade) renderBorderBottom(sec paradeSection) string {
+	borderStyle := lipgloss.NewStyle().Foreground(sec.Color)
+
+	// ╰─...─╯
+	cornerL := borderStyle.Render(ui.BoxBottomLeft)
+	cornerR := borderStyle.Render(ui.BoxBottomRight)
+	cornersW := lipgloss.Width(cornerL) + lipgloss.Width(cornerR)
+
+	fillLen := p.Width - cornersW
+	if fillLen < 1 {
+		fillLen = 1
+	}
+	fill := borderStyle.Render(strings.Repeat(ui.BoxHorizontal, fillLen))
+
+	return cornerL + fill + cornerR
+}
+
+// renderIssue renders an issue row wrapped in │ section borders.
+func (p *Parade) renderIssue(item ParadeItem, selected bool) string {
+	issue := item.Issue
+	sec := item.Section
+	borderStyle := lipgloss.NewStyle().Foreground(sec.Color)
+
 	sym := statusSymbol(issue, p.issueMap, p.blockingTypes)
 	prio := data.PriorityLabel(issue.Priority)
 
@@ -264,13 +321,16 @@ func (p *Parade) renderIssue(issue *data.Issue, selected bool) string {
 		}
 	}
 
-	// Truncate title to fit, accounting for hint
+	// Inner width (between │ borders, with 1 char padding each side)
+	innerWidth := p.Width - 4 // │ + space + content + space + │
+
+	// Truncate title to fit
 	hintLen := lipgloss.Width(hint)
-	maxTitle := p.Width - 18 - hintLen
-	title := issue.Title
-	if len(title) > maxTitle && maxTitle > 3 {
-		title = title[:maxTitle-3] + "..."
+	maxTitle := innerWidth - 16 - hintLen
+	if maxTitle < 0 {
+		maxTitle = 0
 	}
+	title := truncate(issue.Title, maxTitle)
 
 	line := fmt.Sprintf("%s %s %s %s",
 		symStyle.Render(sym),
@@ -280,14 +340,21 @@ func (p *Parade) renderIssue(issue *data.Issue, selected bool) string {
 	)
 	line += hint
 
+	leftBorder := borderStyle.Render(ui.BoxVertical)
+	rightBorder := borderStyle.Render(ui.BoxVertical)
+
 	if selected {
 		cursor := ui.ItemCursor.Render(ui.Cursor + " ")
 		row := cursor + line
-		// Full-width highlight for selected row
-		return ui.ItemSelectedBg.Width(p.Width).Render(row)
+		// Pad content to fill inner width, then highlight
+		content := ui.ItemSelectedBg.Width(innerWidth).MaxWidth(innerWidth).Render(row)
+		return leftBorder + " " + content + " " + rightBorder
 	}
 
-	return ui.ItemNormal.Render(line)
+	// Non-selected: pad with leading space for alignment (matching cursor indent)
+	row := "  " + line
+	content := lipgloss.NewStyle().Width(innerWidth).MaxWidth(innerWidth).Render(row)
+	return leftBorder + " " + content + " " + rightBorder
 }
 
 func statusSymbol(issue *data.Issue, issueMap map[string]*data.Issue, blockingTypes map[string]bool) string {

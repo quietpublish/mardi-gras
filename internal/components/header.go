@@ -22,20 +22,22 @@ func (h Header) View() string {
 	stalled := len(h.Groups[data.ParadeStalled])
 	total := rolling + linedUp + stalled + len(h.Groups[data.ParadePastTheStand])
 
-	title := ui.HeaderStyle.Render(
-		fmt.Sprintf("%s MARDI GRAS %s", ui.FleurDeLis, ui.FleurDeLis),
-	)
+	titleStr := fmt.Sprintf("%s MARDI GRAS %s", ui.FleurDeLis, ui.FleurDeLis)
+	title := ui.HeaderStyle.Render(ui.ApplyMardiGrasGradient(titleStr))
 
 	counts := ui.HeaderCounts.Render(fmt.Sprintf(
-		"%d rolling | %d lined up | %d stalled | %d total",
-		rolling, linedUp, stalled, total,
+		" %d ⊘  %d ♪  %d ●  %d ✓ ",
+		stalled, linedUp, rolling, len(h.Groups[data.ParadePastTheStand]),
 	))
+
+	bar := h.renderProgressBar(total, len(h.Groups[data.ParadePastTheStand]), 20)
 
 	titleLine := lipgloss.JoinHorizontal(
 		lipgloss.Center,
 		title,
-		"  ",
 		counts,
+		"  ",
+		bar,
 	)
 
 	// Pad to full width
@@ -48,11 +50,6 @@ func (h Header) View() string {
 
 // renderBeadString creates the decorative bead string separator.
 func (h Header) renderBeadString() string {
-	colors := []lipgloss.Style{
-		ui.BeadStylePurple,
-		ui.BeadStyleGold,
-		ui.BeadStyleGreen,
-	}
 	beads := []string{ui.BeadRound, ui.BeadDiamond}
 
 	var parts []string
@@ -60,16 +57,36 @@ func (h Header) renderBeadString() string {
 	ci := 0
 	for visibleWidth < h.Width-2 {
 		bead := beads[ci%2]
-		style := colors[ci%3]
-		parts = append(parts, style.Render(bead))
+		parts = append(parts, bead)
 		visibleWidth++
 		if visibleWidth < h.Width-2 {
-			parts = append(parts, style.Render(ui.BeadDash))
+			parts = append(parts, ui.BeadDash)
 			visibleWidth++
 		}
 		ci++
 	}
 
-	line := strings.Join(parts, "")
-	return lipgloss.NewStyle().Width(h.Width).Render(line)
+	rawString := strings.Join(parts, "")
+	gradientString := ui.ApplyMardiGrasGradient(rawString)
+	return lipgloss.NewStyle().Width(h.Width).Render(gradientString)
+}
+
+func (h Header) renderProgressBar(total, done int, length int) string {
+	if total == 0 {
+		return ""
+	}
+	filledLen := int((float64(done) / float64(total)) * float64(length))
+	emptyLen := length - filledLen
+
+	filled := strings.Repeat("█", filledLen)
+	empty := strings.Repeat("█", emptyLen) // Or "━"
+
+	percent := int((float64(done) / float64(total)) * 100)
+
+	styledFilled := ui.ApplyPartialMardiGrasGradient(filled, length)
+	styledEmpty := lipgloss.NewStyle().Foreground(ui.DimPurple).Render(empty)
+
+	textRight := ui.HeaderCounts.Render(fmt.Sprintf(" %d%%", percent))
+
+	return styledFilled + styledEmpty + textRight
 }

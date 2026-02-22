@@ -28,6 +28,14 @@ const (
 	SymNonBlocking = "·"
 	SymNextArrow   = "next →"
 
+	// Section borders (rounded)
+	BoxTopLeft     = "╭"
+	BoxTopRight    = "╮"
+	BoxBottomLeft  = "╰"
+	BoxBottomRight = "╯"
+	BoxHorizontal  = "─"
+	BoxVertical    = "│"
+
 	// Separators
 	DividerH = "━"
 	DividerV = "│"
