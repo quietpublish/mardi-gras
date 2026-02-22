@@ -12,13 +12,14 @@ import (
 
 // Detail renders the right-panel issue details with a scrollable viewport.
 type Detail struct {
-	Issue     *data.Issue
-	AllIssues []data.Issue
-	IssueMap  map[string]*data.Issue
-	Viewport  viewport.Model
-	Width     int
-	Height    int
-	Focused   bool
+	Issue         *data.Issue
+	AllIssues     []data.Issue
+	IssueMap      map[string]*data.Issue
+	BlockingTypes map[string]bool
+	Viewport      viewport.Model
+	Width         int
+	Height        int
+	Focused       bool
 }
 
 // NewDetail creates a detail panel.
@@ -73,6 +74,11 @@ func (d *Detail) renderContent() string {
 		return ""
 	}
 
+	bt := d.BlockingTypes
+	if bt == nil {
+		bt = data.DefaultBlockingTypes
+	}
+
 	var lines []string
 
 	// Title
@@ -80,9 +86,9 @@ func (d *Detail) renderContent() string {
 	lines = append(lines, "")
 
 	// Status row
-	statusSym := statusSymbol(issue, d.IssueMap)
-	statusLabel := paradeLabel(issue, d.IssueMap)
-	statusStyle := lipgloss.NewStyle().Foreground(statusColor(issue, d.IssueMap))
+	statusSym := statusSymbol(issue, d.IssueMap, bt)
+	statusLabel := paradeLabel(issue, d.IssueMap, bt)
+	statusStyle := lipgloss.NewStyle().Foreground(statusColor(issue, d.IssueMap, bt))
 	lines = append(lines, d.row("Status:", statusStyle.Render(statusSym+" "+statusLabel+" ("+string(issue.Status)+")")))
 
 	// Type
@@ -135,14 +141,16 @@ func (d *Detail) renderContent() string {
 		lines = append(lines, ui.DetailValue.Render(wrapped))
 	}
 
-	// Dependencies
-	blockedBy := issue.BlockedByIDs(d.IssueMap)
-	blocks := issue.BlocksIDs(d.AllIssues)
-	if len(blockedBy) > 0 || len(blocks) > 0 {
+	// Dependencies — use EvaluateDependencies for full classification
+	eval := issue.EvaluateDependencies(d.IssueMap, bt)
+	blocks := issue.BlocksIDs(d.AllIssues, bt)
+	hasDeps := len(eval.Edges) > 0 || len(blocks) > 0
+	if hasDeps {
 		lines = append(lines, "")
 		lines = append(lines, ui.DetailSection.Render("DEPENDENCIES"))
 
-		for _, id := range blockedBy {
+		// Blocking (unresolved)
+		for _, id := range eval.BlockingIDs {
 			title := id
 			if dep, ok := d.IssueMap[id]; ok {
 				title = dep.Title
@@ -151,6 +159,37 @@ func (d *Detail) renderContent() string {
 				fmt.Sprintf("  %s waiting on %s %s (%s)", ui.SymStalled, ui.DepArrow, id, truncate(title, 30)),
 			))
 		}
+
+		// Missing (dangling ref)
+		for _, id := range eval.MissingIDs {
+			lines = append(lines, ui.DepMissing.Render(
+				fmt.Sprintf("  %s missing %s %s (not found)", ui.SymMissing, ui.DepArrow, id),
+			))
+		}
+
+		// Resolved (closed blockers) — dimmed
+		for _, id := range eval.ResolvedIDs {
+			title := id
+			if dep, ok := d.IssueMap[id]; ok {
+				title = dep.Title
+			}
+			lines = append(lines, ui.DepResolved.Render(
+				fmt.Sprintf("  %s resolved %s %s (%s)", ui.SymResolved, ui.DepArrow, id, truncate(title, 30)),
+			))
+		}
+
+		// Non-blocking (other dep types)
+		for _, edge := range eval.NonBlocking {
+			title := edge.DependsOnID
+			if dep, ok := d.IssueMap[edge.DependsOnID]; ok {
+				title = dep.Title
+			}
+			lines = append(lines, ui.DepNonBlocking.Render(
+				fmt.Sprintf("  %s related %s %s (%s) (type: %s)", ui.SymNonBlocking, ui.DepArrow, edge.DependsOnID, truncate(title, 25), edge.Type),
+			))
+		}
+
+		// Reverse: what this issue blocks
 		for _, id := range blocks {
 			title := id
 			if dep, ok := d.IssueMap[id]; ok {
@@ -169,14 +208,17 @@ func (d *Detail) row(label, value string) string {
 	return ui.DetailLabel.Render(label) + " " + value
 }
 
-func paradeLabel(issue *data.Issue, issueMap map[string]*data.Issue) string {
+func paradeLabel(issue *data.Issue, issueMap map[string]*data.Issue, blockingTypes map[string]bool) string {
 	switch issue.Status {
-	case data.StatusInProgress:
-		return "Rolling"
 	case data.StatusClosed:
 		return "Past the Stand"
+	case data.StatusInProgress:
+		if issue.EvaluateDependencies(issueMap, blockingTypes).IsBlocked {
+			return "Stalled"
+		}
+		return "Rolling"
 	default:
-		if issue.IsBlocked(issueMap) {
+		if issue.EvaluateDependencies(issueMap, blockingTypes).IsBlocked {
 			return "Stalled"
 		}
 		return "Lined Up"

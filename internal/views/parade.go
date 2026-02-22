@@ -42,20 +42,22 @@ type Parade struct {
 	AllIssues     []data.Issue
 	Groups        map[data.ParadeStatus][]data.Issue
 	issueMap      map[string]*data.Issue
+	blockingTypes map[string]bool
 	SelectedIssue *data.Issue
 }
 
 // NewParade creates a parade view from a set of issues.
-func NewParade(issues []data.Issue, width, height int) Parade {
-	groups := data.GroupByParade(issues)
+func NewParade(issues []data.Issue, width, height int, blockingTypes map[string]bool) Parade {
+	groups := data.GroupByParade(issues, blockingTypes)
 	issueMap := data.BuildIssueMap(issues)
 	p := Parade{
-		ShowClosed: false,
-		Width:      width,
-		Height:     height,
-		AllIssues:  issues,
-		Groups:     groups,
-		issueMap:   issueMap,
+		ShowClosed:    false,
+		Width:         width,
+		Height:        height,
+		AllIssues:     issues,
+		Groups:        groups,
+		issueMap:      issueMap,
+		blockingTypes: blockingTypes,
 	}
 	p.rebuildItems()
 	if len(p.Items) > 0 {
@@ -244,18 +246,31 @@ func (p *Parade) renderSectionHeader(sec paradeSection) string {
 }
 
 func (p *Parade) renderIssue(issue *data.Issue, selected bool) string {
-	sym := statusSymbol(issue, p.issueMap)
+	sym := statusSymbol(issue, p.issueMap, p.blockingTypes)
 	prio := data.PriorityLabel(issue.Priority)
 
-	// Truncate title to fit
-	maxTitle := p.Width - 18
+	prioStyle := ui.BadgePriority.Foreground(ui.PriorityColor(int(issue.Priority)))
+	symStyle := lipgloss.NewStyle().Foreground(statusColor(issue, p.issueMap, p.blockingTypes))
+
+	// Build the "next blocker" hint for stalled issues
+	hint := ""
+	eval := issue.EvaluateDependencies(p.issueMap, p.blockingTypes)
+	if eval.IsBlocked && eval.NextBlockerID != "" {
+		hintStyle := lipgloss.NewStyle().Foreground(ui.Muted)
+		if target, ok := p.issueMap[eval.NextBlockerID]; ok {
+			hint = hintStyle.Render(fmt.Sprintf(" %s %s %s", ui.SymNextArrow, eval.NextBlockerID, truncate(target.Title, 20)))
+		} else {
+			hint = hintStyle.Render(fmt.Sprintf(" %s missing %s", ui.SymNextArrow, eval.NextBlockerID))
+		}
+	}
+
+	// Truncate title to fit, accounting for hint
+	hintLen := lipgloss.Width(hint)
+	maxTitle := p.Width - 18 - hintLen
 	title := issue.Title
 	if len(title) > maxTitle && maxTitle > 3 {
 		title = title[:maxTitle-3] + "..."
 	}
-
-	prioStyle := ui.BadgePriority.Foreground(ui.PriorityColor(int(issue.Priority)))
-	symStyle := lipgloss.NewStyle().Foreground(statusColor(issue, p.issueMap))
 
 	line := fmt.Sprintf("%s %s %s %s",
 		symStyle.Render(sym),
@@ -263,6 +278,7 @@ func (p *Parade) renderIssue(issue *data.Issue, selected bool) string {
 		title,
 		prioStyle.Render(prio),
 	)
+	line += hint
 
 	if selected {
 		cursor := ui.ItemCursor.Render(ui.Cursor + " ")
@@ -274,28 +290,34 @@ func (p *Parade) renderIssue(issue *data.Issue, selected bool) string {
 	return ui.ItemNormal.Render(line)
 }
 
-func statusSymbol(issue *data.Issue, issueMap map[string]*data.Issue) string {
+func statusSymbol(issue *data.Issue, issueMap map[string]*data.Issue, blockingTypes map[string]bool) string {
 	switch issue.Status {
-	case data.StatusInProgress:
-		return ui.SymRolling
 	case data.StatusClosed:
 		return ui.SymPassed
+	case data.StatusInProgress:
+		if issue.EvaluateDependencies(issueMap, blockingTypes).IsBlocked {
+			return ui.SymStalled
+		}
+		return ui.SymRolling
 	default:
-		if issue.IsBlocked(issueMap) {
+		if issue.EvaluateDependencies(issueMap, blockingTypes).IsBlocked {
 			return ui.SymStalled
 		}
 		return ui.SymLinedUp
 	}
 }
 
-func statusColor(issue *data.Issue, issueMap map[string]*data.Issue) lipgloss.Color {
+func statusColor(issue *data.Issue, issueMap map[string]*data.Issue, blockingTypes map[string]bool) lipgloss.Color {
 	switch issue.Status {
-	case data.StatusInProgress:
-		return ui.StatusRolling
 	case data.StatusClosed:
 		return ui.StatusPassed
+	case data.StatusInProgress:
+		if issue.EvaluateDependencies(issueMap, blockingTypes).IsBlocked {
+			return ui.StatusStalled
+		}
+		return ui.StatusRolling
 	default:
-		if issue.IsBlocked(issueMap) {
+		if issue.EvaluateDependencies(issueMap, blockingTypes).IsBlocked {
 			return ui.StatusStalled
 		}
 		return ui.StatusLinedUp

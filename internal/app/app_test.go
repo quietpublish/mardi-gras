@@ -28,7 +28,7 @@ func TestFileChangedMsgPreservesSelectionAndClosedState(t *testing.T) {
 		testIssue("closed-1", data.StatusClosed),
 	}
 
-	m := New(issues, "")
+	m := New(issues, "", false, data.DefaultBlockingTypes)
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	got := model.(Model)
 
@@ -64,7 +64,7 @@ func TestFilteringModeAcceptsTypedInput(t *testing.T) {
 		testIssue("beta-1", data.StatusOpen),
 	}
 
-	m := New(issues, "")
+	m := New(issues, "", false, data.DefaultBlockingTypes)
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	got := model.(Model)
 
@@ -86,7 +86,7 @@ func TestFilteringModeQStillQuits(t *testing.T) {
 		testIssue("alpha-1", data.StatusOpen),
 	}
 
-	m := New(issues, "")
+	m := New(issues, "", false, data.DefaultBlockingTypes)
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	got := model.(Model)
 
@@ -112,7 +112,7 @@ func TestHelpCanOpenFromFilteringMode(t *testing.T) {
 		testIssue("alpha-1", data.StatusOpen),
 	}
 
-	m := New(issues, "")
+	m := New(issues, "", false, data.DefaultBlockingTypes)
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	got := model.(Model)
 

@@ -26,3 +26,6 @@ go.work.sum
 
 # Internal docs (keep local, do not track)
 docs/internal/
+
+# Beads local project tracking
+.beads/

@@ -23,25 +23,27 @@ const (
 
 // Model is the root BubbleTea model.
 type Model struct {
-	issues      []data.Issue
-	groups      map[data.ParadeStatus][]data.Issue
-	parade      views.Parade
-	detail      views.Detail
-	header      components.Header
-	activPane   Pane
-	width       int
-	height      int
-	watchPath   string
-	lastFileMod time.Time
-	filterInput textinput.Model
-	filtering   bool
-	showHelp    bool
-	ready       bool
+	issues        []data.Issue
+	groups        map[data.ParadeStatus][]data.Issue
+	parade        views.Parade
+	detail        views.Detail
+	header        components.Header
+	activPane     Pane
+	width         int
+	height        int
+	watchPath     string
+	pathExplicit  bool
+	lastFileMod   time.Time
+	blockingTypes map[string]bool
+	filterInput   textinput.Model
+	filtering     bool
+	showHelp      bool
+	ready         bool
 }
 
 // New creates a new app model from loaded issues.
-func New(issues []data.Issue, watchPath string) Model {
-	groups := data.GroupByParade(issues)
+func New(issues []data.Issue, watchPath string, pathExplicit bool, blockingTypes map[string]bool) Model {
+	groups := data.GroupByParade(issues, blockingTypes)
 	lastFileMod := time.Time{}
 	if watchPath != "" {
 		if mod, err := data.FileModTime(watchPath); err == nil {
@@ -56,12 +58,14 @@ func New(issues []data.Issue, watchPath string) Model {
 	ti.Width = 50
 
 	return Model{
-		issues:      issues,
-		groups:      groups,
-		activPane:   PaneParade,
-		watchPath:   watchPath,
-		lastFileMod: lastFileMod,
-		filterInput: ti,
+		issues:        issues,
+		groups:        groups,
+		activPane:     PaneParade,
+		watchPath:     watchPath,
+		pathExplicit:  pathExplicit,
+		lastFileMod:   lastFileMod,
+		blockingTypes: blockingTypes,
+		filterInput:   ti,
 	}
 }
 
@@ -94,7 +98,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case data.FileChangedMsg:
 		m.issues = msg.Issues
-		m.groups = data.GroupByParade(msg.Issues)
+		m.groups = data.GroupByParade(msg.Issues, m.blockingTypes)
 		if !msg.LastMod.IsZero() {
 			m.lastFileMod = msg.LastMod
 		}
@@ -284,10 +288,11 @@ func (m *Model) layout() {
 	m.detail.SetSize(detailW, bodyH)
 	m.detail.AllIssues = m.issues
 	m.detail.IssueMap = data.BuildIssueMap(m.issues)
+	m.detail.BlockingTypes = m.blockingTypes
 
 	// Initialize parade on first layout
 	if len(m.parade.Items) == 0 {
-		m.parade = views.NewParade(m.issues, paradeW, bodyH)
+		m.parade = views.NewParade(m.issues, paradeW, bodyH, m.blockingTypes)
 		m.syncSelection()
 	}
 
@@ -319,7 +324,7 @@ func (m *Model) rebuildParade() {
 	groups := m.groups
 	if m.filterInput.Value() != "" {
 		// Use section counts from the filtered list while filtering.
-		groups = data.GroupByParade(filteredIssues)
+		groups = data.GroupByParade(filteredIssues, m.blockingTypes)
 	}
 
 	m.header = components.Header{
@@ -327,7 +332,7 @@ func (m *Model) rebuildParade() {
 		Groups: groups,
 	}
 
-	m.parade = views.NewParade(filteredIssues, paradeW, bodyH)
+	m.parade = views.NewParade(filteredIssues, paradeW, bodyH, m.blockingTypes)
 	if oldShowClosed {
 		m.parade.ToggleClosed()
 	}
@@ -335,6 +340,7 @@ func (m *Model) rebuildParade() {
 
 	m.detail.AllIssues = m.issues
 	m.detail.IssueMap = data.BuildIssueMap(m.issues)
+	m.detail.BlockingTypes = m.blockingTypes
 	m.syncSelection()
 }
 
@@ -396,6 +402,9 @@ func (m Model) View() string {
 			Render(m.filterInput.View())
 	} else {
 		footer := components.NewFooter(m.width, m.activPane == PaneDetail)
+		footer.SourcePath = m.watchPath
+		footer.LastRefresh = m.lastFileMod
+		footer.PathExplicit = m.pathExplicit
 		bottomBar = footer.View()
 	}
 

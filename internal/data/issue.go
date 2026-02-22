@@ -55,6 +55,37 @@ type Dependency struct {
 	CreatedBy   string `json:"created_by"`
 }
 
+// DefaultBlockingTypes is the set of dependency types that count as blockers.
+var DefaultBlockingTypes = map[string]bool{"blocks": true}
+
+// DepStatus classifies a single dependency edge after evaluation.
+type DepStatus int
+
+const (
+	DepBlocking    DepStatus = iota // unresolved blocker exists
+	DepResolved                     // blocker exists but is closed
+	DepMissing                      // depends_on_id not found in map
+	DepNonBlocking                  // dep type not in blockingTypes set
+)
+
+// DepEdge is a single evaluated dependency relationship.
+type DepEdge struct {
+	Type        string
+	DependsOnID string
+	Status      DepStatus
+}
+
+// DepEval is the result of evaluating all dependencies for an issue.
+type DepEval struct {
+	Edges         []DepEdge
+	BlockingIDs   []string  // exist + not closed
+	ResolvedIDs   []string  // exist + closed
+	MissingIDs    []string  // not found in issueMap
+	NonBlocking   []DepEdge // dep type not in blockingTypes
+	IsBlocked     bool
+	NextBlockerID string // first of BlockingIDs, else first of MissingIDs
+}
+
 // Issue represents a single Beads issue.
 type Issue struct {
 	ID                 string       `json:"id"`
@@ -76,44 +107,73 @@ type Issue struct {
 	AcceptanceCriteria string       `json:"acceptance_criteria,omitempty"`
 }
 
-// IsBlocked returns true if this issue depends on an unclosed blocker.
-func (i *Issue) IsBlocked(issueMap map[string]*Issue) bool {
+// EvaluateDependencies is the canonical function for classifying all dependency
+// edges on an issue. It de-duplicates by type|dependsOnID, classifies each edge,
+// and computes aggregate blocked state.
+func (i *Issue) EvaluateDependencies(issueMap map[string]*Issue, blockingTypes map[string]bool) DepEval {
+	var eval DepEval
+	seen := make(map[string]bool)
+
 	for _, dep := range i.Dependencies {
-		if dep.Type != "blocks" {
+		key := dep.Type + "|" + dep.DependsOnID
+		if seen[key] {
 			continue
 		}
-		if blocker, ok := issueMap[dep.DependsOnID]; ok {
-			if blocker.Status != StatusClosed {
-				return true
-			}
+		seen[key] = true
+
+		edge := DepEdge{Type: dep.Type, DependsOnID: dep.DependsOnID}
+
+		if !blockingTypes[dep.Type] {
+			edge.Status = DepNonBlocking
+			eval.NonBlocking = append(eval.NonBlocking, edge)
+			eval.Edges = append(eval.Edges, edge)
+			continue
 		}
+
+		target, exists := issueMap[dep.DependsOnID]
+		if !exists {
+			edge.Status = DepMissing
+			eval.MissingIDs = append(eval.MissingIDs, dep.DependsOnID)
+		} else if target.Status == StatusClosed {
+			edge.Status = DepResolved
+			eval.ResolvedIDs = append(eval.ResolvedIDs, dep.DependsOnID)
+		} else {
+			edge.Status = DepBlocking
+			eval.BlockingIDs = append(eval.BlockingIDs, dep.DependsOnID)
+		}
+		eval.Edges = append(eval.Edges, edge)
 	}
-	return false
+
+	eval.IsBlocked = len(eval.BlockingIDs) > 0 || len(eval.MissingIDs) > 0
+	if len(eval.BlockingIDs) > 0 {
+		eval.NextBlockerID = eval.BlockingIDs[0]
+	} else if len(eval.MissingIDs) > 0 {
+		eval.NextBlockerID = eval.MissingIDs[0]
+	}
+	return eval
+}
+
+// IsBlocked returns true if this issue depends on an unclosed blocker.
+// Delegates to EvaluateDependencies with DefaultBlockingTypes.
+func (i *Issue) IsBlocked(issueMap map[string]*Issue) bool {
+	return i.EvaluateDependencies(issueMap, DefaultBlockingTypes).IsBlocked
 }
 
 // BlockedByIDs returns the IDs of open issues blocking this one.
+// Delegates to EvaluateDependencies with DefaultBlockingTypes.
 func (i *Issue) BlockedByIDs(issueMap map[string]*Issue) []string {
-	var blockers []string
-	for _, dep := range i.Dependencies {
-		if dep.Type != "blocks" {
-			continue
-		}
-		if blocker, ok := issueMap[dep.DependsOnID]; ok {
-			if blocker.Status != StatusClosed {
-				blockers = append(blockers, dep.DependsOnID)
-			}
-		}
-	}
-	return blockers
+	eval := i.EvaluateDependencies(issueMap, DefaultBlockingTypes)
+	return eval.BlockingIDs
 }
 
 // BlocksIDs returns the IDs of issues that this issue blocks.
-func (i *Issue) BlocksIDs(allIssues []Issue) []string {
+func (i *Issue) BlocksIDs(allIssues []Issue, blockingTypes map[string]bool) []string {
 	var blocked []string
 	for _, other := range allIssues {
 		for _, dep := range other.Dependencies {
-			if dep.Type == "blocks" && dep.DependsOnID == i.ID {
+			if blockingTypes[dep.Type] && dep.DependsOnID == i.ID {
 				blocked = append(blocked, other.ID)
+				break
 			}
 		}
 	}
@@ -145,14 +205,18 @@ func (i *Issue) AgeLabel() string {
 }
 
 // ParadeGroup determines which parade section this issue belongs to.
-func (i *Issue) ParadeGroup(issueMap map[string]*Issue) ParadeStatus {
+// Stalled wins over Rolling: an in_progress issue with unresolved blockers is Stalled.
+func (i *Issue) ParadeGroup(issueMap map[string]*Issue, blockingTypes map[string]bool) ParadeStatus {
 	switch i.Status {
-	case StatusInProgress:
-		return ParadeRolling
 	case StatusClosed:
 		return ParadePastTheStand
+	case StatusInProgress:
+		if i.EvaluateDependencies(issueMap, blockingTypes).IsBlocked {
+			return ParadeStalled
+		}
+		return ParadeRolling
 	case StatusOpen:
-		if i.IsBlocked(issueMap) {
+		if i.EvaluateDependencies(issueMap, blockingTypes).IsBlocked {
 			return ParadeStalled
 		}
 		return ParadeLinedUp

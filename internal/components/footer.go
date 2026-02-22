@@ -1,7 +1,10 @@
 package components
 
 import (
+	"fmt"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/matt-wright86/mardi-gras/internal/ui"
@@ -15,8 +18,11 @@ type FooterBinding struct {
 
 // Footer renders the keybinding help bar.
 type Footer struct {
-	Width    int
-	Bindings []FooterBinding
+	Width        int
+	Bindings     []FooterBinding
+	SourcePath   string
+	LastRefresh  time.Time
+	PathExplicit bool
 }
 
 // ParadeBindings are the default keybindings for the parade view.
@@ -41,14 +47,51 @@ var DetailBindings = []FooterBinding{
 
 // View renders the footer.
 func (f Footer) View() string {
+	// Build keybindings section (right side)
 	var parts []string
 	for _, b := range f.Bindings {
 		key := ui.FooterKey.Render(b.Key)
 		desc := ui.FooterDesc.Render(b.Desc)
 		parts = append(parts, key+" "+desc)
 	}
-	content := strings.Join(parts, "  ")
-	return ui.FooterStyle.Width(f.Width).Render(content)
+	keybindings := strings.Join(parts, "  ")
+
+	// Build source info (left side)
+	sourceInfo := ""
+	if f.SourcePath != "" {
+		name := filepath.Base(f.SourcePath)
+		mode := "(auto)"
+		if f.PathExplicit {
+			mode = "(--path)"
+		}
+		age := "?"
+		if !f.LastRefresh.IsZero() {
+			elapsed := time.Since(f.LastRefresh)
+			switch {
+			case elapsed < time.Minute:
+				age = fmt.Sprintf("%ds ago", int(elapsed.Seconds()))
+			case elapsed < time.Hour:
+				age = fmt.Sprintf("%dm ago", int(elapsed.Minutes()))
+			default:
+				age = fmt.Sprintf("%dh ago", int(elapsed.Hours()))
+			}
+		}
+		sourceInfo = ui.FooterSource.Render(fmt.Sprintf("%s %s · %s", name, mode, age))
+	}
+
+	if sourceInfo != "" {
+		// Lay out: source left, keybindings right
+		sourceW := lipgloss.Width(sourceInfo)
+		keysW := lipgloss.Width(keybindings)
+		gap := f.Width - sourceW - keysW - 2 // 2 for padding
+		if gap < 1 {
+			gap = 1
+		}
+		content := sourceInfo + strings.Repeat(" ", gap) + keybindings
+		return ui.FooterStyle.Width(f.Width).Render(content)
+	}
+
+	return ui.FooterStyle.Width(f.Width).Render(keybindings)
 }
 
 // NewFooter creates a footer with the given width and pane focus.

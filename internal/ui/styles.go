@@ -107,6 +107,19 @@ var (
 	DepBlocks = lipgloss.NewStyle().
 			Foreground(StatusLinedUp)
 
+	DepMissing = lipgloss.NewStyle().
+			Foreground(StatusStalled).
+			Bold(true)
+
+	DepResolved = lipgloss.NewStyle().
+			Foreground(StatusPassed)
+
+	DepNonBlocking = lipgloss.NewStyle().
+			Foreground(Muted)
+
+	FooterSource = lipgloss.NewStyle().
+			Foreground(Muted)
+
 	// Filter Input
 	InputPrompt = lipgloss.NewStyle().
 			Foreground(BrightGold).
@@ -122,24 +135,32 @@ var (
 	// Help Overlay
 	HelpOverlayBg = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(Purple).
-			Background(lipgloss.Color("#1B1B1B")).
-			Padding(0, 2)
+			BorderForeground(BrightPurple).
+			Background(lipgloss.Color("#121521")).
+			Padding(1, 2)
 
 	HelpTitle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(BrightGold).
 			Align(lipgloss.Center)
 
+	HelpSubtitle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#A9AFBF")).
+			Align(lipgloss.Center)
+
 	HelpSection = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(White).
+			Foreground(BrightGreen).
 			Underline(true)
 
 	HelpKey = lipgloss.NewStyle().
 		Bold(true).
-		Foreground(StatusLinedUp)
+		Foreground(Gold)
 
 	HelpDesc = lipgloss.NewStyle().
-			Foreground(Light)
+			Foreground(lipgloss.Color("#D6D8DF"))
+
+	HelpHint = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#8E94A6")).
+			Align(lipgloss.Center)
 )

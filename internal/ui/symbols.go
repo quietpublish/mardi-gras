@@ -21,8 +21,12 @@ const (
 	Collapsed = "▶"
 
 	// Dependencies
-	DepArrow = "→"
-	DepTree  = "└─"
+	DepArrow       = "→"
+	DepTree        = "└─"
+	SymMissing     = "!"
+	SymResolved    = "✓" // alias of SymPassed
+	SymNonBlocking = "·"
+	SymNextArrow   = "next →"
 
 	// Separators
 	DividerH = "━"
