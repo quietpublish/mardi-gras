@@ -29,7 +29,7 @@ func LaunchInTmux(prompt, projectDir, issueID string) (string, error) {
 	cmd := exec.Command("tmux", "split-window",
 		"-h",        // vertical split (pane to the right)
 		"-l", "60%", // agent gets 60% of width
-		"-d",        // don't switch focus
+		"-d", // don't switch focus
 		"-c", projectDir,
 		"-P", "-F", "#{pane_id}", // print the new pane ID
 		"--", "claude", "--teammate-mode", "tmux", prompt,
