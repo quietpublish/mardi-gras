@@ -226,6 +226,34 @@ func TestPaletteFuzzyFilterClearRestores(t *testing.T) {
 	}
 }
 
+func TestPaletteSelectedNameDefault(t *testing.T) {
+	cmds := testCommands()
+	p := NewPalette(80, 24, cmds)
+	name := p.SelectedName()
+	if name != cmds[0].Name {
+		t.Fatalf("expected %q, got %q", cmds[0].Name, name)
+	}
+}
+
+func TestPaletteSelectedNameAfterNavigation(t *testing.T) {
+	cmds := testCommands()
+	p := NewPalette(80, 24, cmds)
+	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyDown})
+	p, _ = p.Update(tea.KeyMsg{Type: tea.KeyDown})
+	name := p.SelectedName()
+	if name != cmds[2].Name {
+		t.Fatalf("expected %q at cursor 2, got %q", cmds[2].Name, name)
+	}
+}
+
+func TestPaletteSelectedNameEmpty(t *testing.T) {
+	p := NewPalette(80, 24, nil)
+	name := p.SelectedName()
+	if name != "" {
+		t.Fatalf("expected empty string for nil commands, got %q", name)
+	}
+}
+
 func TestPaletteViewNotEmpty(t *testing.T) {
 	p := NewPalette(80, 24, testCommands())
 	view := p.View()

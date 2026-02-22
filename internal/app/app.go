@@ -78,6 +78,16 @@ type Model struct {
 	// Command palette
 	showPalette bool
 	palette     components.Palette
+
+	// Formula picker state
+	formulaPicking bool
+	formulaTarget  string
+	formulaMulti   []string
+
+	// Nudge input state
+	nudging     bool
+	nudgeInput  textinput.Model
+	nudgeTarget string
 }
 
 // New creates a new app model from loaded issues.
@@ -159,6 +169,29 @@ type townStatusMsg struct {
 
 type slingResultMsg struct {
 	issueID string
+	formula string
+	err     error
+}
+
+type formulaListMsg struct {
+	formulas []string
+	err      error
+}
+
+type unslingResultMsg struct {
+	issueID string
+	err     error
+}
+
+type multiSlingResultMsg struct {
+	count   int
+	formula string
+	err     error
+}
+
+type nudgeResultMsg struct {
+	target  string
+	message string
 	err     error
 }
 
@@ -192,6 +225,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle palette result
 	if result, ok := msg.(components.PaletteResult); ok {
 		m.showPalette = false
+		if m.formulaPicking {
+			m.formulaPicking = false
+			if result.Cancelled {
+				m.formulaTarget = ""
+				m.formulaMulti = nil
+				return m, nil
+			}
+			formula := m.palette.SelectedName()
+			if m.formulaMulti != nil {
+				ids := m.formulaMulti
+				m.formulaMulti = nil
+				m.formulaTarget = ""
+				return m, func() tea.Msg {
+					err := gastown.SlingMultipleWithFormula(ids, formula)
+					return multiSlingResultMsg{count: len(ids), formula: formula, err: err}
+				}
+			}
+			issueID := m.formulaTarget
+			m.formulaTarget = ""
+			return m, func() tea.Msg {
+				err := gastown.SlingWithFormula(issueID, formula)
+				return slingResultMsg{issueID: issueID, formula: formula, err: err}
+			}
+		}
 		if !result.Cancelled {
 			return m.executePaletteAction(result.Action)
 		}
@@ -215,6 +272,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.createForm, cmd = m.createForm.Update(msg)
+		return m, cmd
+	}
+
+	// Forward all messages to nudge input when active
+	if m.nudging {
+		if km, ok := msg.(tea.KeyMsg); ok {
+			switch km.String() {
+			case "ctrl+c":
+				return m, tea.Quit
+			case "esc":
+				m.nudging = false
+				return m, nil
+			case "enter":
+				m.nudging = false
+				target := m.nudgeTarget
+				message := m.nudgeInput.Value()
+				return m, func() tea.Msg {
+					err := gastown.Nudge(target, message)
+					return nudgeResultMsg{target: target, message: message, err: err}
+				}
+			}
+		}
+		var cmd tea.Cmd
+		m.nudgeInput, cmd = m.nudgeInput.Update(msg)
 		return m, cmd
 	}
 
@@ -322,10 +403,104 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.toast = toast
 			return m, cmd
 		}
+		label := fmt.Sprintf("Slung %s to polecat", msg.issueID)
+		if msg.formula != "" {
+			label = fmt.Sprintf("Slung %s with %s formula", msg.issueID, msg.formula)
+		}
+		toast, cmd := components.ShowToast(label, components.ToastSuccess, toastDuration)
+		m.toast = toast
+		return m, tea.Batch(cmd, pollAgentState(m.gtEnv, m.inTmux))
+
+	case formulaListMsg:
+		if msg.err != nil || len(msg.formulas) == 0 {
+			var slingCmd tea.Cmd
+			if m.formulaMulti != nil {
+				ids := m.formulaMulti
+				slingCmd = func() tea.Msg {
+					err := gastown.SlingMultiple(ids)
+					return multiSlingResultMsg{count: len(ids), err: err}
+				}
+			} else {
+				issueID := m.formulaTarget
+				slingCmd = func() tea.Msg {
+					err := gastown.Sling(issueID)
+					return slingResultMsg{issueID: issueID, err: err}
+				}
+			}
+			m.formulaPicking = false
+			m.formulaTarget = ""
+			m.formulaMulti = nil
+			toast, toastCmd := components.ShowToast(
+				"No formulas available \u2014 using plain sling",
+				components.ToastInfo, toastDuration,
+			)
+			m.toast = toast
+			return m, tea.Batch(toastCmd, slingCmd)
+		}
+		cmds := make([]components.PaletteCommand, len(msg.formulas))
+		for i, f := range msg.formulas {
+			cmds[i] = components.PaletteCommand{
+				Name:   f,
+				Desc:   "Formula",
+				Action: components.ActionFormulaSelect,
+			}
+		}
+		m.formulaPicking = true
+		m.showPalette = true
+		m.palette = components.NewPalette(m.width, m.height, cmds)
+		return m, m.palette.Init()
+
+	case unslingResultMsg:
+		if msg.err != nil {
+			toast, cmd := components.ShowToast(
+				fmt.Sprintf("Unsling failed for %s: %s", msg.issueID, msg.err),
+				components.ToastError, toastDuration,
+			)
+			m.toast = toast
+			return m, cmd
+		}
 		toast, cmd := components.ShowToast(
-			fmt.Sprintf("Slung %s to polecat", msg.issueID),
+			fmt.Sprintf("Unslung %s", msg.issueID),
 			components.ToastSuccess, toastDuration,
 		)
+		m.toast = toast
+		return m, tea.Batch(cmd, pollAgentState(m.gtEnv, m.inTmux))
+
+	case multiSlingResultMsg:
+		if msg.err != nil {
+			toast, cmd := components.ShowToast(
+				fmt.Sprintf("Multi-sling failed: %s", msg.err),
+				components.ToastError, toastDuration,
+			)
+			m.toast = toast
+			return m, cmd
+		}
+		label := fmt.Sprintf("Slung %d issues", msg.count)
+		if msg.formula != "" {
+			label = fmt.Sprintf("Slung %d issues with %s formula", msg.count, msg.formula)
+		}
+		toast, cmd := components.ShowToast(label, components.ToastSuccess, toastDuration)
+		m.toast = toast
+		return m, tea.Batch(cmd, pollAgentState(m.gtEnv, m.inTmux))
+
+	case nudgeResultMsg:
+		if msg.err != nil {
+			toast, cmd := components.ShowToast(
+				fmt.Sprintf("Nudge failed for %s: %s", msg.target, msg.err),
+				components.ToastError, toastDuration,
+			)
+			m.toast = toast
+			return m, cmd
+		}
+		label := fmt.Sprintf("Nudged %s", msg.target)
+		if msg.message != "" {
+			display := msg.message
+			if len(display) > 30 {
+				display = display[:27] + "..."
+			}
+			label = fmt.Sprintf("Nudged %s: %s", msg.target, display)
+		}
+		toast, cmd := components.ShowToast(label, components.ToastSuccess, toastDuration)
 		m.toast = toast
 		return m, cmd
 
@@ -501,6 +676,19 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.createAndSwitchBranch()
 
 	case "a":
+		// Multi-sling with Gas Town
+		if selected := m.parade.SelectedIssues(); len(selected) > 0 && m.gtEnv.Available {
+			ids := make([]string, len(selected))
+			for i, iss := range selected {
+				ids[i] = iss.ID
+			}
+			m.parade.ClearSelection()
+			return m, func() tea.Msg {
+				err := gastown.SlingMultiple(ids)
+				return multiSlingResultMsg{count: len(ids), err: err}
+			}
+		}
+
 		issue := m.parade.SelectedIssue
 		if issue == nil || !m.claudeAvail {
 			return m, nil
@@ -538,27 +726,55 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "A":
 		issue := m.parade.SelectedIssue
-		if issue == nil || !m.inTmux {
+		if issue == nil {
 			return m, nil
 		}
 		if _, active := m.activeAgents[issue.ID]; !active {
 			return m, nil
 		}
 		issueID := issue.ID
-		return m, func() tea.Msg {
-			_ = agent.KillAgentWindow(issueID)
-			return agentStatusMsg{activeAgents: make(map[string]string)}
+		if m.gtEnv.Available {
+			return m, func() tea.Msg {
+				err := gastown.Unsling(issueID)
+				return unslingResultMsg{issueID: issueID, err: err}
+			}
 		}
+		if m.inTmux {
+			return m, func() tea.Msg {
+				_ = agent.KillAgentWindow(issueID)
+				return agentStatusMsg{activeAgents: make(map[string]string)}
+			}
+		}
+		return m, nil
 
 	case "s":
-		issue := m.parade.SelectedIssue
-		if issue == nil || !m.gtEnv.Available {
+		if !m.gtEnv.Available {
 			return m, nil
 		}
-		issueID := issue.ID
+		// Multi-select: collect IDs for formula picking
+		if selected := m.parade.SelectedIssues(); len(selected) > 0 {
+			ids := make([]string, len(selected))
+			for i, iss := range selected {
+				ids[i] = iss.ID
+			}
+			m.parade.ClearSelection()
+			m.formulaMulti = ids
+			m.formulaTarget = ""
+			return m, func() tea.Msg {
+				formulas, err := gastown.ListFormulas()
+				return formulaListMsg{formulas: formulas, err: err}
+			}
+		}
+		// Single issue
+		issue := m.parade.SelectedIssue
+		if issue == nil {
+			return m, nil
+		}
+		m.formulaTarget = issue.ID
+		m.formulaMulti = nil
 		return m, func() tea.Msg {
-			err := gastown.SlingWithFormula(issueID, "shiny")
-			return slingResultMsg{issueID: issueID, err: err}
+			formulas, err := gastown.ListFormulas()
+			return formulaListMsg{formulas: formulas, err: err}
 		}
 
 	case "n":
@@ -566,16 +782,20 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if issue == nil || !m.gtEnv.Available {
 			return m, nil
 		}
-		if agentName, active := m.activeAgents[issue.ID]; active {
-			_ = gastown.Nudge(agentName, "")
-			toast, cmd := components.ShowToast(
-				fmt.Sprintf("Nudged %s", agentName),
-				components.ToastInfo, toastDuration,
-			)
-			m.toast = toast
-			return m, cmd
+		agentName, active := m.activeAgents[issue.ID]
+		if !active {
+			return m, nil
 		}
-		return m, nil
+		m.nudging = true
+		m.nudgeTarget = agentName
+		m.nudgeInput = textinput.New()
+		m.nudgeInput.Prompt = ui.InputPrompt.Render("nudge> ")
+		m.nudgeInput.Placeholder = "Message for " + agentName + "..."
+		m.nudgeInput.TextStyle = ui.InputText
+		m.nudgeInput.Cursor.Style = ui.InputCursor
+		m.nudgeInput.Width = 50
+		m.nudgeInput.Focus()
+		return m, textinput.Blink
 
 	case "N":
 		m.creating = true
@@ -838,8 +1058,8 @@ func (m Model) buildPaletteCommands() []components.PaletteCommand {
 
 	if m.gtEnv.Available {
 		cmds = append(cmds,
-			components.PaletteCommand{Name: "Sling with formula", Desc: "Sling shiny formula to polecat", Key: "s", Action: components.ActionSlingFormula},
-			components.PaletteCommand{Name: "Nudge agent", Desc: "Nudge agent working on issue", Key: "n", Action: components.ActionNudgeAgent},
+			components.PaletteCommand{Name: "Sling with formula", Desc: "Pick formula and sling to polecat", Key: "s", Action: components.ActionSlingFormula},
+			components.PaletteCommand{Name: "Nudge agent", Desc: "Nudge agent with message", Key: "n", Action: components.ActionNudgeAgent},
 		)
 	}
 
@@ -1121,8 +1341,12 @@ func (m Model) View() string {
 		bottomBar = m.toast.View(m.width)
 	} else if m.parade.SelectionCount() > 0 {
 		// Bulk action bar when items are multi-selected
-		bulkBar := components.BulkFooter(m.width, m.parade.SelectionCount())
-		bottomBar = bulkBar
+		bottomBar = components.BulkFooter(m.width, m.parade.SelectionCount(), m.gtEnv.Available)
+	} else if m.nudging {
+		bottomBar = lipgloss.NewStyle().
+			Padding(0, 1).
+			Width(m.width).
+			Render(m.nudgeInput.View())
 	} else if m.filtering || m.filterInput.Value() != "" {
 		bottomBar = lipgloss.NewStyle().
 			Padding(0, 1).

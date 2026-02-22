@@ -439,3 +439,183 @@ func TestSetPriorityReturnsCmd(t *testing.T) {
 		t.Fatal("expected non-nil cmd from setPriority(PriorityHigh) with medium priority issue")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// 21. 's' key with Gas Town spawns formula list fetch
+// ---------------------------------------------------------------------------
+
+func TestKeySGasTownFetchesFormulas(t *testing.T) {
+	got := setupModel(t)
+	got.gtEnv.Available = true
+
+	model, cmd := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	got = model.(Model)
+
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from pressing s with Gas Town available")
+	}
+	// The formulaTarget should be set to the selected issue ID
+	if got.formulaTarget == "" {
+		t.Fatal("expected formulaTarget to be set after pressing s")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 22. 's' key without Gas Town is a no-op
+// ---------------------------------------------------------------------------
+
+func TestKeySNoGasTownNoop(t *testing.T) {
+	got := setupModel(t)
+	got.gtEnv.Available = false
+
+	_, cmd := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	if cmd != nil {
+		t.Fatal("expected nil cmd from pressing s without Gas Town")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 23. 'n' key opens nudge input when agent active
+// ---------------------------------------------------------------------------
+
+func TestKeyNOpensNudgeInput(t *testing.T) {
+	got := setupModel(t)
+	got.gtEnv.Available = true
+	issueID := got.parade.SelectedIssue.ID
+	got.activeAgents[issueID] = "Toast"
+
+	model, cmd := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	got = model.(Model)
+
+	if !got.nudging {
+		t.Fatal("expected nudging to be true after pressing n with active agent")
+	}
+	if got.nudgeTarget != "Toast" {
+		t.Fatalf("expected nudgeTarget 'Toast', got %q", got.nudgeTarget)
+	}
+	if cmd == nil {
+		t.Fatal("expected blink cmd from nudge input")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 24. 'n' key no-op when no active agent
+// ---------------------------------------------------------------------------
+
+func TestKeyNNoActiveAgentNoop(t *testing.T) {
+	got := setupModel(t)
+	got.gtEnv.Available = true
+
+	model, cmd := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	got = model.(Model)
+
+	if got.nudging {
+		t.Fatal("expected nudging to be false when no active agent")
+	}
+	if cmd != nil {
+		t.Fatal("expected nil cmd when no active agent for nudge")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 25. 'A' key with Gas Town dispatches unsling
+// ---------------------------------------------------------------------------
+
+func TestKeyAGasTownUnsling(t *testing.T) {
+	got := setupModel(t)
+	got.gtEnv.Available = true
+	issueID := got.parade.SelectedIssue.ID
+	got.activeAgents[issueID] = "Toast"
+
+	_, cmd := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'A'}})
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from pressing A with Gas Town and active agent")
+	}
+	// Execute the cmd and verify it returns unslingResultMsg
+	msg := cmd()
+	if _, ok := msg.(unslingResultMsg); !ok {
+		t.Fatalf("expected unslingResultMsg, got %T", msg)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 26. 'A' key no-op when no active agent
+// ---------------------------------------------------------------------------
+
+func TestKeyANoActiveAgentNoop(t *testing.T) {
+	got := setupModel(t)
+	got.gtEnv.Available = true
+
+	_, cmd := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'A'}})
+	if cmd != nil {
+		t.Fatal("expected nil cmd when no active agent for A key")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 27. formulaListMsg opens formula palette
+// ---------------------------------------------------------------------------
+
+func TestFormulaListMsgOpensPalette(t *testing.T) {
+	got := setupModel(t)
+	got.formulaTarget = "open-1"
+
+	model, cmd := got.Update(formulaListMsg{formulas: []string{"shiny", "basic"}, err: nil})
+	got = model.(Model)
+
+	if !got.formulaPicking {
+		t.Fatal("expected formulaPicking to be true")
+	}
+	if !got.showPalette {
+		t.Fatal("expected showPalette to be true")
+	}
+	if cmd == nil {
+		t.Fatal("expected palette init cmd")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 28. formulaListMsg with empty formulas falls back to plain sling
+// ---------------------------------------------------------------------------
+
+func TestFormulaListMsgEmptyFallback(t *testing.T) {
+	got := setupModel(t)
+	got.formulaTarget = "open-1"
+
+	model, cmd := got.Update(formulaListMsg{formulas: nil, err: nil})
+	got = model.(Model)
+
+	if got.formulaPicking {
+		t.Fatal("expected formulaPicking to be false on fallback")
+	}
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd (toast + sling) on fallback")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 29. multi-sling 'a' key with Gas Town and selection
+// ---------------------------------------------------------------------------
+
+func TestKeyAMultiSlingWithSelection(t *testing.T) {
+	got := setupModel(t)
+	got.gtEnv.Available = true
+
+	// Select current item
+	model, _ := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	got = model.(Model)
+	if got.parade.SelectionCount() == 0 {
+		t.Fatal("expected items to be selected")
+	}
+
+	model, cmd := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	got = model.(Model)
+
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from multi-sling")
+	}
+	// Selection should be cleared
+	if got.parade.SelectionCount() != 0 {
+		t.Fatal("expected selection to be cleared after multi-sling")
+	}
+}

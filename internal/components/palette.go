@@ -34,6 +34,7 @@ const (
 	ActionNudgeAgent
 	ActionHelp
 	ActionQuit
+	ActionFormulaSelect
 )
 
 // PaletteCommand is a single entry in the command palette.
@@ -180,6 +181,14 @@ func (p *Palette) refilter() {
 	p.filtered = result
 	p.cursor = 0
 	p.scrollOffset = 0
+}
+
+// SelectedName returns the Name of the currently highlighted command.
+func (p Palette) SelectedName() string {
+	if p.cursor >= 0 && p.cursor < len(p.filtered) {
+		return p.filtered[p.cursor].Name
+	}
+	return ""
 }
 
 // View renders the command palette overlay.

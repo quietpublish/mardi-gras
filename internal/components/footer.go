@@ -131,14 +131,20 @@ func insertBefore(bindings []FooterBinding, key string, extra ...FooterBinding) 
 }
 
 // BulkFooter renders the footer bar shown during multi-select.
-func BulkFooter(width, count int) string {
+func BulkFooter(width, count int, hasGasTown bool) string {
 	label := ui.FooterKey.Render(fmt.Sprintf(" %d selected: ", count))
 	bindings := []FooterBinding{
 		{Key: "1", Desc: "in_progress"},
 		{Key: "2", Desc: "open"},
 		{Key: "3", Desc: "close"},
-		{Key: "X", Desc: "clear"},
 	}
+	if hasGasTown {
+		bindings = append(bindings,
+			FooterBinding{Key: "a", Desc: "sling"},
+			FooterBinding{Key: "s", Desc: "sling+formula"},
+		)
+	}
+	bindings = append(bindings, FooterBinding{Key: "X", Desc: "clear"})
 	var parts []string
 	for _, b := range bindings {
 		key := ui.FooterKey.Render(b.Key)

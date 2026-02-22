@@ -35,6 +35,31 @@ func ListFormulas() ([]string, error) {
 	return names, nil
 }
 
+// Unsling stops work dispatched via `gt sling`.
+func Unsling(issueID string) error {
+	return exec.Command("gt", "unsling", issueID).Run()
+}
+
+// SlingMultiple dispatches multiple issues sequentially.
+func SlingMultiple(issueIDs []string) error {
+	for _, id := range issueIDs {
+		if err := Sling(id); err != nil {
+			return fmt.Errorf("sling %s: %w", id, err)
+		}
+	}
+	return nil
+}
+
+// SlingMultipleWithFormula dispatches multiple issues with a named formula.
+func SlingMultipleWithFormula(issueIDs []string, formula string) error {
+	for _, id := range issueIDs {
+		if err := SlingWithFormula(id, formula); err != nil {
+			return fmt.Errorf("sling %s with %s: %w", id, formula, err)
+		}
+	}
+	return nil
+}
+
 // Nudge sends a wake-up message to the agent working on the given issue.
 func Nudge(target, message string) error {
 	args := []string{"nudge", target}

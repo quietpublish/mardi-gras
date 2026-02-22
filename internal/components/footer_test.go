@@ -103,8 +103,25 @@ func TestInsertBeforeMissingKey(t *testing.T) {
 }
 
 func TestBulkFooterContainsCount(t *testing.T) {
-	output := BulkFooter(80, 5)
+	output := BulkFooter(80, 5, false)
 	if !strings.Contains(output, "5") {
 		t.Fatal("BulkFooter output should contain the selection count")
+	}
+}
+
+func TestBulkFooterGasTownBindings(t *testing.T) {
+	output := BulkFooter(80, 3, true)
+	if !strings.Contains(output, "3") {
+		t.Fatal("BulkFooter output should contain the selection count")
+	}
+	if !strings.Contains(output, "sling") {
+		t.Fatal("BulkFooter with Gas Town should contain 'sling'")
+	}
+}
+
+func TestBulkFooterNoGasTownNoSling(t *testing.T) {
+	output := BulkFooter(80, 2, false)
+	if strings.Contains(output, "sling") {
+		t.Fatal("BulkFooter without Gas Town should not contain 'sling'")
 	}
 }

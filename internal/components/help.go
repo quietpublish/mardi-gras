@@ -84,6 +84,8 @@ func (h Help) View() string {
 				{key: "Shift+J/K", desc: "Select and move down/up"},
 				{key: "X", desc: "Clear all selections"},
 				{key: "1/2/3", desc: "Bulk set status on selected"},
+				{key: "a", desc: "Sling all selected issues"},
+				{key: "s", desc: "Pick formula and sling all selected"},
 			},
 		},
 		{
@@ -109,9 +111,9 @@ func (h Help) View() string {
 			title: "GAS TOWN (when gt detected)",
 			bindings: []helpBinding{
 				{key: "a", desc: "Sling issue to polecat (or tmux fallback)"},
-				{key: "s", desc: "Sling with shiny formula (full workflow)"},
-				{key: "n", desc: "Nudge agent working on issue"},
-				{key: "A", desc: "Kill agent (tmux mode only)"},
+				{key: "s", desc: "Pick formula and sling to polecat"},
+				{key: "n", desc: "Nudge agent with message"},
+				{key: "A", desc: "Unsling/kill agent"},
 			},
 		},
 	}
