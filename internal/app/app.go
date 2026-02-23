@@ -279,6 +279,11 @@ type commentsMsg struct {
 	err      error
 }
 
+type costsMsg struct {
+	costs *gastown.CostsOutput
+	err   error
+}
+
 // mutateResultMsg is sent when a bd CLI mutation completes.
 type mutateResultMsg struct {
 	issueID string
@@ -829,6 +834,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case costsMsg:
+		if msg.err == nil && msg.costs != nil {
+			m.gasTown.SetCosts(msg.costs)
+		}
+		return m, nil
+
 	case views.GasTownActionMsg:
 		return m.handleGasTownAction(msg)
 
@@ -1005,8 +1016,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.showGasTown = !m.showGasTown
 		if m.showGasTown {
+			m.showProblems = false
 			m.gasTown.SetStatus(m.townStatus, m.gtEnv)
-			cmds := []tea.Cmd{fetchConvoyList, fetchMailInbox}
+			cmds := []tea.Cmd{fetchConvoyList, fetchMailInbox, fetchCosts}
 			if m.townStatus == nil {
 				cmds = append(cmds, pollAgentState(m.gtEnv, m.inTmux))
 			}
@@ -1914,6 +1926,11 @@ func fetchComments(issueID string) tea.Cmd {
 		comments, err := gastown.FetchComments(issueID)
 		return commentsMsg{issueID: issueID, comments: comments, err: err}
 	}
+}
+
+func fetchCosts() tea.Msg {
+	costs, err := gastown.FetchCosts()
+	return costsMsg{costs: costs, err: err}
 }
 
 // fetchMoleculeDAG returns a Cmd that fetches molecule DAG and progress for an issue.

@@ -945,3 +945,46 @@ func TestTruncateGT(t *testing.T) {
 		}
 	}
 }
+
+func TestGasTownSetCosts(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	costs := &gastown.CostsOutput{
+		Period:   "today",
+		Total:    gastown.CostTotal{InputTokens: 150000, OutputTokens: 50000, Cost: 47.23},
+		Sessions: 20,
+		ByRole: []gastown.RoleCost{
+			{Role: "polecat", Sessions: 12, Cost: 12.30},
+			{Role: "witness", Sessions: 3, Cost: 3.20},
+		},
+	}
+	g.SetCosts(costs)
+
+	view := g.View()
+	if !strings.Contains(view, "COSTS") {
+		t.Fatal("view should contain COSTS section")
+	}
+	if !strings.Contains(view, "47.23") {
+		t.Fatal("view should contain total cost")
+	}
+	if !strings.Contains(view, "polecat") {
+		t.Fatal("view should contain role 'polecat'")
+	}
+	if !strings.Contains(view, "12.30") {
+		t.Fatal("view should contain polecat cost")
+	}
+}
+
+func TestGasTownNoCostsSection(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	// No costs set
+	view := g.View()
+	if strings.Contains(view, "COSTS") {
+		t.Fatal("view should not contain COSTS section when no data")
+	}
+}

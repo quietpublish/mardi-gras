@@ -46,6 +46,9 @@ type GasTown struct {
 	mailCursor   int                    // cursor within mail list
 	mailMessages []gastown.MailMessage  // messages from gt mail inbox
 	expandedMail int                    // index of expanded message, -1 = none
+
+	// Costs data
+	costs *gastown.CostsOutput
 }
 
 // NewGasTown creates a Gas Town panel.
@@ -116,6 +119,11 @@ func (g *GasTown) SetMailMessages(msgs []gastown.MailMessage) {
 	if g.mailCursor >= len(msgs) {
 		g.mailCursor = max(len(msgs)-1, 0)
 	}
+}
+
+// SetCosts updates the cost data from gt costs --json.
+func (g *GasTown) SetCosts(costs *gastown.CostsOutput) {
+	g.costs = costs
 }
 
 // SelectedMail returns the currently selected mail message, or nil if none.
@@ -414,6 +422,10 @@ func (g *GasTown) renderContent() string {
 
 	if len(g.mailMessages) > 0 {
 		sections = append(sections, g.renderMail(contentWidth))
+	}
+
+	if g.costs != nil {
+		sections = append(sections, g.renderCosts(contentWidth))
 	}
 
 	// Hint bar at bottom
@@ -793,6 +805,41 @@ func renderConvoys(convoys []gastown.ConvoyInfo, width int) string {
 		bar := progressBar(c.Done, c.Total, barWidth)
 		label := fmt.Sprintf("%d/%d", c.Done, c.Total)
 		lines = append(lines, fmt.Sprintf("  %s %s", bar, ui.GasTownLabel.Render(label)))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// renderCosts renders the costs section with per-role breakdown.
+func (g *GasTown) renderCosts(width int) string {
+	c := g.costs
+	var lines []string
+
+	totalLabel := fmt.Sprintf("$%.2f", c.Total.Cost)
+	if c.Period != "" {
+		totalLabel = fmt.Sprintf("%s: $%.2f", c.Period, c.Total.Cost)
+	}
+	header := fmt.Sprintf("COSTS%s",
+		lipgloss.NewStyle().Foreground(ui.Muted).Render("  "+totalLabel))
+	lines = append(lines, ui.GasTownTitle.Render(header))
+
+	if len(c.ByRole) > 0 {
+		for _, rc := range c.ByRole {
+			roleStyle := lipgloss.NewStyle().Foreground(ui.RoleColor(rc.Role))
+			costStyle := lipgloss.NewStyle().Foreground(ui.Muted)
+			line := fmt.Sprintf("  %-12s %d sessions  %s",
+				roleStyle.Render(rc.Role),
+				rc.Sessions,
+				costStyle.Render(fmt.Sprintf("$%.2f", rc.Cost)))
+			lines = append(lines, line)
+		}
+	}
+
+	if c.Total.InputTokens > 0 || c.Total.OutputTokens > 0 {
+		tokenStyle := lipgloss.NewStyle().Foreground(ui.Dim)
+		lines = append(lines, tokenStyle.Render(
+			fmt.Sprintf("  tokens: %dk in / %dk out",
+				c.Total.InputTokens/1000, c.Total.OutputTokens/1000)))
 	}
 
 	return strings.Join(lines, "\n")
