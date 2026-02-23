@@ -7,6 +7,7 @@ import (
 
 	"github.com/matt-wright86/mardi-gras/internal/data"
 	"github.com/matt-wright86/mardi-gras/internal/gastown"
+	"github.com/matt-wright86/mardi-gras/internal/ui"
 )
 
 func TestParadeLabel(t *testing.T) {
@@ -219,11 +220,132 @@ func TestMoleculeRenderingInContent(t *testing.T) {
 	if !strings.Contains(content, "Implement") {
 		t.Error("content should contain step title 'Implement'")
 	}
-	if !strings.Contains(content, "done") {
-		t.Error("content should contain 'done' status")
+	// DAG flow connectors between tiers
+	if !strings.Contains(content, ui.SymDAGFlow) {
+		t.Error("content should contain DAG flow connector between tiers")
 	}
-	if !strings.Contains(content, "in_progress") {
-		t.Error("content should contain 'in_progress' status")
+	// Step symbols
+	if !strings.Contains(content, ui.SymStepDone) {
+		t.Error("content should contain done step symbol")
+	}
+	if !strings.Contains(content, ui.SymStepActive) {
+		t.Error("content should contain active step symbol")
+	}
+}
+
+func TestMoleculeDAGParallelBranching(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "mg-001", Title: "Test Issue", Status: data.StatusInProgress, Priority: data.PriorityMedium, IssueType: data.TypeTask, CreatedAt: time.Now()},
+	}
+	d := NewDetail(80, 40, issues)
+	d.SetIssue(&issues[0])
+
+	dag := &gastown.DAGInfo{
+		RootID:    "mg-001",
+		RootTitle: "Shiny Workflow",
+		Nodes: map[string]*gastown.DAGNode{
+			"s1": {ID: "s1", Title: "Design", Status: "done", Tier: 0},
+			"s2": {ID: "s2", Title: "Implement A", Status: "in_progress", Tier: 1, Parallel: true},
+			"s3": {ID: "s3", Title: "Implement B", Status: "in_progress", Tier: 1, Parallel: true},
+			"s4": {ID: "s4", Title: "Test", Status: "blocked", Tier: 2},
+			"s5": {ID: "s5", Title: "Submit", Status: "blocked", Tier: 3},
+		},
+		TierGroups: [][]string{{"s1"}, {"s2", "s3"}, {"s4"}, {"s5"}},
+	}
+	d.SetMolecule("mg-001", dag, nil)
+	content := d.renderContent()
+
+	// Parallel branch connectors
+	if !strings.Contains(content, ui.SymDAGBranch) {
+		t.Error("content should contain branch start connector for parallel nodes")
+	}
+	if !strings.Contains(content, ui.SymDAGJoin) {
+		t.Error("content should contain branch end connector for parallel nodes")
+	}
+	if !strings.Contains(content, "Implement A") {
+		t.Error("content should contain parallel step 'Implement A'")
+	}
+	if !strings.Contains(content, "Implement B") {
+		t.Error("content should contain parallel step 'Implement B'")
+	}
+}
+
+func TestMoleculeDAGFiveWayParallel(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "mg-001", Title: "Test Issue", Status: data.StatusInProgress, Priority: data.PriorityMedium, IssueType: data.TypeTask, CreatedAt: time.Now()},
+	}
+	d := NewDetail(80, 40, issues)
+	d.SetIssue(&issues[0])
+
+	dag := &gastown.DAGInfo{
+		RootID:    "mg-001",
+		RootTitle: "Rule of Five",
+		Nodes: map[string]*gastown.DAGNode{
+			"s1": {ID: "s1", Title: "Implement", Status: "done", Tier: 0},
+			"r1": {ID: "r1", Title: "Correctness", Status: "in_progress", Tier: 1, Parallel: true},
+			"r2": {ID: "r2", Title: "Security", Status: "ready", Tier: 1, Parallel: true},
+			"r3": {ID: "r3", Title: "Performance", Status: "ready", Tier: 1, Parallel: true},
+			"r4": {ID: "r4", Title: "Maintainability", Status: "ready", Tier: 1, Parallel: true},
+			"r5": {ID: "r5", Title: "Testing", Status: "ready", Tier: 1, Parallel: true},
+			"s2": {ID: "s2", Title: "Submit", Status: "blocked", Tier: 2},
+		},
+		TierGroups: [][]string{{"s1"}, {"r1", "r2", "r3", "r4", "r5"}, {"s2"}},
+	}
+	d.SetMolecule("mg-001", dag, nil)
+	content := d.renderContent()
+
+	// Should have branch start, middle forks, and join
+	if !strings.Contains(content, ui.SymDAGBranch) {
+		t.Error("content should contain branch start for 5-way parallel")
+	}
+	if !strings.Contains(content, ui.SymDAGFork) {
+		t.Error("content should contain fork connectors for middle parallel nodes")
+	}
+	if !strings.Contains(content, ui.SymDAGJoin) {
+		t.Error("content should contain branch end for 5-way parallel")
+	}
+	// All five review aspects present
+	for _, title := range []string{"Correctness", "Security", "Performance", "Maintainability", "Testing"} {
+		if !strings.Contains(content, title) {
+			t.Errorf("content should contain parallel step %q", title)
+		}
+	}
+}
+
+func TestMoleculeDAGCriticalPathTitles(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "mg-001", Title: "Test Issue", Status: data.StatusInProgress, Priority: data.PriorityMedium, IssueType: data.TypeTask, CreatedAt: time.Now()},
+	}
+	d := NewDetail(80, 40, issues)
+	d.SetIssue(&issues[0])
+
+	dag := &gastown.DAGInfo{
+		RootID:    "mg-001",
+		RootTitle: "Feature",
+		Nodes: map[string]*gastown.DAGNode{
+			"s1": {ID: "s1", Title: "Design", Status: "done", Tier: 0},
+			"s2": {ID: "s2", Title: "Implement", Status: "in_progress", Tier: 1},
+			"s3": {ID: "s3", Title: "Submit", Status: "blocked", Tier: 2},
+		},
+		TierGroups:   [][]string{{"s1"}, {"s2"}, {"s3"}},
+		CriticalPath: []string{"s1", "s2", "s3"},
+	}
+	d.SetMolecule("mg-001", dag, nil)
+	content := d.renderContent()
+
+	// Critical path shows titles, not IDs
+	if !strings.Contains(content, "critical:") {
+		t.Error("content should contain critical path line")
+	}
+	if !strings.Contains(content, "Design") {
+		t.Error("critical path should use title 'Design' not ID 's1'")
+	}
+	if strings.Contains(content, "s1 ") {
+		t.Error("critical path should not show raw IDs")
+	}
+	// Arrow separator
+	if !strings.Contains(content, "→") {
+		t.Error("critical path should use → separator")
 	}
 }
 

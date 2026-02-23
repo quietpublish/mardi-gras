@@ -419,7 +419,7 @@ func (d *Detail) renderContent() string {
 	return strings.Join(lines, "\n")
 }
 
-// renderMolecule renders the molecule DAG step chain.
+// renderMolecule renders the molecule DAG with visual flow connectors and branching.
 func (d *Detail) renderMolecule() string {
 	dag := d.MoleculeDAG
 	if dag == nil {
@@ -445,76 +445,86 @@ func (d *Detail) renderMolecule() string {
 		lines = append(lines, fmt.Sprintf("  %s", bar))
 	}
 
-	// Render steps organized by tier
-	if len(dag.TierGroups) > 0 {
-		for tierIdx, tier := range dag.TierGroups {
-			if len(tier) == 0 {
-				continue
-			}
-			// Tier label
-			tierLabel := fmt.Sprintf("tier %d", tierIdx)
-			lines = append(lines, ui.MolTierLabel.Render(fmt.Sprintf("  %s %s", ui.SymTierLine, tierLabel)))
+	// DAG layout rendering with flow connectors
+	rows := gastown.LayoutDAG(dag)
+	if len(rows) > 0 {
+		criticalSet := gastown.CriticalPathSet(dag)
+		for _, row := range rows {
+			switch row.Kind {
+			case gastown.RowConnector:
+				lines = append(lines, ui.MolDAGFlow.Render("  "+ui.SymDAGFlow))
 
-			for _, nodeID := range tier {
-				node, ok := dag.Nodes[nodeID]
-				if !ok {
-					continue
+			case gastown.RowSingle:
+				node := row.Nodes[0]
+				critical := criticalSet[node.ID]
+				lines = append(lines, d.renderDAGNode(node, "", critical))
+
+			case gastown.RowParallel:
+				for i, node := range row.Nodes {
+					var prefix string
+					switch {
+					case i == 0:
+						prefix = ui.SymDAGBranch + "─"
+					case i == len(row.Nodes)-1:
+						prefix = ui.SymDAGJoin + "─"
+					default:
+						prefix = ui.SymDAGFork + "─"
+					}
+					critical := criticalSet[node.ID]
+					lines = append(lines, d.renderDAGNode(node, prefix, critical))
 				}
-				lines = append(lines, d.renderMoleculeStep(node))
 			}
 		}
 	} else {
-		// Fallback: render all nodes without tier grouping
+		// Fallback: flat list when no tier groups available
 		for _, node := range dag.Nodes {
-			lines = append(lines, d.renderMoleculeStep(node))
+			sym, style := d.nodeSymbolStyle(node)
+			title := truncate(node.Title, d.Width-18)
+			lines = append(lines, style.Render(fmt.Sprintf("    %s %s", sym, title)))
 		}
 	}
 
-	// Critical path hint
+	// Critical path with human-readable titles
 	if len(dag.CriticalPath) > 1 {
-		pathStr := truncate(strings.Join(dag.CriticalPath, " > "), d.Width-18)
+		pathStr := truncate(gastown.CriticalPathString(dag), d.Width-18)
 		lines = append(lines, ui.MolTierLabel.Render(fmt.Sprintf("  critical: %s", pathStr)))
 	}
 
 	return strings.Join(lines, "\n")
 }
 
-// renderMoleculeStep renders a single molecule step with status symbol.
-func (d *Detail) renderMoleculeStep(node *gastown.DAGNode) string {
-	var sym string
-	var style lipgloss.Style
+// renderDAGNode renders a single node in the DAG layout with optional branch prefix.
+func (d *Detail) renderDAGNode(node *gastown.DAGNode, prefix string, critical bool) string {
+	sym, style := d.nodeSymbolStyle(node)
+	title := truncate(node.Title, d.Width-18)
 
+	if prefix != "" {
+		// Parallel node with branch connector
+		return fmt.Sprintf("  %s%s", ui.MolDAGFlow.Render(prefix), style.Render(sym+" "+title))
+	}
+
+	// Single node
+	result := fmt.Sprintf("  %s", style.Render(sym+" "+title))
+	if critical && node.Status != "done" && node.Status != "closed" {
+		result += " " + ui.MolCritical.Render(ui.SymCrystal)
+	}
+	return result
+}
+
+// nodeSymbolStyle returns the symbol and style for a DAG node based on its status.
+func (d *Detail) nodeSymbolStyle(node *gastown.DAGNode) (string, lipgloss.Style) {
 	switch node.Status {
 	case "done", "closed":
-		sym = ui.SymStepDone
-		style = ui.MolStepDone
+		return ui.SymStepDone, ui.MolStepDone
 	case "in_progress":
-		sym = ui.SymStepActive
-		style = ui.MolStepActive
+		return ui.SymStepActive, ui.MolStepActive
 	case "ready":
-		sym = ui.SymStepReady
-		style = ui.MolStepReady
+		return ui.SymStepReady, ui.MolStepReady
 	case "blocked":
-		sym = ui.SymStepBlocked
-		style = ui.MolStepBlocked
+		return ui.SymStepBlocked, ui.MolStepBlocked
 	default:
-		sym = ui.SymStepReady
-		style = lipgloss.NewStyle().Foreground(ui.Muted)
+		return ui.SymStepReady, lipgloss.NewStyle().Foreground(ui.Muted)
 	}
-
-	title := truncate(node.Title, d.Width-18)
-	statusLabel := node.Status
-
-	// Show dependency info for blocked steps
-	suffix := ""
-	if node.Status == "blocked" && len(node.Dependencies) > 0 {
-		suffix = fmt.Sprintf(" (needs %s)", truncate(strings.Join(node.Dependencies, ", "), 20))
-	}
-	if node.Parallel {
-		suffix += " ||"
-	}
-
-	return style.Render(fmt.Sprintf("    %s %-12s %s%s", sym, statusLabel, title, suffix))
 }
 
 // renderActivity renders the activity timeline from issue timestamps.

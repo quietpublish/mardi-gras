@@ -78,6 +78,13 @@ const (
 	SymStepSkipped = "─"
 	SymTierLine    = "│"
 
+	// DAG flow connectors
+	SymDAGFlow   = "│"
+	SymDAGBranch = "┌"
+	SymDAGFork   = "├"
+	SymDAGJoin   = "└"
+	SymDAGArrow  = "↓"
+
 	// HOP quality indicators
 	SymStar      = "★"
 	SymStarEmpty = "☆"
