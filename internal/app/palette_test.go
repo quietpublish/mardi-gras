@@ -15,7 +15,7 @@ func initModel(t *testing.T) Model {
 		testIssue("open-2", data.StatusOpen),
 		testIssue("closed-1", data.StatusClosed),
 	}
-	m := New(issues, "", false, data.DefaultBlockingTypes)
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	return model.(Model)
 }

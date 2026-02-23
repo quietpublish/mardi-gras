@@ -22,7 +22,7 @@ func setupModel(t *testing.T) Model {
 		testIssue("open-3", data.StatusOpen),
 		testIssue("closed-1", data.StatusClosed),
 	}
-	m := New(issues, "", false, data.DefaultBlockingTypes)
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	return model.(Model)
 }
@@ -389,7 +389,7 @@ func TestQuickActionReturnsCmd(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestQuickActionNilIssueNoop(t *testing.T) {
-	m := New([]data.Issue{}, "", false, data.DefaultBlockingTypes)
+	m := New([]data.Issue{}, data.Source{}, data.DefaultBlockingTypes)
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	got := model.(Model)
 

@@ -3,7 +3,6 @@ package app
 import (
 	"fmt"
 	"os/exec"
-	"path/filepath"
 	"time"
 
 	"github.com/atotto/clipboard"
@@ -111,11 +110,19 @@ type Model struct {
 	// Problems view
 	showProblems bool
 	problems     views.Problems
+
+	// Data source mode (JSONL file watcher vs bd CLI polling)
+	sourceMode data.SourceMode
 }
 
 // New creates a new app model from loaded issues.
-func New(issues []data.Issue, watchPath string, pathExplicit bool, blockingTypes map[string]bool) Model {
+func New(issues []data.Issue, source data.Source, blockingTypes map[string]bool) Model {
 	groups := data.GroupByParade(issues, blockingTypes)
+
+	watchPath := source.Path
+	pathExplicit := source.Explicit
+	projectDir := source.ProjectDir
+
 	lastFileMod := time.Time{}
 	if watchPath != "" {
 		if mod, err := data.FileModTime(watchPath); err == nil {
@@ -128,12 +135,6 @@ func New(issues []data.Issue, watchPath string, pathExplicit bool, blockingTypes
 	ti.TextStyle = ui.InputText
 	ti.Cursor.Style = ui.InputCursor
 	ti.Width = 50
-
-	// Derive project root by stripping .beads/issues.jsonl from the watch path.
-	projectDir := ""
-	if watchPath != "" {
-		projectDir = filepath.Dir(filepath.Dir(watchPath))
-	}
 
 	// Build initial status snapshot for change detection
 	prevMap := make(map[string]data.Status, len(issues))
@@ -157,15 +158,32 @@ func New(issues []data.Issue, watchPath string, pathExplicit bool, blockingTypes
 		gtEnv:         gastown.Detect(),
 		changedIDs:    make(map[string]bool),
 		prevIssueMap:  prevMap,
+		sourceMode:    source.Mode,
 	}
 }
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
-		data.WatchFile(m.watchPath, m.lastFileMod),
+		m.startPoll(),
 		pollAgentState(m.gtEnv, m.inTmux),
 	)
+}
+
+// startPoll returns the appropriate polling Cmd based on sourceMode.
+func (m Model) startPoll() tea.Cmd {
+	if m.sourceMode == data.SourceCLI {
+		return data.PollCLI()
+	}
+	return data.WatchFile(m.watchPath, m.lastFileMod)
+}
+
+// startPollImmediate returns an immediate-fetch Cmd for post-mutation refresh.
+func (m Model) startPollImmediate() tea.Cmd {
+	if m.sourceMode == data.SourceCLI {
+		return data.FetchIssuesNow()
+	}
+	return data.WatchFile(m.watchPath, m.lastFileMod)
 }
 
 // agentFinishedMsg is sent when a launched claude session exits.
@@ -536,7 +554,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case data.FileChangedMsg:
 		cmds := []tea.Cmd{
-			data.WatchFile(m.watchPath, m.lastFileMod),
+			m.startPoll(),
 			pollAgentState(m.gtEnv, m.inTmux),
 		}
 
@@ -574,10 +592,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !msg.LastMod.IsZero() {
 			m.lastFileMod = msg.LastMod
 		}
-		return m, tea.Batch(data.WatchFile(m.watchPath, m.lastFileMod), pollAgentState(m.gtEnv, m.inTmux))
+		return m, tea.Batch(m.startPoll(), pollAgentState(m.gtEnv, m.inTmux))
 
 	case data.FileWatchErrorMsg:
-		return m, tea.Batch(data.WatchFile(m.watchPath, m.lastFileMod), pollAgentState(m.gtEnv, m.inTmux))
+		cmds := []tea.Cmd{m.startPoll(), pollAgentState(m.gtEnv, m.inTmux)}
+		if m.sourceMode == data.SourceCLI {
+			toast, toastCmd := components.ShowToast(
+				fmt.Sprintf("bd list failed: %s", msg.Err),
+				components.ToastError, toastDuration,
+			)
+			m.toast = toast
+			cmds = append(cmds, toastCmd)
+		}
+		return m, tea.Batch(cmds...)
 
 	case agentLaunchedMsg:
 		m.activeAgents[msg.issueID] = msg.windowName
@@ -954,9 +981,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			components.ToastSuccess, toastDuration,
 		)
 		m.toast = toast
-		// Force reload on next poll
+		// Force reload: reset lastFileMod for JSONL, or immediate fetch for CLI
 		m.lastFileMod = time.Time{}
-		cmds := []tea.Cmd{toastCmd, data.WatchFile(m.watchPath, m.lastFileMod)}
+		cmds := []tea.Cmd{toastCmd, m.startPollImmediate()}
 		// Trigger confetti on close
 		if msg.action == "closed" && m.width > 0 && m.height > 0 {
 			m.confetti = NewConfetti(m.width, m.height)
@@ -983,7 +1010,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agentFinishedMsg:
 		// Reset lastFileMod to force reload on next poll cycle.
 		m.lastFileMod = time.Time{}
-		return m, tea.Batch(data.WatchFile(m.watchPath, m.lastFileMod), pollAgentState(m.gtEnv, m.inTmux))
+		return m, tea.Batch(m.startPollImmediate(), pollAgentState(m.gtEnv, m.inTmux))
 	}
 
 	// Forward to detail viewport (or Gas Town viewport) when focused
@@ -2139,6 +2166,7 @@ func (m Model) View() string {
 		footer.SourcePath = m.watchPath
 		footer.LastRefresh = m.lastFileMod
 		footer.PathExplicit = m.pathExplicit
+		footer.SourceMode = m.sourceMode
 		bottomBar = footer.View()
 	}
 
