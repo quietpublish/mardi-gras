@@ -96,26 +96,40 @@ Mardi Gras polls your JSONL file on a short interval. No OS-specific file watche
 
 ## Keybindings
 
-| Key          | Action                                                                   |
-| ------------ | ------------------------------------------------------------------------ |
-| `?`          | Toggle help overlay                                                      |
-| `j` / `k`    | Navigate up/down                                                         |
-| `/`          | Enter filter mode                                                        |
-| `esc`        | Clear filter (in filter mode) / Back to parade pane / Close help overlay |
-| `enter`      | Apply filter (in filter mode) / Focus detail pane                        |
-| `tab`        | Switch between parade and detail panes                                   |
-| `c`          | Toggle closed issues                                                     |
-| `f`          | Toggle focus mode (my work + top priority)                               |
-| `1` / `2` / `3` | Set status: in_progress / open / closed                              |
-| `a`          | Launch Claude agent (tmux: new window; otherwise: suspend TUI)           |
-| `A`          | Kill active agent on selected issue (tmux only)                          |
-| `g` / `G`    | Jump to top / bottom                                                     |
-| `b`          | Copy branch name to clipboard                                            |
-| `B`          | Create + checkout git branch                                             |
-| `N`          | Create new issue                                                         |
-| `: / Ctrl+K` | Open command palette                                                    |
-| `q`          | Quit (or close help overlay if open)                                     |
-| `ctrl+c`     | Quit (global)                                                            |
+Press `?` from anywhere to open the full help overlay.
+
+### Global
+
+| Key          | Action                     |
+| ------------ | -------------------------- |
+| `q`          | Quit application           |
+| `tab`        | Switch active pane         |
+| `?`          | Toggle help overlay        |
+| `: / Ctrl+K` | Open command palette      |
+| `p`          | Toggle problems view (gt)  |
+
+### Parade
+
+| Key          | Action                                    |
+| ------------ | ----------------------------------------- |
+| `j` / `k`    | Navigate up/down                         |
+| `g` / `G`    | Jump to top / bottom                     |
+| `enter`      | Focus detail pane                         |
+| `c`          | Toggle closed issues                      |
+| `/`          | Enter filter mode                         |
+| `f`          | Toggle focus mode (my work + top priority)|
+| `a`          | Launch agent (tmux: new window)           |
+| `A`          | Kill active agent on issue                |
+
+### Quick Actions
+
+| Key           | Action                                   |
+| ------------- | ---------------------------------------- |
+| `1` / `2` / `3` | Set status: in_progress / open / closed |
+| `!` / `@` / `#` / `$` | Set priority: P1 / P2 / P3 / P4 |
+| `b`           | Copy branch name to clipboard            |
+| `B`           | Create + checkout git branch             |
+| `N`           | Create new issue                         |
 
 ### Multi-select
 
@@ -128,17 +142,34 @@ Mardi Gras polls your JSONL file on a short interval. No OS-specific file watche
 | `a`           | Sling all selected issues           |
 | `s`           | Pick formula and sling all selected |
 
-### Gas Town (when `gt` detected)
+### Detail Pane
 
-| Key       | Action                          |
-| --------- | ------------------------------- |
-| `ctrl+g`  | Toggle Gas Town dashboard panel |
-| `a`       | Sling issue to polecat          |
-| `s`       | Pick formula and sling          |
-| `n`       | Nudge agent with message        |
-| `A`       | Unsling / kill agent            |
+| Key          | Action                     |
+| ------------ | -------------------------- |
+| `j` / `k`    | Scroll up/down            |
+| `esc`        | Back to parade pane        |
+| `/`          | Enter filter mode          |
+| `a`          | Launch agent               |
+| `A`          | Kill active agent          |
+| `m`          | Mark active molecule step done |
 
-Press `?` from anywhere (including while filtering) to open the full command reference overlay.
+### Gas Town Panel (`ctrl+g`)
+
+| Key          | Action                          |
+| ------------ | ------------------------------- |
+| `j` / `k`    | Navigate agents/convoys/mail   |
+| `g` / `G`    | Jump to first/last             |
+| `tab`        | Switch section (agents/convoys/mail) |
+| `n`          | Nudge selected agent            |
+| `h`          | Handoff work from agent         |
+| `K`          | Decommission polecat            |
+| `enter`      | Expand/collapse convoy or message |
+| `l`          | Land convoy                     |
+| `x`          | Close convoy                    |
+| `r`          | Reply to selected message       |
+| `w`          | Compose new message to agent    |
+| `d`          | Archive selected message        |
+| `C`          | Create convoy from selection    |
 
 ## Filtering
 
@@ -178,6 +209,22 @@ Every Beads issue maps to a spot on the parade route:
 Closed issues are collapsed by default (because in any real project, 90%+ of your issues are closed). Press `c` to expand them.
 
 Stalled issues show a "next blocker" hint so you can see at a glance what's holding things up. The detail panel breaks dependencies into four categories: waiting on (active blockers), missing (dangling references), resolved (closed blockers), and related (non-blocking dependency types).
+
+## Detail Panel
+
+Press `enter` on any issue to focus the detail pane. It shows everything about the selected issue:
+
+- **Metadata** — type, priority, assignee, due dates with overdue/due-soon badges
+- **Dependencies** — eight types (blocks, blocked-by, related, duplicates, supersedes, parent-child, discovered-from, depends-on) grouped by status: waiting, missing, resolved, and non-blocking
+- **Comments & Timeline** — full conversation history with timestamps
+- **Molecule DAG** — multi-step workflows rendered as a visual flow graph with parallel branching (`┌─ ├─ └─`) and connector lines between tiers
+- **HOP Quality** — reputation stars, crystal/ephemeral badges, and validator verdicts for agent-produced work
+
+Press `m` in the detail pane to mark the active molecule step as done.
+
+## Command Palette
+
+Press `:` or `Ctrl+K` to open a fuzzy-match command palette. Type to filter available actions, then press `enter` to execute. The palette provides access to the same actions available through keybindings, useful when you forget a shortcut.
 
 ## tmux Integration
 
@@ -236,17 +283,17 @@ Outside tmux, the TUI suspends while Claude runs (using BubbleTea's `tea.ExecPro
 
 ## Gas Town Integration
 
-[Gas Town](https://github.com/steveyegge/gastown) is a multi-agent orchestrator for Claude Code. When `gt` is on your PATH, Mardi Gras lights up with agent-aware features:
+[Gas Town](https://github.com/steveyegge/gastown) is a multi-agent orchestrator for Claude Code. When `gt` is on your PATH, Mardi Gras lights up with a full agent control surface.
 
 ### Control Surface (`ctrl+g`)
 
-Press `ctrl+g` to replace the detail pane with the Gas Town dashboard:
+Press `ctrl+g` to replace the detail pane with the Gas Town dashboard. It has three navigable sections (switch with `tab`):
 
-- **Agent Roster** — all agents across rigs with role, state (working/idle/backoff), current work, and unread mail count
-- **Convoy Progress** — delivery batches shown as progress bars with status badges
-- **Live refresh** — the panel updates as `gt status` data arrives
+**Agent Roster** — all agents across rigs with role badges, state (working/idle/backoff), current work assignment, and unread mail count. From here you can nudge (`n`), handoff (`h`), or decommission (`K`) agents.
 
-The panel scrolls with `j/k` and toggles back to the detail view with `ctrl+g` again.
+**Convoys** — delivery batches shown as progress bars with status badges. Expand a convoy with `enter` to see its issues, then land (`l`) or close (`x`) it. Create new convoys from multi-selected issues with `C`.
+
+**Mail** — inbox showing messages between agents. Expand a message with `enter`, reply with `r`, compose a new message with `w`, or archive with `d`.
 
 ### Sling & Nudge
 
@@ -257,6 +304,24 @@ When running inside a Gas Town workspace, the `a` key dispatches issues to polec
 - `A` — unsling an issue from its polecat
 
 Multi-select (`space` to mark, then `a` or `s`) slings multiple issues in one batch.
+
+### Operational Intelligence
+
+The Gas Town panel includes several data views below the interactive sections:
+
+- **Cost Dashboard** — session counts, token usage, and cost breakdown per agent and time window
+- **Activity Feed** — real-time event ticker showing slings, nudges, handoffs, session starts/deaths, and spawns
+- **Velocity** — issue flow rates (created/closed today and this week), agent utilization percentage, and cost summary
+- **Scorecards** — HOP-powered agent quality ratings aggregated across recent work
+- **Predictions** — convoy completion ETAs based on historical throughput
+
+### Problems View (`p`)
+
+Press `p` to toggle the problems view overlay. It scans the current Gas Town status for operational issues:
+
+- Stalled agents (working but no progress)
+- Backoff loops (repeated retry failures)
+- Zombie sessions (agents that stopped reporting)
 
 ### Environment
 
@@ -289,8 +354,8 @@ It is a visual lens on top of Beads. Beads remains the source of truth.
 ## Possible Future Ideas
 
 - Color themes (Catppuccin, Dracula)
-- Dependency graph view (ASCII DAG)
 - Bead throw celebration animation on task close
+- Real-time streaming updates (SSE)
 
 No promises. Just dreams. PRs welcome.
 
