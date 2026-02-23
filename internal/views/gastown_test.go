@@ -1068,3 +1068,70 @@ func TestGasTownNoActivitySection(t *testing.T) {
 		t.Fatal("view should not contain ACTIVITY section when no events")
 	}
 }
+
+func TestGasTownMailComposeAction(t *testing.T) {
+	g := NewGasTown(100, 30)
+	agents := []gastown.AgentRuntime{
+		{Name: "quartz", Role: "polecat", Address: "mardi_gras/polecats/quartz"},
+	}
+	status := &gastown.TownStatus{Agents: agents}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	g, cmd := g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	if cmd == nil {
+		t.Fatal("expected cmd from mail compose action")
+	}
+	msg := cmd()
+	action, ok := msg.(GasTownActionMsg)
+	if !ok {
+		t.Fatalf("expected GasTownActionMsg, got %T", msg)
+	}
+	if action.Type != "mail_compose" {
+		t.Fatalf("expected type 'mail_compose', got %q", action.Type)
+	}
+	if action.Agent.Name != "quartz" {
+		t.Fatalf("expected agent 'quartz', got %q", action.Agent.Name)
+	}
+}
+
+func TestGasTownMailComposeFromMail(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	msgs := []gastown.MailMessage{
+		{ID: "msg-1", From: "gastown/Toast", Subject: "Help"},
+	}
+	g.SetMailMessages(msgs)
+	g.section = SectionMail
+
+	g, cmd := g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	if cmd == nil {
+		t.Fatal("expected cmd from mail compose in mail section")
+	}
+	msg := cmd()
+	action, ok := msg.(GasTownActionMsg)
+	if !ok {
+		t.Fatalf("expected GasTownActionMsg, got %T", msg)
+	}
+	if action.Type != "mail_compose" {
+		t.Fatalf("expected type 'mail_compose', got %q", action.Type)
+	}
+	if action.Agent.Name != "gastown/Toast" {
+		t.Fatalf("expected agent name 'gastown/Toast', got %q", action.Agent.Name)
+	}
+}
+
+func TestGasTownMailComposeNoActionInConvoySection(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	g.SetConvoyDetails([]gastown.ConvoyDetail{{ID: "cv-1", Title: "Sprint"}})
+	g.section = SectionConvoys
+
+	_, cmd := g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	if cmd != nil {
+		t.Fatal("w should not produce cmd in convoy section")
+	}
+}

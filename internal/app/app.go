@@ -101,6 +101,13 @@ type Model struct {
 	mailReplyID   string
 	mailReplyInput textinput.Model
 
+	// Mail compose state (two-step: subject then body)
+	mailComposing      bool
+	mailComposeStep    int // 0 = subject, 1 = body
+	mailComposeAddress string
+	mailComposeSubject string
+	mailComposeInput   textinput.Model
+
 	// Problems view
 	showProblems bool
 	problems     views.Problems
@@ -254,6 +261,12 @@ type mailReplyResultMsg struct {
 type mailArchiveResultMsg struct {
 	messageID string
 	err       error
+}
+
+type mailSendResultMsg struct {
+	address string
+	subject string
+	err     error
 }
 
 type mailMarkReadResultMsg struct {
@@ -419,6 +432,56 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.mailReplyInput, cmd = m.mailReplyInput.Update(msg)
+		return m, cmd
+	}
+
+	// Forward all messages to mail compose input when active
+	if m.mailComposing {
+		if km, ok := msg.(tea.KeyMsg); ok {
+			switch km.String() {
+			case "ctrl+c":
+				return m, tea.Quit
+			case "esc":
+				m.mailComposing = false
+				m.mailComposeAddress = ""
+				m.mailComposeSubject = ""
+				return m, nil
+			case "enter":
+				if m.mailComposeStep == 0 {
+					// Save subject, switch to body input
+					subject := m.mailComposeInput.Value()
+					if subject == "" {
+						return m, nil
+					}
+					m.mailComposeSubject = subject
+					m.mailComposeStep = 1
+					m.mailComposeInput = textinput.New()
+					m.mailComposeInput.Prompt = ui.InputPrompt.Render("message> ")
+					m.mailComposeInput.Placeholder = "Message body..."
+					m.mailComposeInput.TextStyle = ui.InputText
+					m.mailComposeInput.Cursor.Style = ui.InputCursor
+					m.mailComposeInput.Width = 50
+					m.mailComposeInput.Focus()
+					return m, textinput.Blink
+				}
+				// Step 1: send the message
+				m.mailComposing = false
+				address := m.mailComposeAddress
+				subject := m.mailComposeSubject
+				body := m.mailComposeInput.Value()
+				m.mailComposeAddress = ""
+				m.mailComposeSubject = ""
+				if body == "" {
+					return m, nil
+				}
+				return m, func() tea.Msg {
+					err := gastown.MailSend(address, subject, body)
+					return mailSendResultMsg{address: address, subject: subject, err: err}
+				}
+			}
+		}
+		var cmd tea.Cmd
+		m.mailComposeInput, cmd = m.mailComposeInput.Update(msg)
 		return m, cmd
 	}
 
@@ -792,6 +855,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toast = toast
 		return m, tea.Batch(cmd, fetchMailInbox)
 
+	case mailSendResultMsg:
+		if msg.err != nil {
+			toast, cmd := components.ShowToast(
+				fmt.Sprintf("Send failed: %s", msg.err),
+				components.ToastError, toastDuration,
+			)
+			m.toast = toast
+			return m, cmd
+		}
+		display := msg.subject
+		if len(display) > 30 {
+			display = display[:27] + "..."
+		}
+		toast, cmd := components.ShowToast(
+			fmt.Sprintf("Sent to %s: %s", msg.address, display),
+			components.ToastSuccess, toastDuration,
+		)
+		m.toast = toast
+		return m, tea.Batch(cmd, fetchMailInbox)
+
 	case mailMarkReadResultMsg:
 		if msg.err == nil {
 			// Refresh mail to update read status
@@ -970,7 +1053,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// When Gas Town panel is focused, route its keys before global handlers
 	if m.showGasTown && m.activPane == PaneDetail {
 		switch msg.String() {
-		case "j", "k", "up", "down", "g", "G", "n", "h", "K", "tab", "enter", "l", "x", "r", "d":
+		case "j", "k", "up", "down", "g", "G", "n", "h", "K", "tab", "enter", "l", "x", "r", "d", "w":
 			var cmd tea.Cmd
 			m.gasTown, cmd = m.gasTown.Update(msg)
 			return m, cmd
@@ -1687,6 +1770,24 @@ func (m Model) handleGasTownAction(msg views.GasTownActionMsg) (tea.Model, tea.C
 			err := gastown.MailMarkRead(msgID)
 			return mailMarkReadResultMsg{messageID: msgID, err: err}
 		}
+
+	case "mail_compose":
+		address := msg.Agent.Address
+		if address == "" {
+			address = msg.Agent.Name
+		}
+		m.mailComposing = true
+		m.mailComposeStep = 0
+		m.mailComposeAddress = address
+		m.mailComposeSubject = ""
+		m.mailComposeInput = textinput.New()
+		m.mailComposeInput.Prompt = ui.InputPrompt.Render("subject> ")
+		m.mailComposeInput.Placeholder = "Subject for " + msg.Agent.Name + "..."
+		m.mailComposeInput.TextStyle = ui.InputText
+		m.mailComposeInput.Cursor.Style = ui.InputCursor
+		m.mailComposeInput.Width = 50
+		m.mailComposeInput.Focus()
+		return m, textinput.Blink
 	}
 	return m, nil
 }
@@ -2007,6 +2108,11 @@ func (m Model) View() string {
 			Padding(0, 1).
 			Width(m.width).
 			Render(m.nudgeInput.View())
+	} else if m.mailComposing {
+		bottomBar = lipgloss.NewStyle().
+			Padding(0, 1).
+			Width(m.width).
+			Render(m.mailComposeInput.View())
 	} else if m.mailReplying {
 		bottomBar = lipgloss.NewStyle().
 			Padding(0, 1).

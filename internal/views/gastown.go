@@ -22,7 +22,7 @@ const (
 
 // GasTownActionMsg carries user intent from the Gas Town panel back to app.go.
 type GasTownActionMsg struct {
-	Type     string // "nudge", "handoff", "decommission", "convoy_land", "convoy_close", "mail_reply", "mail_archive", "mail_read"
+	Type     string // "nudge", "handoff", "decommission", "convoy_land", "convoy_close", "mail_reply", "mail_archive", "mail_read", "mail_compose"
 	Agent    gastown.AgentRuntime
 	ConvoyID string
 	Mail     gastown.MailMessage
@@ -309,6 +309,27 @@ func (g GasTown) Update(msg tea.Msg) (GasTown, tea.Cmd) {
 				mail := *m
 				return g, func() tea.Msg {
 					return GasTownActionMsg{Type: "mail_archive", Mail: mail}
+				}
+			}
+		}
+
+	case "w":
+		if g.section == SectionAgents {
+			if a := g.SelectedAgent(); a != nil {
+				agent := *a
+				return g, func() tea.Msg {
+					return GasTownActionMsg{Type: "mail_compose", Agent: agent}
+				}
+			}
+		} else if g.section == SectionMail {
+			if m := g.SelectedMail(); m != nil {
+				// Compose a new message to the sender of the selected mail
+				agent := gastown.AgentRuntime{
+					Name:    m.From,
+					Address: m.From,
+				}
+				return g, func() tea.Msg {
+					return GasTownActionMsg{Type: "mail_compose", Agent: agent}
 				}
 			}
 		}
@@ -1056,11 +1077,11 @@ func (g *GasTown) renderHints() string {
 	var hint string
 	switch g.section {
 	case SectionAgents:
-		hint = "n nudge  h handoff  K decommission  j/k navigate  tab section"
+		hint = "n nudge  w mail  h handoff  K decommission  j/k navigate  tab section"
 	case SectionConvoys:
 		hint = "enter expand  l land  x close  j/k navigate  tab section"
 	case SectionMail:
-		hint = "enter read  r reply  d archive  j/k navigate  tab section"
+		hint = "enter read  r reply  w compose  d archive  j/k navigate  tab section"
 	}
 	return "\n" + ui.GasTownHint.Render(hint)
 }
