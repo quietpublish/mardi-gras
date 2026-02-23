@@ -16,13 +16,15 @@ type GasTownSection int
 const (
 	SectionAgents GasTownSection = iota
 	SectionConvoys
+	SectionMail
 )
 
 // GasTownActionMsg carries user intent from the Gas Town panel back to app.go.
 type GasTownActionMsg struct {
-	Type     string // "nudge", "handoff", "decommission", "convoy_land", "convoy_close"
+	Type     string // "nudge", "handoff", "decommission", "convoy_land", "convoy_close", "mail_reply", "mail_archive", "mail_read"
 	Agent    gastown.AgentRuntime
 	ConvoyID string
+	Mail     gastown.MailMessage
 }
 
 // GasTown renders the Gas Town control surface panel in place of the detail pane.
@@ -36,9 +38,14 @@ type GasTown struct {
 	section     GasTownSection // which section has focus
 
 	// Convoy state
-	convoyCursor   int                      // cursor within convoy list
-	convoyDetails  []gastown.ConvoyDetail   // rich convoy data from gt convoy list
-	expandedConvoy int                      // index of expanded convoy, -1 = none
+	convoyCursor   int                    // cursor within convoy list
+	convoyDetails  []gastown.ConvoyDetail // rich convoy data from gt convoy list
+	expandedConvoy int                    // index of expanded convoy, -1 = none
+
+	// Mail state
+	mailCursor   int                    // cursor within mail list
+	mailMessages []gastown.MailMessage  // messages from gt mail inbox
+	expandedMail int                    // index of expanded message, -1 = none
 }
 
 // NewGasTown creates a Gas Town panel.
@@ -47,6 +54,7 @@ func NewGasTown(width, height int) GasTown {
 		width:          width,
 		height:         height,
 		expandedConvoy: -1,
+		expandedMail:   -1,
 	}
 }
 
@@ -102,6 +110,28 @@ func (g *GasTown) SelectedConvoy() *gastown.ConvoyDetail {
 	return nil
 }
 
+// SetMailMessages updates the mail list from gt mail inbox --json.
+func (g *GasTown) SetMailMessages(msgs []gastown.MailMessage) {
+	g.mailMessages = msgs
+	if g.mailCursor >= len(msgs) {
+		g.mailCursor = max(len(msgs)-1, 0)
+	}
+}
+
+// SelectedMail returns the currently selected mail message, or nil if none.
+func (g *GasTown) SelectedMail() *gastown.MailMessage {
+	if g.section != SectionMail {
+		return nil
+	}
+	if len(g.mailMessages) == 0 {
+		return nil
+	}
+	if g.mailCursor >= 0 && g.mailCursor < len(g.mailMessages) {
+		return &g.mailMessages[g.mailCursor]
+	}
+	return nil
+}
+
 // AgentCount returns the number of agents in the current status.
 func (g *GasTown) AgentCount() int {
 	if g.status == nil {
@@ -125,10 +155,21 @@ func (g GasTown) Update(msg tea.Msg) (GasTown, tea.Cmd) {
 
 	switch km.String() {
 	case "tab":
-		// Toggle between sections
-		if g.section == SectionAgents && len(g.convoyDetails) > 0 {
-			g.section = SectionConvoys
-		} else {
+		// Cycle through sections: Agents → Convoys → Mail → Agents
+		switch g.section {
+		case SectionAgents:
+			if len(g.convoyDetails) > 0 {
+				g.section = SectionConvoys
+			} else if len(g.mailMessages) > 0 {
+				g.section = SectionMail
+			}
+		case SectionConvoys:
+			if len(g.mailMessages) > 0 {
+				g.section = SectionMail
+			} else {
+				g.section = SectionAgents
+			}
+		case SectionMail:
 			g.section = SectionAgents
 		}
 		return g, nil
@@ -155,6 +196,19 @@ func (g GasTown) Update(msg tea.Msg) (GasTown, tea.Cmd) {
 				g.expandedConvoy = -1
 			} else {
 				g.expandedConvoy = g.convoyCursor
+			}
+		} else if g.section == SectionMail {
+			if g.expandedMail == g.mailCursor {
+				g.expandedMail = -1
+			} else {
+				g.expandedMail = g.mailCursor
+				// Emit mark-read action when expanding
+				if m := g.SelectedMail(); m != nil && !m.Read {
+					mail := *m
+					return g, func() tea.Msg {
+						return GasTownActionMsg{Type: "mail_read", Mail: mail}
+					}
+				}
 			}
 		}
 		return g, nil
@@ -208,59 +262,99 @@ func (g GasTown) Update(msg tea.Msg) (GasTown, tea.Cmd) {
 				}
 			}
 		}
+
+	case "r":
+		if g.section == SectionMail {
+			if m := g.SelectedMail(); m != nil {
+				mail := *m
+				return g, func() tea.Msg {
+					return GasTownActionMsg{Type: "mail_reply", Mail: mail}
+				}
+			}
+		}
+
+	case "d":
+		if g.section == SectionMail {
+			if m := g.SelectedMail(); m != nil {
+				mail := *m
+				return g, func() tea.Msg {
+					return GasTownActionMsg{Type: "mail_archive", Mail: mail}
+				}
+			}
+		}
 	}
 
 	return g, nil
 }
 
 func (g *GasTown) moveCursorDown() {
-	if g.section == SectionAgents {
+	switch g.section {
+	case SectionAgents:
 		count := g.AgentCount()
 		if count > 0 && g.agentCursor < count-1 {
 			g.agentCursor++
 			g.ensureVisible()
 		}
-	} else {
+	case SectionConvoys:
 		count := len(g.convoyDetails)
 		if count > 0 && g.convoyCursor < count-1 {
 			g.convoyCursor++
+		}
+	case SectionMail:
+		count := len(g.mailMessages)
+		if count > 0 && g.mailCursor < count-1 {
+			g.mailCursor++
 		}
 	}
 }
 
 func (g *GasTown) moveCursorUp() {
-	if g.section == SectionAgents {
+	switch g.section {
+	case SectionAgents:
 		if g.agentCursor > 0 {
 			g.agentCursor--
 			g.ensureVisible()
 		}
-	} else {
+	case SectionConvoys:
 		if g.convoyCursor > 0 {
 			g.convoyCursor--
+		}
+	case SectionMail:
+		if g.mailCursor > 0 {
+			g.mailCursor--
 		}
 	}
 }
 
 func (g *GasTown) jumpTop() {
-	if g.section == SectionAgents {
+	switch g.section {
+	case SectionAgents:
 		g.agentCursor = 0
 		g.scrollOff = 0
-	} else {
+	case SectionConvoys:
 		g.convoyCursor = 0
+	case SectionMail:
+		g.mailCursor = 0
 	}
 }
 
 func (g *GasTown) jumpBottom() {
-	if g.section == SectionAgents {
+	switch g.section {
+	case SectionAgents:
 		count := g.AgentCount()
 		if count > 0 {
 			g.agentCursor = count - 1
 			g.ensureVisible()
 		}
-	} else {
+	case SectionConvoys:
 		count := len(g.convoyDetails)
 		if count > 0 {
 			g.convoyCursor = count - 1
+		}
+	case SectionMail:
+		count := len(g.mailMessages)
+		if count > 0 {
+			g.mailCursor = count - 1
 		}
 	}
 }
@@ -316,6 +410,10 @@ func (g *GasTown) renderContent() string {
 		sections = append(sections, g.renderConvoyDetails(contentWidth))
 	} else if len(g.status.Convoys) > 0 {
 		sections = append(sections, renderConvoys(g.status.Convoys, contentWidth))
+	}
+
+	if len(g.mailMessages) > 0 {
+		sections = append(sections, g.renderMail(contentWidth))
 	}
 
 	// Hint bar at bottom
@@ -570,6 +668,111 @@ func (g *GasTown) renderConvoyDetails(width int) string {
 	return strings.Join(lines, "\n")
 }
 
+// renderMail renders the mail section with cursor and expand/collapse.
+func (g *GasTown) renderMail(width int) string {
+	var lines []string
+
+	// Count unread
+	unread := 0
+	for _, m := range g.mailMessages {
+		if !m.Read {
+			unread++
+		}
+	}
+
+	titleStr := "MAIL"
+	if unread > 0 {
+		titleStr = fmt.Sprintf("MAIL (%d unread)", unread)
+	}
+	if g.section == SectionMail {
+		titleStr = ui.Cursor + " " + titleStr
+	}
+	lines = append(lines, ui.GasTownTitle.Render(titleStr))
+
+	for i, m := range g.mailMessages {
+		isSelected := g.section == SectionMail && i == g.mailCursor
+		isExpanded := i == g.expandedMail
+
+		// Unread indicator
+		unreadSym := " "
+		if !m.Read {
+			unreadSym = lipgloss.NewStyle().Foreground(ui.StatusMail).Render(ui.SymMail)
+		}
+
+		// Priority indicator
+		prioStyle := lipgloss.NewStyle().Foreground(ui.Muted)
+		switch m.Priority {
+		case "urgent":
+			prioStyle = lipgloss.NewStyle().Foreground(ui.PrioP0)
+		case "high":
+			prioStyle = lipgloss.NewStyle().Foreground(ui.PrioP1)
+		}
+
+		// From (truncated)
+		from := m.From
+		if len(from) > 18 {
+			from = from[:15] + "..."
+		}
+		fromStyle := lipgloss.NewStyle().Foreground(ui.Light)
+		if !m.Read {
+			fromStyle = fromStyle.Bold(true)
+		}
+
+		// Subject (truncated)
+		subjectWidth := max(width-24, 10)
+		subject := truncateGT(m.Subject, subjectWidth)
+		subjectStyle := lipgloss.NewStyle().Foreground(ui.Muted)
+		if !m.Read {
+			subjectStyle = lipgloss.NewStyle().Foreground(ui.White)
+		}
+
+		// Cursor
+		prefix := "  "
+		if isSelected {
+			prefix = ui.ItemCursor.Render(ui.Cursor+" ") + ""
+		}
+
+		// Type badge
+		typeBadge := ""
+		if m.Type == "task" {
+			typeBadge = prioStyle.Render("[task] ")
+		} else if m.Type == "scavenge" {
+			typeBadge = prioStyle.Render("[scav] ")
+		}
+
+		row := fmt.Sprintf("%s%s %s %s%s",
+			prefix, unreadSym, fromStyle.Render(from), typeBadge, subjectStyle.Render(subject))
+
+		if isSelected {
+			row = ui.GasTownAgentSelected.Width(width).Render(row)
+		}
+		lines = append(lines, row)
+
+		// Expanded: show full message body
+		if isExpanded {
+			bodyWidth := max(width-8, 20)
+			body := m.Body
+			if body == "" {
+				body = "(no body)"
+			}
+			// Wrap body lines
+			bodyStyle := lipgloss.NewStyle().Foreground(ui.Light).Width(bodyWidth)
+			lines = append(lines, "")
+			lines = append(lines, "      "+lipgloss.NewStyle().Foreground(ui.Dim).Render("From: ")+fromStyle.Render(m.From))
+			if m.Time != "" {
+				lines = append(lines, "      "+lipgloss.NewStyle().Foreground(ui.Dim).Render("Time: ")+lipgloss.NewStyle().Foreground(ui.Muted).Render(m.Time))
+			}
+			lines = append(lines, "")
+			for _, bline := range strings.Split(bodyStyle.Render(body), "\n") {
+				lines = append(lines, "      "+bline)
+			}
+			lines = append(lines, "")
+		}
+	}
+
+	return strings.Join(lines, "\n")
+}
+
 // renderConvoys renders the basic convoy section (fallback when no detail data).
 func renderConvoys(convoys []gastown.ConvoyInfo, width int) string {
 	var lines []string
@@ -596,9 +799,14 @@ func renderConvoys(convoys []gastown.ConvoyInfo, width int) string {
 }
 
 func (g *GasTown) renderHints() string {
-	hint := "n nudge  h handoff  K decommission  j/k navigate  tab section"
-	if g.section == SectionConvoys {
+	var hint string
+	switch g.section {
+	case SectionAgents:
+		hint = "n nudge  h handoff  K decommission  j/k navigate  tab section"
+	case SectionConvoys:
 		hint = "enter expand  l land  x close  j/k navigate  tab section"
+	case SectionMail:
+		hint = "enter read  r reply  d archive  j/k navigate  tab section"
 	}
 	return "\n" + ui.GasTownHint.Render(hint)
 }

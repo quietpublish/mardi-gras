@@ -616,6 +616,295 @@ func TestGasTownConvoyDetailsRender(t *testing.T) {
 	}
 }
 
+func TestGasTownSetMailMessages(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	msgs := []gastown.MailMessage{
+		{ID: "msg-1", From: "gastown/Toast", Subject: "Status update", Read: false},
+		{ID: "msg-2", From: "mayor/", Subject: "Deploy approved", Read: true},
+	}
+	g.SetMailMessages(msgs)
+
+	if len(g.mailMessages) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(g.mailMessages))
+	}
+}
+
+func TestGasTownSelectedMail(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	// No messages → nil
+	if g.SelectedMail() != nil {
+		t.Fatal("expected nil mail when none set")
+	}
+
+	msgs := []gastown.MailMessage{
+		{ID: "msg-1", Subject: "First"},
+		{ID: "msg-2", Subject: "Second"},
+	}
+	g.SetMailMessages(msgs)
+
+	// Still nil in agents section
+	if g.SelectedMail() != nil {
+		t.Fatal("expected nil mail when in agents section")
+	}
+
+	g.section = SectionMail
+	m := g.SelectedMail()
+	if m == nil || m.ID != "msg-1" {
+		t.Fatalf("expected msg-1, got %v", m)
+	}
+
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = g.SelectedMail()
+	if m == nil || m.ID != "msg-2" {
+		t.Fatalf("expected msg-2, got %v", m)
+	}
+}
+
+func TestGasTownMailCursor(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	msgs := []gastown.MailMessage{
+		{ID: "msg-1"}, {ID: "msg-2"}, {ID: "msg-3"},
+	}
+	g.SetMailMessages(msgs)
+	g.section = SectionMail
+
+	// Move down
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if g.mailCursor != 1 {
+		t.Fatalf("after j, mail cursor = %d, want 1", g.mailCursor)
+	}
+
+	// Can't go past end
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if g.mailCursor != 2 {
+		t.Fatalf("cursor should clamp at end, got %d", g.mailCursor)
+	}
+
+	// Jump to top
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	if g.mailCursor != 0 {
+		t.Fatalf("after g, mail cursor = %d, want 0", g.mailCursor)
+	}
+
+	// Jump to bottom
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	if g.mailCursor != 2 {
+		t.Fatalf("after G, mail cursor = %d, want 2", g.mailCursor)
+	}
+}
+
+func TestGasTownMailExpandCollapse(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	msgs := []gastown.MailMessage{
+		{ID: "msg-1", Subject: "Test", Body: "Hello world", Read: true},
+	}
+	g.SetMailMessages(msgs)
+	g.section = SectionMail
+
+	if g.expandedMail != -1 {
+		t.Fatalf("initial expanded = %d, want -1", g.expandedMail)
+	}
+
+	// Enter expands (already-read message, no cmd emitted)
+	g, cmd := g.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if g.expandedMail != 0 {
+		t.Fatalf("after enter, expanded = %d, want 0", g.expandedMail)
+	}
+	if cmd != nil {
+		t.Fatal("expected no cmd for already-read message expand")
+	}
+
+	// Enter again collapses
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if g.expandedMail != -1 {
+		t.Fatalf("after second enter, expanded = %d, want -1", g.expandedMail)
+	}
+}
+
+func TestGasTownMailExpandUnreadEmitsMarkRead(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	msgs := []gastown.MailMessage{
+		{ID: "msg-1", Subject: "Unread", Read: false},
+	}
+	g.SetMailMessages(msgs)
+	g.section = SectionMail
+
+	g, cmd := g.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if g.expandedMail != 0 {
+		t.Fatalf("expected expand, got %d", g.expandedMail)
+	}
+	if cmd == nil {
+		t.Fatal("expected mark-read cmd for unread message")
+	}
+	msg := cmd()
+	action, ok := msg.(GasTownActionMsg)
+	if !ok {
+		t.Fatalf("expected GasTownActionMsg, got %T", msg)
+	}
+	if action.Type != "mail_read" {
+		t.Fatalf("expected type 'mail_read', got %q", action.Type)
+	}
+	if action.Mail.ID != "msg-1" {
+		t.Fatalf("expected mail ID 'msg-1', got %q", action.Mail.ID)
+	}
+}
+
+func TestGasTownMailActionReply(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	msgs := []gastown.MailMessage{
+		{ID: "msg-1", From: "gastown/Toast", Subject: "Help"},
+	}
+	g.SetMailMessages(msgs)
+	g.section = SectionMail
+
+	g, cmd := g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	if cmd == nil {
+		t.Fatal("expected cmd from reply action")
+	}
+	msg := cmd()
+	action, ok := msg.(GasTownActionMsg)
+	if !ok {
+		t.Fatalf("expected GasTownActionMsg, got %T", msg)
+	}
+	if action.Type != "mail_reply" {
+		t.Fatalf("expected type 'mail_reply', got %q", action.Type)
+	}
+	if action.Mail.ID != "msg-1" {
+		t.Fatalf("expected mail ID 'msg-1', got %q", action.Mail.ID)
+	}
+}
+
+func TestGasTownMailActionArchive(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	msgs := []gastown.MailMessage{
+		{ID: "msg-2", Subject: "Done"},
+	}
+	g.SetMailMessages(msgs)
+	g.section = SectionMail
+
+	g, cmd := g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	if cmd == nil {
+		t.Fatal("expected cmd from archive action")
+	}
+	msg := cmd()
+	action, ok := msg.(GasTownActionMsg)
+	if !ok {
+		t.Fatalf("expected GasTownActionMsg, got %T", msg)
+	}
+	if action.Type != "mail_archive" {
+		t.Fatalf("expected type 'mail_archive', got %q", action.Type)
+	}
+}
+
+func TestGasTownMailRender(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	msgs := []gastown.MailMessage{
+		{ID: "msg-1", From: "gastown/Toast", Subject: "Build complete", Read: false, Type: "notification"},
+		{ID: "msg-2", From: "mayor/", Subject: "Deploy request", Read: true, Type: "task"},
+	}
+	g.SetMailMessages(msgs)
+
+	view := g.View()
+	if !strings.Contains(view, "MAIL") {
+		t.Fatal("view should contain MAIL section")
+	}
+	if !strings.Contains(view, "1 unread") {
+		t.Fatal("view should contain unread count")
+	}
+	if !strings.Contains(view, "Build complete") {
+		t.Fatal("view should contain message subject")
+	}
+}
+
+func TestGasTownSectionCycleWithMail(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{
+		{Name: "test", Role: "polecat"},
+	}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	g.SetConvoyDetails([]gastown.ConvoyDetail{{ID: "cv-1", Title: "Sprint"}})
+	g.SetMailMessages([]gastown.MailMessage{{ID: "msg-1", Subject: "Hello"}})
+
+	// Agents → Convoys
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if g.Section() != SectionConvoys {
+		t.Fatalf("expected SectionConvoys, got %d", g.Section())
+	}
+
+	// Convoys → Mail
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if g.Section() != SectionMail {
+		t.Fatalf("expected SectionMail, got %d", g.Section())
+	}
+
+	// Mail → Agents
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if g.Section() != SectionAgents {
+		t.Fatalf("expected SectionAgents, got %d", g.Section())
+	}
+}
+
+func TestGasTownMailNoActionInOtherSection(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{
+		{Name: "test", Role: "polecat"},
+	}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	g.SetMailMessages([]gastown.MailMessage{{ID: "msg-1", Subject: "Test"}})
+
+	// r and d should not produce cmd in agents section
+	_, cmd := g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	if cmd != nil {
+		t.Fatal("r should not produce cmd in agents section")
+	}
+	_, cmd = g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	if cmd != nil {
+		t.Fatal("d should not produce cmd in agents section")
+	}
+}
+
+func TestGasTownMailCursorClamp(t *testing.T) {
+	g := NewGasTown(100, 30)
+	g.section = SectionMail
+
+	msgs := []gastown.MailMessage{{ID: "msg-1"}, {ID: "msg-2"}, {ID: "msg-3"}}
+	g.SetMailMessages(msgs)
+	g.mailCursor = 2
+
+	// Reduce to 1 message — cursor should clamp
+	g.SetMailMessages([]gastown.MailMessage{{ID: "msg-1"}})
+	if g.mailCursor != 0 {
+		t.Fatalf("mail cursor should clamp to 0, got %d", g.mailCursor)
+	}
+}
+
 func TestGasTownConvoyNoActionInAgentSection(t *testing.T) {
 	g := NewGasTown(100, 30)
 	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{

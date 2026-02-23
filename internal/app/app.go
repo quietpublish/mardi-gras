@@ -92,9 +92,14 @@ type Model struct {
 	nudgeTarget string
 
 	// Convoy creation state
-	convoyCreating  bool
-	convoyInput     textinput.Model
-	convoyIssueIDs  []string
+	convoyCreating bool
+	convoyInput    textinput.Model
+	convoyIssueIDs []string
+
+	// Mail reply state
+	mailReplying  bool
+	mailReplyID   string
+	mailReplyInput textinput.Model
 }
 
 // New creates a new app model from loaded issues.
@@ -232,6 +237,26 @@ type convoyCreateResultMsg struct {
 	err  error
 }
 
+type mailInboxMsg struct {
+	messages []gastown.MailMessage
+	err      error
+}
+
+type mailReplyResultMsg struct {
+	messageID string
+	err       error
+}
+
+type mailArchiveResultMsg struct {
+	messageID string
+	err       error
+}
+
+type mailMarkReadResultMsg struct {
+	messageID string
+	err       error
+}
+
 // mutateResultMsg is sent when a bd CLI mutation completes.
 type mutateResultMsg struct {
 	issueID string
@@ -333,6 +358,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.nudgeInput, cmd = m.nudgeInput.Update(msg)
+		return m, cmd
+	}
+
+	// Forward all messages to mail reply input when active
+	if m.mailReplying {
+		if km, ok := msg.(tea.KeyMsg); ok {
+			switch km.String() {
+			case "ctrl+c":
+				return m, tea.Quit
+			case "esc":
+				m.mailReplying = false
+				m.mailReplyID = ""
+				return m, nil
+			case "enter":
+				m.mailReplying = false
+				msgID := m.mailReplyID
+				body := m.mailReplyInput.Value()
+				m.mailReplyID = ""
+				if body == "" {
+					return m, nil
+				}
+				return m, func() tea.Msg {
+					err := gastown.MailReply(msgID, body)
+					return mailReplyResultMsg{messageID: msgID, err: err}
+				}
+			}
+		}
+		var cmd tea.Cmd
+		m.mailReplyInput, cmd = m.mailReplyInput.Update(msg)
 		return m, cmd
 	}
 
@@ -659,6 +713,51 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toast = toast
 		return m, tea.Batch(cmd, fetchConvoyList)
 
+	case mailInboxMsg:
+		if msg.err == nil {
+			m.gasTown.SetMailMessages(msg.messages)
+		}
+		return m, nil
+
+	case mailReplyResultMsg:
+		if msg.err != nil {
+			toast, cmd := components.ShowToast(
+				fmt.Sprintf("Reply failed: %s", msg.err),
+				components.ToastError, toastDuration,
+			)
+			m.toast = toast
+			return m, cmd
+		}
+		toast, cmd := components.ShowToast(
+			"Reply sent",
+			components.ToastSuccess, toastDuration,
+		)
+		m.toast = toast
+		return m, tea.Batch(cmd, fetchMailInbox)
+
+	case mailArchiveResultMsg:
+		if msg.err != nil {
+			toast, cmd := components.ShowToast(
+				fmt.Sprintf("Archive failed: %s", msg.err),
+				components.ToastError, toastDuration,
+			)
+			m.toast = toast
+			return m, cmd
+		}
+		toast, cmd := components.ShowToast(
+			fmt.Sprintf("Archived %s", msg.messageID),
+			components.ToastSuccess, toastDuration,
+		)
+		m.toast = toast
+		return m, tea.Batch(cmd, fetchMailInbox)
+
+	case mailMarkReadResultMsg:
+		if msg.err == nil {
+			// Refresh mail to update read status
+			return m, fetchMailInbox
+		}
+		return m, nil
+
 	case views.GasTownActionMsg:
 		return m.handleGasTownAction(msg)
 
@@ -765,7 +864,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// When Gas Town panel is focused, route its keys before global handlers
 	if m.showGasTown && m.activPane == PaneDetail {
 		switch msg.String() {
-		case "j", "k", "up", "down", "g", "G", "n", "h", "K", "tab", "enter", "l", "x":
+		case "j", "k", "up", "down", "g", "G", "n", "h", "K", "tab", "enter", "l", "x", "r", "d":
 			var cmd tea.Cmd
 			m.gasTown, cmd = m.gasTown.Update(msg)
 			return m, cmd
@@ -826,7 +925,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.showGasTown = !m.showGasTown
 		if m.showGasTown {
 			m.gasTown.SetStatus(m.townStatus, m.gtEnv)
-			cmds := []tea.Cmd{fetchConvoyList}
+			cmds := []tea.Cmd{fetchConvoyList, fetchMailInbox}
 			if m.townStatus == nil {
 				cmds = append(cmds, pollAgentState(m.gtEnv, m.inTmux))
 			}
@@ -1423,6 +1522,32 @@ func (m Model) handleGasTownAction(msg views.GasTownActionMsg) (tea.Model, tea.C
 			err := gastown.ConvoyClose(convoyID)
 			return convoyCloseResultMsg{convoyID: convoyID, err: err}
 		}
+
+	case "mail_reply":
+		m.mailReplying = true
+		m.mailReplyID = msg.Mail.ID
+		m.mailReplyInput = textinput.New()
+		m.mailReplyInput.Prompt = ui.InputPrompt.Render("reply> ")
+		m.mailReplyInput.Placeholder = "Reply to " + msg.Mail.From + "..."
+		m.mailReplyInput.TextStyle = ui.InputText
+		m.mailReplyInput.Cursor.Style = ui.InputCursor
+		m.mailReplyInput.Width = 50
+		m.mailReplyInput.Focus()
+		return m, textinput.Blink
+
+	case "mail_archive":
+		msgID := msg.Mail.ID
+		return m, func() tea.Msg {
+			err := gastown.MailArchive(msgID)
+			return mailArchiveResultMsg{messageID: msgID, err: err}
+		}
+
+	case "mail_read":
+		msgID := msg.Mail.ID
+		return m, func() tea.Msg {
+			err := gastown.MailMarkRead(msgID)
+			return mailMarkReadResultMsg{messageID: msgID, err: err}
+		}
 	}
 	return m, nil
 }
@@ -1630,6 +1755,12 @@ func fetchConvoyList() tea.Msg {
 	return convoyListMsg{convoys: convoys, err: err}
 }
 
+// fetchMailInbox returns a Cmd that fetches mail messages via gt mail inbox.
+func fetchMailInbox() tea.Msg {
+	msgs, err := gastown.MailInbox(false)
+	return mailInboxMsg{messages: msgs, err: err}
+}
+
 // View implements tea.Model.
 func (m Model) View() string {
 	if !m.ready {
@@ -1660,6 +1791,11 @@ func (m Model) View() string {
 			Padding(0, 1).
 			Width(m.width).
 			Render(m.nudgeInput.View())
+	} else if m.mailReplying {
+		bottomBar = lipgloss.NewStyle().
+			Padding(0, 1).
+			Width(m.width).
+			Render(m.mailReplyInput.View())
 	} else if m.convoyCreating {
 		bottomBar = lipgloss.NewStyle().
 			Padding(0, 1).
