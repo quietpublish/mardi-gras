@@ -35,6 +35,7 @@ const (
 	ActionHelp
 	ActionQuit
 	ActionFormulaSelect
+	ActionToggleGasTown
 )
 
 // PaletteCommand is a single entry in the command palette.

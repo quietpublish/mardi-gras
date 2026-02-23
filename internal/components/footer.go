@@ -107,6 +107,7 @@ func NewFooter(width int, detailFocused bool, hasGasTown bool) Footer {
 	}
 	if hasGasTown {
 		gtBindings := []FooterBinding{
+			{Key: "^g", Desc: "gas town"},
 			{Key: "s", Desc: "sling"},
 			{Key: "n", Desc: "nudge"},
 		}

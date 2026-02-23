@@ -9,20 +9,20 @@ import (
 
 // CreateFormResult is sent when the create form completes.
 type CreateFormResult struct {
-	Title    string
-	Type     string
-	Priority string
+	Title     string
+	Type      string
+	Priority  string
 	Cancelled bool
 }
 
 // CreateForm is a mini-form for creating a new issue.
 type CreateForm struct {
-	form     *huh.Form
-	title    string
+	form      *huh.Form
+	title     string
 	issueType string
-	priority string
-	width    int
-	height   int
+	priority  string
+	width     int
+	height    int
 }
 
 // NewCreateForm creates a new issue creation form.

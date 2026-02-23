@@ -138,6 +138,24 @@ var (
 	ConvoyBadge = lipgloss.NewStyle().Foreground(StatusConvoy).Bold(true)
 	GasTownTag  = lipgloss.NewStyle().Foreground(BrightPurple).Italic(true)
 
+	// Gas Town panel
+	GasTownBorder = lipgloss.NewStyle().
+			BorderLeft(true).
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderForeground(BrightGold).
+			PaddingLeft(1)
+
+	GasTownTitle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(BrightGold).
+			MarginTop(1)
+
+	GasTownLabel = lipgloss.NewStyle().
+			Foreground(Muted)
+
+	GasTownValue = lipgloss.NewStyle().
+			Foreground(Light)
+
 	FooterSource = lipgloss.NewStyle().
 			Foreground(Muted)
 
@@ -209,3 +227,25 @@ var (
 			Bold(true).
 			Padding(0, 1)
 )
+
+// RoleBadge returns a styled badge for a Gas Town role.
+func RoleBadge(role string) string {
+	return lipgloss.NewStyle().
+		Foreground(RoleColor(role)).
+		Bold(true).
+		Render(role)
+}
+
+// StateBadge returns a styled badge for an agent state.
+func StateBadge(state string) string {
+	sym := SymIdle
+	switch state {
+	case "working":
+		sym = SymWorking
+	case "backoff":
+		sym = SymBackoff
+	}
+	return lipgloss.NewStyle().
+		Foreground(AgentStateColor(state)).
+		Render(sym + " " + state)
+}

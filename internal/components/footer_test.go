@@ -32,8 +32,8 @@ func TestNewFooterDetailBindings(t *testing.T) {
 func TestNewFooterGasTownAddsBindings(t *testing.T) {
 	f := NewFooter(80, false, true)
 
-	// Should have ParadeBindings + 2 Gas Town bindings (sling, nudge)
-	expected := len(ParadeBindings) + 2
+	// Should have ParadeBindings + 3 Gas Town bindings (gas town, sling, nudge)
+	expected := len(ParadeBindings) + 3
 	if len(f.Bindings) != expected {
 		t.Fatalf("expected %d bindings with Gas Town, got %d", expected, len(f.Bindings))
 	}

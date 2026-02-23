@@ -110,6 +110,7 @@ func (h Help) View() string {
 		{
 			title: "GAS TOWN (when gt detected)",
 			bindings: []helpBinding{
+				{key: "ctrl+g", desc: "Toggle Gas Town panel"},
 				{key: "a", desc: "Sling issue to polecat (or tmux fallback)"},
 				{key: "s", desc: "Pick formula and sling to polecat"},
 				{key: "n", desc: "Nudge agent with message"},

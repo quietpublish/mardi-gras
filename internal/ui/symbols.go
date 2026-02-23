@@ -58,4 +58,12 @@ const (
 	DividerV = "│"
 	CornerTL = "┯"
 	CornerBL = "┷"
+
+	// Gas Town panel
+	SymIdle          = "○"
+	SymWorking       = "●"
+	SymBackoff       = "◌"
+	SymProgress      = "█"
+	SymProgressEmpty = "░"
+	SymTown          = "⛽"
 )

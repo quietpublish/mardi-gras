@@ -481,9 +481,9 @@ func TestDetailRenderContentRichDeps(t *testing.T) {
 
 func TestDepTypeDisplay(t *testing.T) {
 	tests := []struct {
-		depType    string
-		wantSym    string
-		wantVerb   string
+		depType  string
+		wantSym  string
+		wantVerb string
 	}{
 		{"related", ui.SymRelated, "related to"},
 		{"duplicates", ui.SymDuplicates, "duplicates"},

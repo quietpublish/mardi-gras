@@ -56,6 +56,8 @@ type Model struct {
 	activeAgents  map[string]string   // issueID -> tmux window name
 	gtEnv         gastown.Env         // Gas Town environment, read once at startup
 	townStatus    *gastown.TownStatus // Latest gt status, nil when unavailable
+	gasTown       views.GasTown       // Gas Town control surface panel
+	showGasTown   bool                // Whether the Gas Town panel replaces detail
 
 	// Toast notification
 	toast components.Toast
@@ -391,6 +393,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.townStatus = msg.status
 			m.activeAgents = msg.status.ActiveAgentMap()
 			m.propagateAgentState()
+			if m.showGasTown {
+				m.gasTown.SetStatus(m.townStatus, m.gtEnv)
+			}
 		}
 		return m, nil
 
@@ -550,8 +555,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(data.WatchFile(m.watchPath, m.lastFileMod), pollAgentState(m.gtEnv, m.inTmux))
 	}
 
-	// Forward to detail viewport when focused
+	// Forward to detail viewport (or Gas Town viewport) when focused
 	if m.activPane == PaneDetail {
+		if m.showGasTown {
+			var cmd tea.Cmd
+			m.gasTown, cmd = m.gasTown.Update(msg)
+			return m, cmd
+		}
 		var cmd tea.Cmd
 		m.detail.Viewport, cmd = m.detail.Viewport.Update(msg)
 		return m, cmd
@@ -645,6 +655,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		toast, cmd := components.ShowToast("Focus mode OFF", components.ToastInfo, toastDuration)
 		m.toast = toast
 		return m, cmd
+
+	case "ctrl+g":
+		if !m.gtEnv.Available {
+			return m, nil
+		}
+		m.showGasTown = !m.showGasTown
+		if m.showGasTown {
+			m.gasTown.SetStatus(m.townStatus, m.gtEnv)
+		}
+		return m, nil
 
 	case "c":
 		m.parade.ToggleClosed()
@@ -854,8 +874,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Detail pane navigation
+	// Detail pane navigation (or Gas Town panel when active)
 	if m.activPane == PaneDetail {
+		if m.showGasTown {
+			var cmd tea.Cmd
+			m.gasTown, cmd = m.gasTown.Update(msg)
+			return m, cmd
+		}
 		var cmd tea.Cmd
 		switch msg.String() {
 		case "j", "down":
@@ -1058,6 +1083,7 @@ func (m Model) buildPaletteCommands() []components.PaletteCommand {
 
 	if m.gtEnv.Available {
 		cmds = append(cmds,
+			components.PaletteCommand{Name: "Toggle Gas Town", Desc: "Show/hide Gas Town panel", Key: "^g", Action: components.ActionToggleGasTown},
 			components.PaletteCommand{Name: "Sling with formula", Desc: "Pick formula and sling to polecat", Key: "s", Action: components.ActionSlingFormula},
 			components.PaletteCommand{Name: "Nudge agent", Desc: "Nudge agent with message", Key: "n", Action: components.ActionNudgeAgent},
 		)
@@ -1117,6 +1143,15 @@ func (m Model) executePaletteAction(action components.PaletteAction) (tea.Model,
 		return m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
 	case components.ActionNudgeAgent:
 		return m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	case components.ActionToggleGasTown:
+		if !m.gtEnv.Available {
+			return m, nil
+		}
+		m.showGasTown = !m.showGasTown
+		if m.showGasTown {
+			m.gasTown.SetStatus(m.townStatus, m.gtEnv)
+		}
+		return m, nil
 	case components.ActionHelp:
 		m.showHelp = true
 		return m, nil
@@ -1189,6 +1224,7 @@ func (m *Model) layout() {
 
 	m.parade.SetSize(paradeW, bodyH)
 	m.detail.SetSize(detailW, bodyH)
+	m.gasTown.SetSize(detailW, bodyH)
 	m.detail.AllIssues = m.issues
 	m.detail.IssueMap = data.BuildIssueMap(m.issues)
 	m.detail.BlockingTypes = m.blockingTypes
@@ -1330,10 +1366,15 @@ func (m Model) View() string {
 
 	header := m.header.View()
 
+	rightPanel := m.detail.View()
+	if m.showGasTown && m.gtEnv.Available {
+		rightPanel = m.gasTown.View()
+	}
+
 	body := lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		m.parade.View(),
-		m.detail.View(),
+		rightPanel,
 	)
 
 	var bottomBar string

@@ -49,6 +49,20 @@ var (
 	ColorTask    = BrightGold
 	ColorChore   = Muted
 	ColorEpic    = lipgloss.Color("#3498DB")
+
+	// Neutrals (extra)
+	Silver = lipgloss.Color("#AAAAAA")
+
+	// Gas Town role colors
+	RoleMayor   = BrightGold
+	RolePolecat = BrightGreen
+	RoleCrew    = BrightPurple
+	RoleDefault = Silver
+
+	// Gas Town agent state colors
+	StateWorking = BrightGreen
+	StateIdle    = Silver
+	StateBackoff = lipgloss.Color("#E74C3C")
 )
 
 // PriorityColor returns the theme color for a priority level.
@@ -70,6 +84,32 @@ func PriorityColor(p int) lipgloss.Color {
 }
 
 // IssueTypeColor returns the theme color for an issue type.
+// RoleColor returns the theme color for a Gas Town agent role.
+func RoleColor(role string) lipgloss.Color {
+	switch role {
+	case "mayor":
+		return RoleMayor
+	case "polecat":
+		return RolePolecat
+	case "crew":
+		return RoleCrew
+	default:
+		return RoleDefault
+	}
+}
+
+// AgentStateColor returns the theme color for a Gas Town agent state.
+func AgentStateColor(state string) lipgloss.Color {
+	switch state {
+	case "working":
+		return StateWorking
+	case "backoff":
+		return StateBackoff
+	default:
+		return StateIdle
+	}
+}
+
 func IssueTypeColor(t string) lipgloss.Color {
 	switch t {
 	case "bug":
