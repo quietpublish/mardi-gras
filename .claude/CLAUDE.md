@@ -20,11 +20,12 @@ Always run `make test` after changes. Run `make lint` before committing.
 |---------|---------|
 | `cmd/mg` | Entry point, flag parsing |
 | `internal/app` | Root BubbleTea model, key handlers, message routing |
-| `internal/views` | Parade list + Detail panel views |
+| `internal/views` | Parade list, Detail panel, Gas Town panel views |
 | `internal/components` | Header, footer, help overlay, divider |
 | `internal/ui` | Theme colors, styles, symbols — no logic |
 | `internal/data` | JSONL loading, issue types, filtering, file watcher |
 | `internal/agent` | Claude Code launch, tmux pane dispatch |
+| `internal/gastown` | Gas Town integration: env detection, status parsing, sling/nudge commands |
 | `internal/tmux` | `mg --status` widget for tmux status bar |
 
 ## Conventions
@@ -43,10 +44,22 @@ This project uses [Beads](https://github.com/beads-project/beads) for issue trac
 bd ready                              # Find unblocked work
 bd update <id> --status=in_progress   # Claim an issue
 bd close <id>                         # Mark done
-bd sync --from-main                   # Pull beads data from main
+bd sync                               # Sync beads data
 ```
 
 Do NOT use `bd edit` — it opens `$EDITOR` and blocks agents.
+
+## Gas Town Integration
+
+Mardi Gras integrates with [Gas Town](https://github.com/steveyegge/gastown) (`gt`) for multi-agent orchestration. The `internal/gastown` package handles:
+
+- **Environment detection** (`detect.go`): Reads `GT_ROLE`, `GT_RIG`, `GT_SCOPE`, `GT_POLECAT`, `GT_CREW` env vars and checks if `gt` is on PATH.
+- **Status parsing** (`status.go`): Parses `gt status --json` output. The raw JSON nests agents under `rigs[].agents`; `normalizeStatus()` flattens them into a single `Agents` slice for the UI.
+- **Sling/Nudge** (`sling.go`): Issue dispatch to polecats, formula selection, multi-sling, nudge messaging.
+
+**Key gotcha**: `gt status --json` takes ~9 seconds to run. Background polling via BubbleTea Cmds may not return before the user interacts. The Gas Town panel (`ctrl+g`) triggers an on-demand fetch if status is nil and shows a loading state while waiting.
+
+**Testing with real gt**: Run mg from a Gas Town workspace (e.g., `cd ~/gt/<rig>/crew/<name> && ~/Work/mardi-gras/mg`). The `gt` source code is at `~/go/pkg/mod/github.com/steveyegge/gastown@v0.7.0/` — check it directly rather than guessing struct shapes.
 
 ## Agent Dispatch
 
