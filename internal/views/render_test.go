@@ -507,6 +507,99 @@ func TestDepTypeDisplay(t *testing.T) {
 	}
 }
 
+func TestSectionHintsNoGasTown(t *testing.T) {
+	p := newTestParade()
+	p.HasGasTown = false
+
+	rolling := paradeSection{Status: data.ParadeRolling}
+	linedUp := paradeSection{Status: data.ParadeLinedUp}
+	stalled := paradeSection{Status: data.ParadeStalled}
+	passed := paradeSection{Status: data.ParadePastTheStand}
+
+	// Rolling without Gas Town shows agent + close
+	h := p.sectionHints(rolling)
+	if !strings.Contains(h, "agent") {
+		t.Errorf("Rolling hints without GT should contain 'agent', got: %s", h)
+	}
+	if !strings.Contains(h, "close") {
+		t.Errorf("Rolling hints without GT should contain 'close', got: %s", h)
+	}
+
+	// Lined Up without Gas Town shows start + agent
+	h = p.sectionHints(linedUp)
+	if !strings.Contains(h, "start") {
+		t.Errorf("Lined Up hints without GT should contain 'start', got: %s", h)
+	}
+
+	// Stalled shows details
+	h = p.sectionHints(stalled)
+	if !strings.Contains(h, "details") {
+		t.Errorf("Stalled hints should contain 'details', got: %s", h)
+	}
+
+	// Past the Stand has no hints (handled by title text)
+	h = p.sectionHints(passed)
+	if h != "" {
+		t.Errorf("Past the Stand hints should be empty, got: %s", h)
+	}
+}
+
+func TestSectionHintsGasTown(t *testing.T) {
+	p := newTestParade()
+	p.HasGasTown = true
+
+	rolling := paradeSection{Status: data.ParadeRolling}
+	linedUp := paradeSection{Status: data.ParadeLinedUp}
+
+	// Rolling with Gas Town shows nudge + unsling
+	h := p.sectionHints(rolling)
+	if !strings.Contains(h, "nudge") {
+		t.Errorf("Rolling hints with GT should contain 'nudge', got: %s", h)
+	}
+	if !strings.Contains(h, "unsling") {
+		t.Errorf("Rolling hints with GT should contain 'unsling', got: %s", h)
+	}
+
+	// Lined Up with Gas Town shows sling + formula
+	h = p.sectionHints(linedUp)
+	if !strings.Contains(h, "sling") {
+		t.Errorf("Lined Up hints with GT should contain 'sling', got: %s", h)
+	}
+	if !strings.Contains(h, "formula") {
+		t.Errorf("Lined Up hints with GT should contain 'formula', got: %s", h)
+	}
+}
+
+func TestRenderBorderTopShowsHints(t *testing.T) {
+	issues := []data.Issue{
+		testIssue("roll-1", data.StatusInProgress),
+	}
+	p := NewParade(issues, 80, 20, data.DefaultBlockingTypes)
+	p.HasGasTown = true
+
+	sec := sections[0] // Rolling
+	out := p.renderBorderTop(sec)
+	if !strings.Contains(out, "nudge") {
+		t.Errorf("renderBorderTop for Rolling with GT should contain 'nudge' hint, got: %s", out)
+	}
+}
+
+func TestRenderBorderTopHiddenWhenNarrow(t *testing.T) {
+	issues := []data.Issue{
+		testIssue("roll-1", data.StatusInProgress),
+	}
+	// Very narrow width — hints shouldn't fit
+	p := NewParade(issues, 30, 20, data.DefaultBlockingTypes)
+	p.HasGasTown = true
+
+	sec := sections[0] // Rolling
+	out := p.renderBorderTop(sec)
+	// Should still render without crashing, just no hints
+	if !strings.Contains(out, "Rolling") {
+		t.Errorf("renderBorderTop should still contain title even when narrow, got: %s", out)
+	}
+}
+
 func TestDetailRenderContentOwnerAssignee(t *testing.T) {
 	iss := testIssue("owner-1", data.StatusOpen)
 	iss.Owner = "alice"

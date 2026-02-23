@@ -141,6 +141,14 @@ var (
 	FooterSource = lipgloss.NewStyle().
 			Foreground(Muted)
 
+	// Section shortcut hints (inline in parade section headers)
+	SectionHintKey = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(Dim)
+
+	SectionHintDesc = lipgloss.NewStyle().
+			Foreground(Dark)
+
 	// Filter Input
 	InputPrompt = lipgloss.NewStyle().
 			Foreground(BrightGold).

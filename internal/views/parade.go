@@ -58,6 +58,7 @@ type Parade struct {
 	TownStatus    *gastown.TownStatus
 	ChangedIDs    map[string]bool // recently changed issues (change indicator dot)
 	Selected      map[string]bool // multi-selected issue IDs
+	HasGasTown    bool            // Gas Town available (shows sling/nudge hints)
 }
 
 // NewParade creates a parade view from a set of issues.
@@ -291,7 +292,45 @@ func (p *Parade) View() string {
 	return lipgloss.NewStyle().Width(p.Width).Render(content)
 }
 
-// renderBorderTop builds a top border line: ╭─ ● Rolling (2) ────────╮
+// sectionHints returns the keyboard shortcut hints for a parade section.
+func (p *Parade) sectionHints(sec paradeSection) string {
+	type hint struct {
+		key  string
+		desc string
+	}
+	var hints []hint
+
+	switch sec.Status {
+	case data.ParadeRolling:
+		if p.HasGasTown {
+			hints = append(hints, hint{"n", "nudge"}, hint{"A", "unsling"})
+		} else {
+			hints = append(hints, hint{"a", "agent"}, hint{"3", "close"})
+		}
+	case data.ParadeLinedUp:
+		if p.HasGasTown {
+			hints = append(hints, hint{"a", "sling"}, hint{"s", "formula"})
+		} else {
+			hints = append(hints, hint{"1", "start"}, hint{"a", "agent"})
+		}
+	case data.ParadeStalled:
+		hints = append(hints, hint{"enter", "details"})
+	case data.ParadePastTheStand:
+		// "press c" hint handled inline in title text
+	}
+
+	if len(hints) == 0 {
+		return ""
+	}
+
+	var parts []string
+	for _, h := range hints {
+		parts = append(parts, ui.SectionHintKey.Render(h.key)+ui.SectionHintDesc.Render("·"+h.desc))
+	}
+	return strings.Join(parts, " ")
+}
+
+// renderBorderTop builds a top border line: ╭─ ● Rolling (2) ──── a·sling ─╮
 func (p *Parade) renderBorderTop(sec paradeSection) string {
 	count := len(p.Groups[sec.Status])
 	borderStyle := lipgloss.NewStyle().Foreground(sec.Color)
@@ -314,6 +353,10 @@ func (p *Parade) renderBorderTop(sec paradeSection) string {
 	coloredTitle := sec.Style.Render(titleText)
 	titleWidth := lipgloss.Width(coloredTitle)
 
+	// Build shortcut hints for this section
+	hintStr := p.sectionHints(sec)
+	hintWidth := lipgloss.Width(hintStr)
+
 	// ╭─ <title> ─────────────╮
 	prefix := borderStyle.Render(ui.BoxTopLeft + ui.BoxHorizontal + " ")
 	suffix := borderStyle.Render(" " + ui.BoxTopRight)
@@ -329,7 +372,24 @@ func (p *Parade) renderBorderTop(sec paradeSection) string {
 		titleWidth = lipgloss.Width(coloredTitle)
 	}
 
-	fillLen := p.Width - prefixW - titleWidth - 1 - suffixW
+	// Calculate fill, reserving space for hints if they fit
+	totalUsed := prefixW + titleWidth + 1 + suffixW // +1 for space after title
+	remaining := p.Width - totalUsed
+
+	if hintWidth > 0 && remaining >= hintWidth+4 {
+		// Enough room: ── <fill> ── hint ──
+		leftFill := remaining - hintWidth - 3 // 3 = spaces around hint + trailing dash
+		if leftFill < 1 {
+			leftFill = 1
+		}
+		fill := borderStyle.Render(" " + strings.Repeat(ui.BoxHorizontal, leftFill) + " ") +
+			hintStr +
+			borderStyle.Render(" " + ui.BoxHorizontal)
+		return prefix + coloredTitle + fill + suffix
+	}
+
+	// No room for hints — plain fill
+	fillLen := remaining
 	if fillLen < 1 {
 		fillLen = 1
 	}

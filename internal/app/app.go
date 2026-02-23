@@ -1292,6 +1292,7 @@ func (m *Model) restoreParadeSelection(issueID string) {
 func (m *Model) propagateAgentState() {
 	m.parade.ActiveAgents = m.activeAgents
 	m.parade.TownStatus = m.townStatus
+	m.parade.HasGasTown = m.gtEnv.Available
 	m.detail.ActiveAgents = m.activeAgents
 	m.detail.TownStatus = m.townStatus
 	m.header.AgentCount = len(m.activeAgents)
