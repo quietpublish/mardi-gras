@@ -16,7 +16,7 @@ import (
 
 func TestToastDismissMsg(t *testing.T) {
 	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
-	m := New(issues, "", false, data.DefaultBlockingTypes)
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	got := model.(Model)
 
@@ -37,7 +37,7 @@ func TestToastDismissMsg(t *testing.T) {
 
 func TestMutateResultSuccess(t *testing.T) {
 	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
-	m := New(issues, "", false, data.DefaultBlockingTypes)
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	got := model.(Model)
 
@@ -55,7 +55,7 @@ func TestMutateResultSuccess(t *testing.T) {
 
 func TestMutateResultClosed(t *testing.T) {
 	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
-	m := New(issues, "", false, data.DefaultBlockingTypes)
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	got := model.(Model)
 
@@ -73,7 +73,7 @@ func TestMutateResultClosed(t *testing.T) {
 
 func TestMutateResultError(t *testing.T) {
 	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
-	m := New(issues, "", false, data.DefaultBlockingTypes)
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	got := model.(Model)
 
@@ -91,7 +91,7 @@ func TestMutateResultError(t *testing.T) {
 
 func TestChangeIndicatorExpired(t *testing.T) {
 	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
-	m := New(issues, "", false, data.DefaultBlockingTypes)
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	got := model.(Model)
 
@@ -112,7 +112,7 @@ func TestChangeIndicatorExpired(t *testing.T) {
 
 func TestCreateFormResultCancelled(t *testing.T) {
 	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
-	m := New(issues, "", false, data.DefaultBlockingTypes)
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	got := model.(Model)
 
@@ -130,7 +130,7 @@ func TestCreateFormResultCancelled(t *testing.T) {
 
 func TestCreateFormResultSubmit(t *testing.T) {
 	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
-	m := New(issues, "", false, data.DefaultBlockingTypes)
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	got := model.(Model)
 
@@ -153,7 +153,7 @@ func TestCreateFormResultSubmit(t *testing.T) {
 
 func TestViewNotReady(t *testing.T) {
 	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
-	m := New(issues, "", false, data.DefaultBlockingTypes)
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
 
 	// Do NOT send WindowSizeMsg, so ready remains false.
 	output := m.View()
@@ -168,7 +168,7 @@ func TestViewNotReady(t *testing.T) {
 
 func TestViewReady(t *testing.T) {
 	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
-	m := New(issues, "", false, data.DefaultBlockingTypes)
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	got := model.(Model)
 
@@ -187,7 +187,7 @@ func TestViewReady(t *testing.T) {
 
 func TestViewWithHelp(t *testing.T) {
 	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
-	m := New(issues, "", false, data.DefaultBlockingTypes)
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	got := model.(Model)
 
@@ -207,7 +207,7 @@ func TestViewWithHelp(t *testing.T) {
 
 func TestBuildPaletteCommandsGasTown(t *testing.T) {
 	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
-	m := New(issues, "", false, data.DefaultBlockingTypes)
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	got := model.(Model)
 
@@ -317,7 +317,7 @@ func TestExecutePaletteActions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
-			m := New(issues, "", false, data.DefaultBlockingTypes)
+			m := New(issues, data.Source{}, data.DefaultBlockingTypes)
 			model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 			got := model.(Model)
 

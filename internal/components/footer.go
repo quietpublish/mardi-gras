@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/matt-wright86/mardi-gras/internal/data"
 	"github.com/matt-wright86/mardi-gras/internal/ui"
 )
 
@@ -23,6 +24,7 @@ type Footer struct {
 	SourcePath   string
 	LastRefresh  time.Time
 	PathExplicit bool
+	SourceMode   data.SourceMode
 }
 
 // ParadeBindings are the default keybindings for the parade view.
@@ -63,11 +65,15 @@ func (f Footer) View() string {
 
 	// Build source info (left side)
 	sourceInfo := ""
-	if f.SourcePath != "" {
-		name := filepath.Base(f.SourcePath)
-		mode := "(auto)"
-		if f.PathExplicit {
-			mode = "(--path)"
+	if f.SourceMode == data.SourceCLI || f.SourcePath != "" {
+		name := "bd list"
+		mode := "(cli)"
+		if f.SourceMode != data.SourceCLI {
+			name = filepath.Base(f.SourcePath)
+			mode = "(auto)"
+			if f.PathExplicit {
+				mode = "(--path)"
+			}
 		}
 		age := "?"
 		if !f.LastRefresh.IsZero() {

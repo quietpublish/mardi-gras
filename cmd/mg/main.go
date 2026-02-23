@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -11,6 +12,12 @@ import (
 	"github.com/matt-wright86/mardi-gras/internal/app"
 	"github.com/matt-wright86/mardi-gras/internal/data"
 	"github.com/matt-wright86/mardi-gras/internal/tmux"
+)
+
+// Alias SourceMode constants for convenience.
+const (
+	SourceJSONL = data.SourceJSONL
+	SourceCLI   = data.SourceCLI
 )
 
 // version is set at build time via -ldflags.
@@ -31,31 +38,36 @@ func main() {
 	// Parse blocking types from flag, env var, or default
 	blockingTypes := parseBlockingTypes(*blockTypesFlag)
 
-	pathExplicit := *path != ""
-
-	// Resolve JSONL path
-	jsonlPath := *path
-	if jsonlPath == "" {
-		// Walk up from cwd looking for .beads/issues.jsonl
-		cwd, err := os.Getwd()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error getting working directory: %v\n", err)
-			os.Exit(1)
-		}
-		jsonlPath = findBeadsFile(cwd)
-		if jsonlPath == "" {
-			fmt.Fprintf(os.Stderr, "No .beads/issues.jsonl found.\n\n")
-			fmt.Fprintf(os.Stderr, "Run mg from inside a project with Beads, or specify a path:\n")
-			fmt.Fprintf(os.Stderr, "  mg --path /path/to/.beads/issues.jsonl\n")
-			os.Exit(1)
-		}
+	// Resolve data source: JSONL file or bd CLI fallback
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting working directory: %v\n", err)
+		os.Exit(1)
+	}
+	source := resolveSource(cwd, *path)
+	if source.Mode == SourceJSONL && source.Path == "" {
+		fmt.Fprintf(os.Stderr, "No .beads/issues.jsonl found and bd not on PATH.\n\n")
+		fmt.Fprintf(os.Stderr, "Run mg from inside a project with Beads, or specify a path:\n")
+		fmt.Fprintf(os.Stderr, "  mg --path /path/to/.beads/issues.jsonl\n")
+		os.Exit(1)
 	}
 
 	// Load issues
-	issues, err := data.LoadIssues(jsonlPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading issues from %s: %v\n", jsonlPath, err)
-		os.Exit(1)
+	var issues []data.Issue
+	switch source.Mode {
+	case SourceCLI:
+		issues, err = data.FetchIssuesCLI()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading issues via bd list: %v\n\n", err)
+			fmt.Fprintf(os.Stderr, "Ensure the Dolt server is running (dolt sql-server) and bd is working.\n")
+			os.Exit(1)
+		}
+	default:
+		issues, err = data.LoadIssues(source.Path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading issues from %s: %v\n", source.Path, err)
+			os.Exit(1)
+		}
 	}
 
 	if *statusMode {
@@ -65,7 +77,7 @@ func main() {
 	}
 
 	// Run TUI
-	model := app.New(issues, jsonlPath, pathExplicit, blockingTypes)
+	model := app.New(issues, source, blockingTypes)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -108,4 +120,62 @@ func findBeadsFile(dir string) string {
 		}
 		dir = parent
 	}
+}
+
+// findBeadsDir walks up from dir looking for a .beads/ directory (even without issues.jsonl).
+func findBeadsDir(dir string) string {
+	for {
+		candidate := filepath.Join(dir, ".beads")
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
+// bdOnPath returns true if the bd command is available.
+func bdOnPath() bool {
+	_, err := exec.LookPath("bd")
+	return err == nil
+}
+
+// resolveSource determines how mg should load issues.
+//
+//	--path flag → SourceJSONL with explicit path
+//	.beads/issues.jsonl exists → SourceJSONL (current behavior)
+//	.beads/ dir exists, no JSONL, bd on PATH → SourceCLI
+//	neither → empty Source (caller should exit with error)
+func resolveSource(cwd, pathFlag string) data.Source {
+	if pathFlag != "" {
+		return data.Source{
+			Mode:       data.SourceJSONL,
+			Path:       pathFlag,
+			ProjectDir: filepath.Dir(filepath.Dir(pathFlag)),
+			Explicit:   true,
+		}
+	}
+
+	// Try JSONL first
+	if jsonlPath := findBeadsFile(cwd); jsonlPath != "" {
+		return data.Source{
+			Mode:       data.SourceJSONL,
+			Path:       jsonlPath,
+			ProjectDir: filepath.Dir(filepath.Dir(jsonlPath)),
+		}
+	}
+
+	// Fallback: .beads/ dir exists but no JSONL → try CLI
+	if projectDir := findBeadsDir(cwd); projectDir != "" && bdOnPath() {
+		return data.Source{
+			Mode:       data.SourceCLI,
+			ProjectDir: projectDir,
+		}
+	}
+
+	// Nothing found
+	return data.Source{}
 }

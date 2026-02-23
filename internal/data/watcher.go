@@ -26,6 +26,7 @@ type FileWatchErrorMsg struct {
 }
 
 const watchInterval = 1200 * time.Millisecond
+const cliPollInterval = 5 * time.Second
 
 // WatchFile polls a JSONL file and emits a single message (changed, unchanged, or error).
 // Callers should schedule it again after handling the returned message.
@@ -49,6 +50,18 @@ func WatchFile(path string, lastMod time.Time) tea.Cmd {
 			return FileWatchErrorMsg{Err: err}
 		}
 		return FileChangedMsg{Issues: issues, LastMod: modTime}
+	})
+}
+
+// PollCLI polls bd list --json on a timer and emits FileChangedMsg or FileWatchErrorMsg.
+// The app's diffIssues() handles no-op detection when nothing changed.
+func PollCLI() tea.Cmd {
+	return tea.Tick(cliPollInterval, func(time.Time) tea.Msg {
+		issues, err := FetchIssuesCLI()
+		if err != nil {
+			return FileWatchErrorMsg{Err: err}
+		}
+		return FileChangedMsg{Issues: issues, LastMod: time.Now()}
 	})
 }
 
