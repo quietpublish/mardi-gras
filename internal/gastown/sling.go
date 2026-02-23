@@ -68,3 +68,26 @@ func Nudge(target, message string) error {
 	}
 	return exec.Command("gt", args...).Run()
 }
+
+// HandoffInTmux launches `gt handoff <target>` in a new tmux pane.
+// Handoff is interactive (starts a new agent session), so it can't run inline.
+func HandoffInTmux(target, projectDir string) (string, error) {
+	cmd := exec.Command("tmux", "split-window",
+		"-h",
+		"-l", "60%",
+		"-d",
+		"-c", projectDir,
+		"-P", "-F", "#{pane_id}",
+		"--", "gt", "handoff", target,
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("tmux split-window for handoff: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// Decommission kills a polecat process by its address.
+func Decommission(address string) error {
+	return exec.Command("gt", "polecat", "kill", address).Run()
+}

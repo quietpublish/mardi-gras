@@ -156,6 +156,13 @@ var (
 	GasTownValue = lipgloss.NewStyle().
 			Foreground(Light)
 
+	GasTownAgentSelected = lipgloss.NewStyle().
+				Background(DimPurple)
+
+	GasTownHint = lipgloss.NewStyle().
+			Foreground(Dim).
+			MarginTop(1)
+
 	FooterSource = lipgloss.NewStyle().
 			Foreground(Muted)
 

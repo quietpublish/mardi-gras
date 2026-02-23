@@ -117,6 +117,16 @@ func (h Help) View() string {
 				{key: "A", desc: "Unsling/kill agent"},
 			},
 		},
+		{
+			title: "GAS TOWN PANEL (ctrl+g)",
+			bindings: []helpBinding{
+				{key: "j / k", desc: "Navigate agents"},
+				{key: "g / G", desc: "Jump to first/last agent"},
+				{key: "n", desc: "Nudge selected agent"},
+				{key: "h", desc: "Handoff work from agent"},
+				{key: "K", desc: "Decommission polecat"},
+			},
+		},
 	}
 
 	header := lipgloss.JoinVertical(

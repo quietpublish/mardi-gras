@@ -197,6 +197,16 @@ type nudgeResultMsg struct {
 	err     error
 }
 
+type handoffResultMsg struct {
+	target string
+	err    error
+}
+
+type decommissionResultMsg struct {
+	address string
+	err     error
+}
+
 // mutateResultMsg is sent when a bd CLI mutation completes.
 type mutateResultMsg struct {
 	issueID string
@@ -509,6 +519,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toast = toast
 		return m, cmd
 
+	case handoffResultMsg:
+		if msg.err != nil {
+			toast, cmd := components.ShowToast(
+				fmt.Sprintf("Handoff failed for %s: %s", msg.target, msg.err),
+				components.ToastError, toastDuration,
+			)
+			m.toast = toast
+			return m, cmd
+		}
+		toast, cmd := components.ShowToast(
+			fmt.Sprintf("Handoff initiated for %s", msg.target),
+			components.ToastSuccess, toastDuration,
+		)
+		m.toast = toast
+		return m, tea.Batch(cmd, pollAgentState(m.gtEnv, m.inTmux))
+
+	case decommissionResultMsg:
+		if msg.err != nil {
+			toast, cmd := components.ShowToast(
+				fmt.Sprintf("Decommission failed for %s: %s", msg.address, msg.err),
+				components.ToastError, toastDuration,
+			)
+			m.toast = toast
+			return m, cmd
+		}
+		toast, cmd := components.ShowToast(
+			fmt.Sprintf("Decommissioned %s", msg.address),
+			components.ToastSuccess, toastDuration,
+		)
+		m.toast = toast
+		return m, tea.Batch(cmd, pollAgentState(m.gtEnv, m.inTmux))
+
+	case views.GasTownActionMsg:
+		return m.handleGasTownAction(msg)
+
 	case mutateResultMsg:
 		if msg.err != nil {
 			toast, cmd := components.ShowToast(
@@ -609,6 +654,16 @@ func (m Model) handleFilteringKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// When Gas Town panel is focused, route its keys before global handlers
+	if m.showGasTown && m.activPane == PaneDetail {
+		switch msg.String() {
+		case "j", "k", "up", "down", "g", "G", "n", "h", "K":
+			var cmd tea.Cmd
+			m.gasTown, cmd = m.gasTown.Update(msg)
+			return m, cmd
+		}
+	}
+
 	switch msg.String() {
 	case "q":
 		return m, tea.Quit
@@ -1161,6 +1216,59 @@ func (m Model) executePaletteAction(action components.PaletteAction) (tea.Model,
 		return m, nil
 	case components.ActionQuit:
 		return m, tea.Quit
+	}
+	return m, nil
+}
+
+// handleGasTownAction processes actions emitted by the Gas Town panel.
+func (m Model) handleGasTownAction(msg views.GasTownActionMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case "nudge":
+		// Reuse the existing nudge input flow
+		m.nudging = true
+		target := msg.Agent.Address
+		if target == "" {
+			target = msg.Agent.Name
+		}
+		m.nudgeTarget = target
+		m.nudgeInput = textinput.New()
+		m.nudgeInput.Prompt = ui.InputPrompt.Render("nudge> ")
+		m.nudgeInput.Placeholder = "Message for " + msg.Agent.Name + "..."
+		m.nudgeInput.TextStyle = ui.InputText
+		m.nudgeInput.Cursor.Style = ui.InputCursor
+		m.nudgeInput.Width = 50
+		m.nudgeInput.Focus()
+		return m, textinput.Blink
+
+	case "handoff":
+		if !m.inTmux {
+			toast, cmd := components.ShowToast(
+				"Handoff requires tmux",
+				components.ToastError, toastDuration,
+			)
+			m.toast = toast
+			return m, cmd
+		}
+		target := msg.Agent.Address
+		if target == "" {
+			target = msg.Agent.Name
+		}
+		agentName := msg.Agent.Name
+		projDir := m.projectDir
+		return m, func() tea.Msg {
+			_, err := gastown.HandoffInTmux(target, projDir)
+			return handoffResultMsg{target: agentName, err: err}
+		}
+
+	case "decommission":
+		address := msg.Agent.Address
+		if address == "" {
+			address = msg.Agent.Name
+		}
+		return m, func() tea.Msg {
+			err := gastown.Decommission(address)
+			return decommissionResultMsg{address: msg.Agent.Name, err: err}
+		}
 	}
 	return m, nil
 }
