@@ -184,6 +184,13 @@ var (
 			Foreground(Dim).
 			Italic(true)
 
+	MolDAGFlow = lipgloss.NewStyle().
+			Foreground(Dim)
+
+	MolCritical = lipgloss.NewStyle().
+			Foreground(BrightGold).
+			Bold(true)
+
 	// HOP quality badges
 	QualityBadge = lipgloss.NewStyle().
 			Bold(true)
