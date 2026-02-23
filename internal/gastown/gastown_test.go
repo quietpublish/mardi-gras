@@ -217,3 +217,110 @@ func TestTownStatusParsing(t *testing.T) {
 		t.Errorf("expected 1 working, got %d", status.WorkingCount())
 	}
 }
+
+func TestTownStatusMQParsing(t *testing.T) {
+	raw := `{
+		"name": "test-hq",
+		"agents": [],
+		"rigs": [{
+			"name":"beads",
+			"polecat_count":2,
+			"crew_count":0,
+			"has_witness":false,
+			"has_refinery":true,
+			"hooks": [],
+			"agents": [],
+			"mq": {
+				"pending": 3,
+				"in_flight": 1,
+				"blocked": 0,
+				"state": "processing",
+				"health": "healthy"
+			}
+		}]
+	}`
+	var rawStatus rawTownStatus
+	if err := json.Unmarshal([]byte(raw), &rawStatus); err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	status := normalizeStatus(&rawStatus)
+
+	if len(status.Rigs) != 1 {
+		t.Fatalf("expected 1 rig, got %d", len(status.Rigs))
+	}
+	rig := status.Rigs[0]
+	if rig.MQ == nil {
+		t.Fatal("expected MQ to be parsed")
+	}
+	if rig.MQ.Pending != 3 {
+		t.Errorf("expected MQ.Pending=3, got %d", rig.MQ.Pending)
+	}
+	if rig.MQ.InFlight != 1 {
+		t.Errorf("expected MQ.InFlight=1, got %d", rig.MQ.InFlight)
+	}
+	if rig.MQ.State != "processing" {
+		t.Errorf("expected MQ.State=processing, got %q", rig.MQ.State)
+	}
+	if rig.MQ.Health != "healthy" {
+		t.Errorf("expected MQ.Health=healthy, got %q", rig.MQ.Health)
+	}
+}
+
+func TestTownStatusMQStatusHelper(t *testing.T) {
+	// No MQ
+	status := &TownStatus{
+		Rigs: []RigStatus{{Name: "empty"}},
+	}
+	if status.MQStatus() != nil {
+		t.Error("expected nil MQ from rig without MQ")
+	}
+
+	// With MQ
+	status = &TownStatus{
+		Rigs: []RigStatus{
+			{Name: "no-mq"},
+			{Name: "with-mq", MQ: &MQSummary{Pending: 5, State: "idle", Health: "healthy"}},
+		},
+	}
+	mq := status.MQStatus()
+	if mq == nil {
+		t.Fatal("expected non-nil MQ")
+	}
+	if mq.Pending != 5 {
+		t.Errorf("expected Pending=5, got %d", mq.Pending)
+	}
+
+	// Nil status
+	var nilStatus *TownStatus
+	if nilStatus.MQStatus() != nil {
+		t.Error("expected nil from nil TownStatus")
+	}
+}
+
+func TestTownStatusMQNoRefinery(t *testing.T) {
+	raw := `{
+		"name": "test-hq",
+		"agents": [],
+		"rigs": [{
+			"name":"beads",
+			"polecat_count":1,
+			"crew_count":0,
+			"has_witness":false,
+			"has_refinery":false,
+			"hooks": [],
+			"agents": []
+		}]
+	}`
+	var rawStatus rawTownStatus
+	if err := json.Unmarshal([]byte(raw), &rawStatus); err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	status := normalizeStatus(&rawStatus)
+
+	if status.Rigs[0].MQ != nil {
+		t.Error("expected nil MQ when no refinery")
+	}
+	if status.MQStatus() != nil {
+		t.Error("expected nil from MQStatus when no MQ data")
+	}
+}

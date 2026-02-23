@@ -67,6 +67,9 @@ const (
 	SymProgressEmpty = "░"
 	SymTown          = "⛽"
 
+	// Problems
+	SymWarning = "⚠"
+
 	// Molecule steps
 	SymStepDone    = "✓"
 	SymStepActive  = "●"

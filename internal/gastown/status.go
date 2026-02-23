@@ -31,11 +31,21 @@ type AgentRuntime struct {
 
 // RigStatus represents a Gas Town rig (project).
 type RigStatus struct {
-	Name         string `json:"name"`
-	PolecatCount int    `json:"polecat_count"`
-	CrewCount    int    `json:"crew_count"`
-	HasWitness   bool   `json:"has_witness"`
-	HasRefinery  bool   `json:"has_refinery"`
+	Name         string     `json:"name"`
+	PolecatCount int        `json:"polecat_count"`
+	CrewCount    int        `json:"crew_count"`
+	HasWitness   bool       `json:"has_witness"`
+	HasRefinery  bool       `json:"has_refinery"`
+	MQ           *MQSummary `json:"mq,omitempty"`
+}
+
+// MQSummary represents the merge queue status for a rig.
+type MQSummary struct {
+	Pending  int    `json:"pending"`   // Open MRs ready to merge
+	InFlight int    `json:"in_flight"` // MRs currently being processed
+	Blocked  int    `json:"blocked"`   // MRs waiting on dependencies
+	State    string `json:"state"`     // idle, processing, blocked
+	Health   string `json:"health"`    // healthy, stale, empty
 }
 
 // ConvoyInfo represents a Gas Town convoy (delivery batch).
@@ -63,6 +73,7 @@ type rawRigStatus struct {
 	HasRefinery  bool           `json:"has_refinery"`
 	Agents       []AgentRuntime `json:"agents"`
 	Hooks        []rawHook      `json:"hooks"`
+	MQ           *MQSummary     `json:"mq,omitempty"`
 }
 
 type rawHook struct {
@@ -101,6 +112,7 @@ func normalizeStatus(raw *rawTownStatus) *TownStatus {
 			CrewCount:    rig.CrewCount,
 			HasWitness:   rig.HasWitness,
 			HasRefinery:  rig.HasRefinery,
+			MQ:           rig.MQ,
 		})
 
 		// Build hook lookup: agent address -> hook info
@@ -176,6 +188,19 @@ func (s *TownStatus) WorkingCount() int {
 		}
 	}
 	return n
+}
+
+// MQStatus returns the first non-nil MQ summary from any rig.
+func (s *TownStatus) MQStatus() *MQSummary {
+	if s == nil {
+		return nil
+	}
+	for _, r := range s.Rigs {
+		if r.MQ != nil {
+			return r.MQ
+		}
+	}
+	return nil
 }
 
 // UnreadMail returns total unread mail across all agents.

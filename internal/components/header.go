@@ -17,6 +17,7 @@ type Header struct {
 	AgentCount       int
 	TownStatus       *gastown.TownStatus
 	GasTownAvailable bool
+	ProblemCount     int
 }
 
 // View renders the header.
@@ -62,7 +63,23 @@ func (h Header) View() string {
 			parts = append(parts, fmt.Sprintf("%s%d", ui.SymConvoy, activeConvoys))
 		}
 
+		if mq := h.TownStatus.MQStatus(); mq != nil && (mq.Pending > 0 || mq.InFlight > 0) {
+			mqLabel := fmt.Sprintf("MQ:%d", mq.Pending+mq.InFlight)
+			if mq.Health == "stale" || mq.State == "blocked" {
+				mqLabel = lipgloss.NewStyle().Foreground(ui.StatusStalled).Bold(true).Render(mqLabel)
+			} else {
+				mqLabel = gtStyle.Render(mqLabel)
+			}
+			parts = append(parts, mqLabel)
+		}
+
 		gasTownInfo = gtStyle.Render(" " + strings.Join(parts, " "))
+	}
+
+	problemInfo := ""
+	if h.ProblemCount > 0 {
+		warnStyle := lipgloss.NewStyle().Foreground(ui.StatusStalled).Bold(true)
+		problemInfo = warnStyle.Render(fmt.Sprintf(" %s%d", ui.SymWarning, h.ProblemCount))
 	}
 
 	bar := h.renderProgressBar(total, len(h.Groups[data.ParadePastTheStand]), 20)
@@ -73,6 +90,7 @@ func (h Header) View() string {
 		counts,
 		agentInfo,
 		gasTownInfo,
+		problemInfo,
 		"  ",
 		bar,
 	)

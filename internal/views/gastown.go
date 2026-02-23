@@ -3,6 +3,7 @@ package views
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -21,7 +22,7 @@ const (
 
 // GasTownActionMsg carries user intent from the Gas Town panel back to app.go.
 type GasTownActionMsg struct {
-	Type     string // "nudge", "handoff", "decommission", "convoy_land", "convoy_close", "mail_reply", "mail_archive", "mail_read"
+	Type     string // "nudge", "handoff", "decommission", "convoy_land", "convoy_close", "mail_reply", "mail_archive", "mail_read", "mail_compose"
 	Agent    gastown.AgentRuntime
 	ConvoyID string
 	Mail     gastown.MailMessage
@@ -46,6 +47,15 @@ type GasTown struct {
 	mailCursor   int                    // cursor within mail list
 	mailMessages []gastown.MailMessage  // messages from gt mail inbox
 	expandedMail int                    // index of expanded message, -1 = none
+
+	// Costs data
+	costs *gastown.CostsOutput
+
+	// Activity feed
+	events []gastown.Event
+
+	// Velocity metrics
+	velocity *gastown.VelocityMetrics
 }
 
 // NewGasTown creates a Gas Town panel.
@@ -116,6 +126,26 @@ func (g *GasTown) SetMailMessages(msgs []gastown.MailMessage) {
 	if g.mailCursor >= len(msgs) {
 		g.mailCursor = max(len(msgs)-1, 0)
 	}
+}
+
+// SetCosts updates the cost data from gt costs --json.
+func (g *GasTown) SetCosts(costs *gastown.CostsOutput) {
+	g.costs = costs
+}
+
+// GetCosts returns the current cost data for velocity computation.
+func (g *GasTown) GetCosts() *gastown.CostsOutput {
+	return g.costs
+}
+
+// SetEvents updates the activity event feed.
+func (g *GasTown) SetEvents(events []gastown.Event) {
+	g.events = events
+}
+
+// SetVelocity updates the velocity metrics.
+func (g *GasTown) SetVelocity(v *gastown.VelocityMetrics) {
+	g.velocity = v
 }
 
 // SelectedMail returns the currently selected mail message, or nil if none.
@@ -282,6 +312,27 @@ func (g GasTown) Update(msg tea.Msg) (GasTown, tea.Cmd) {
 				}
 			}
 		}
+
+	case "w":
+		if g.section == SectionAgents {
+			if a := g.SelectedAgent(); a != nil {
+				agent := *a
+				return g, func() tea.Msg {
+					return GasTownActionMsg{Type: "mail_compose", Agent: agent}
+				}
+			}
+		} else if g.section == SectionMail {
+			if m := g.SelectedMail(); m != nil {
+				// Compose a new message to the sender of the selected mail
+				agent := gastown.AgentRuntime{
+					Name:    m.From,
+					Address: m.From,
+				}
+				return g, func() tea.Msg {
+					return GasTownActionMsg{Type: "mail_compose", Agent: agent}
+				}
+			}
+		}
 	}
 
 	return g, nil
@@ -414,6 +465,18 @@ func (g *GasTown) renderContent() string {
 
 	if len(g.mailMessages) > 0 {
 		sections = append(sections, g.renderMail(contentWidth))
+	}
+
+	if g.costs != nil {
+		sections = append(sections, g.renderCosts(contentWidth))
+	}
+
+	if len(g.events) > 0 {
+		sections = append(sections, g.renderActivity(contentWidth))
+	}
+
+	if g.velocity != nil {
+		sections = append(sections, g.renderVelocity(contentWidth))
 	}
 
 	// Hint bar at bottom
@@ -798,15 +861,227 @@ func renderConvoys(convoys []gastown.ConvoyInfo, width int) string {
 	return strings.Join(lines, "\n")
 }
 
+// renderCosts renders the costs section with per-role breakdown.
+func (g *GasTown) renderCosts(width int) string {
+	c := g.costs
+	var lines []string
+
+	totalLabel := fmt.Sprintf("$%.2f", c.Total.Cost)
+	if c.Period != "" {
+		totalLabel = fmt.Sprintf("%s: $%.2f", c.Period, c.Total.Cost)
+	}
+	header := fmt.Sprintf("COSTS%s",
+		lipgloss.NewStyle().Foreground(ui.Muted).Render("  "+totalLabel))
+	lines = append(lines, ui.GasTownTitle.Render(header))
+
+	if len(c.ByRole) > 0 {
+		for _, rc := range c.ByRole {
+			roleStyle := lipgloss.NewStyle().Foreground(ui.RoleColor(rc.Role))
+			costStyle := lipgloss.NewStyle().Foreground(ui.Muted)
+			line := fmt.Sprintf("  %-12s %d sessions  %s",
+				roleStyle.Render(rc.Role),
+				rc.Sessions,
+				costStyle.Render(fmt.Sprintf("$%.2f", rc.Cost)))
+			lines = append(lines, line)
+		}
+	}
+
+	if c.Total.InputTokens > 0 || c.Total.OutputTokens > 0 {
+		tokenStyle := lipgloss.NewStyle().Foreground(ui.Dim)
+		lines = append(lines, tokenStyle.Render(
+			fmt.Sprintf("  tokens: %dk in / %dk out",
+				c.Total.InputTokens/1000, c.Total.OutputTokens/1000)))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// renderVelocity renders the workflow velocity metrics section.
+func (g *GasTown) renderVelocity(_ int) string {
+	v := g.velocity
+	var lines []string
+
+	lines = append(lines, ui.GasTownTitle.Render("VELOCITY"))
+
+	// Issues line
+	labelStyle := lipgloss.NewStyle().Foreground(ui.Dim)
+	valStyle := lipgloss.NewStyle().Foreground(ui.Light)
+	greenStyle := lipgloss.NewStyle().Foreground(ui.BrightGreen)
+
+	issuesLine := fmt.Sprintf("  %s +%d today (+%d week)   %s %d today (%d week)   %s %d open",
+		labelStyle.Render("Issues"),
+		v.CreatedToday, v.CreatedWeek,
+		greenStyle.Render("closed"),
+		v.ClosedToday, v.ClosedWeek,
+		valStyle.Render(""),
+		v.OpenCount)
+	lines = append(lines, issuesLine)
+
+	// Agents line
+	if v.TotalAgents > 0 {
+		pct := 0
+		if v.TotalAgents > 0 {
+			pct = v.WorkingAgents * 100 / v.TotalAgents
+		}
+		agentsLine := fmt.Sprintf("  %s %d/%d working (%d%%)",
+			labelStyle.Render("Agents"),
+			v.WorkingAgents, v.TotalAgents, pct)
+		lines = append(lines, agentsLine)
+	}
+
+	// Cost line
+	if v.TodayCost > 0 || v.TodaySessions > 0 {
+		costLine := fmt.Sprintf("  %s $%.2f today   %d sessions",
+			labelStyle.Render("Cost  "),
+			v.TodayCost, v.TodaySessions)
+		lines = append(lines, costLine)
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// renderActivity renders the activity feed section.
+func (g *GasTown) renderActivity(width int) string {
+	var lines []string
+
+	header := fmt.Sprintf("ACTIVITY%s",
+		lipgloss.NewStyle().Foreground(ui.Muted).Render(
+			fmt.Sprintf("  last %d events", len(g.events))))
+	lines = append(lines, ui.GasTownTitle.Render(header))
+
+	for _, ev := range g.events {
+		ts := formatEventTime(ev.Timestamp)
+		label := eventLabel(ev)
+		detail := eventDetail(ev, width-24)
+
+		tsStyle := lipgloss.NewStyle().Foreground(ui.Dim)
+		labelStyle := lipgloss.NewStyle().Foreground(ui.BrightGold)
+		detailStyle := lipgloss.NewStyle().Foreground(ui.Light)
+
+		line := fmt.Sprintf("  %s  %s  %s",
+			tsStyle.Render(fmt.Sprintf("%-8s", ts)),
+			labelStyle.Render(fmt.Sprintf("%-10s", label)),
+			detailStyle.Render(truncateGT(detail, width-24)))
+		lines = append(lines, line)
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// eventLabel returns a short label for an event type.
+func eventLabel(ev gastown.Event) string {
+	switch ev.Type {
+	case "session_start":
+		return "session"
+	case "session_death":
+		return "death"
+	case "sling":
+		return "sling"
+	case "nudge":
+		return "nudge"
+	case "handoff":
+		return "handoff"
+	case "spawn":
+		return "spawn"
+	case "patrol_started":
+		return "patrol"
+	default:
+		return ev.Type
+	}
+}
+
+// eventDetail extracts a human-readable detail from the event payload.
+func eventDetail(ev gastown.Event, _ int) string {
+	actor := shortenActor(ev.Actor)
+	switch ev.Type {
+	case "sling":
+		target := gastown.EventPayloadString(ev, "target")
+		bead := gastown.EventPayloadString(ev, "bead")
+		if target != "" {
+			detail := actor + " -> " + shortenActor(target)
+			if bead != "" {
+				detail += "  " + bead
+			}
+			return detail
+		}
+	case "nudge":
+		target := gastown.EventPayloadString(ev, "target")
+		reason := gastown.EventPayloadString(ev, "reason")
+		if target != "" {
+			detail := actor + " -> " + shortenActor(target)
+			if reason != "" {
+				if len(reason) > 30 {
+					reason = reason[:27] + "..."
+				}
+				detail += "  \"" + reason + "\""
+			}
+			return detail
+		}
+	case "session_start":
+		topic := gastown.EventPayloadString(ev, "topic")
+		if topic != "" {
+			return actor + " started (" + topic + ")"
+		}
+		return actor + " started"
+	case "session_death":
+		reason := gastown.EventPayloadString(ev, "reason")
+		if reason != "" {
+			return actor + " (" + reason + ")"
+		}
+		return actor
+	case "handoff":
+		subject := gastown.EventPayloadString(ev, "subject")
+		if subject != "" {
+			return actor + ": " + subject
+		}
+		return actor
+	case "spawn":
+		polecat := gastown.EventPayloadString(ev, "polecat")
+		if polecat != "" {
+			return actor + " -> " + polecat
+		}
+		return actor
+	}
+	return actor
+}
+
+// shortenActor strips common prefixes for compact display.
+func shortenActor(s string) string {
+	// Already short
+	if len(s) <= 16 {
+		return s
+	}
+	return s
+}
+
+// formatEventTime formats an RFC3339 timestamp as a relative time string.
+func formatEventTime(ts string) string {
+	t, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		return ts
+	}
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	}
+}
+
 func (g *GasTown) renderHints() string {
 	var hint string
 	switch g.section {
 	case SectionAgents:
-		hint = "n nudge  h handoff  K decommission  j/k navigate  tab section"
+		hint = "n nudge  w mail  h handoff  K decommission  j/k navigate  tab section"
 	case SectionConvoys:
 		hint = "enter expand  l land  x close  j/k navigate  tab section"
 	case SectionMail:
-		hint = "enter read  r reply  d archive  j/k navigate  tab section"
+		hint = "enter read  r reply  w compose  d archive  j/k navigate  tab section"
 	}
 	return "\n" + ui.GasTownHint.Render(hint)
 }

@@ -320,3 +320,164 @@ func TestFormatTime(t *testing.T) {
 		t.Errorf("zero time should be blank, got %q", zero)
 	}
 }
+
+func TestGateStatusRendering(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "mg-001", Title: "Gated Issue", Status: data.StatusInProgress,
+			Priority: data.PriorityMedium, IssueType: data.TypeTask,
+			CreatedAt: time.Now()},
+	}
+	d := NewDetail(80, 40, issues)
+	d.TownStatus = &gastown.TownStatus{
+		Agents: []gastown.AgentRuntime{
+			{Name: "Toast", Role: "polecat", State: "awaiting-gate", HookBead: "mg-001", Running: true},
+		},
+	}
+	d.ActiveAgents = map[string]string{"mg-001": "Toast"}
+	d.SetIssue(&issues[0])
+
+	content := d.renderContent()
+
+	if !strings.Contains(content, "GATE") {
+		t.Error("content should contain GATE section when agent is awaiting-gate")
+	}
+	if !strings.Contains(content, "Waiting on gate") {
+		t.Error("content should show 'Waiting on gate' indicator")
+	}
+	if !strings.Contains(content, "Toast") {
+		t.Error("content should show agent name in gate section")
+	}
+}
+
+func TestGateStatusNotShownWhenWorking(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "mg-001", Title: "Working Issue", Status: data.StatusInProgress,
+			Priority: data.PriorityMedium, IssueType: data.TypeTask,
+			CreatedAt: time.Now()},
+	}
+	d := NewDetail(80, 40, issues)
+	d.TownStatus = &gastown.TownStatus{
+		Agents: []gastown.AgentRuntime{
+			{Name: "Toast", Role: "polecat", State: "working", HookBead: "mg-001", Running: true},
+		},
+	}
+	d.SetIssue(&issues[0])
+
+	gate := d.renderGateStatus()
+	if gate != "" {
+		t.Error("gate section should not render when agent state is 'working'")
+	}
+}
+
+func TestGateStatusNotShownWithoutTownStatus(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "mg-001", Title: "No GT", Status: data.StatusInProgress,
+			Priority: data.PriorityMedium, IssueType: data.TypeTask,
+			CreatedAt: time.Now()},
+	}
+	d := NewDetail(80, 40, issues)
+	d.SetIssue(&issues[0])
+
+	gate := d.renderGateStatus()
+	if gate != "" {
+		t.Error("gate section should not render without TownStatus")
+	}
+}
+
+func TestCommentsRendering(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "mg-001", Title: "Commented Issue", Status: data.StatusInProgress,
+			Priority: data.PriorityMedium, IssueType: data.TypeTask,
+			CreatedAt: time.Now()},
+	}
+	d := NewDetail(80, 40, issues)
+	d.SetIssue(&issues[0])
+
+	comments := []gastown.Comment{
+		{ID: "c-1", Author: "claude (Toast)", Body: "JWT validation needs refresh", Time: "2025-02-22T10:30:00Z"},
+		{ID: "c-2", Author: "overseer", Body: "Approved, ship it", Time: "2025-02-22T11:15:00Z"},
+	}
+	d.SetComments("mg-001", comments)
+
+	content := d.renderContent()
+
+	if !strings.Contains(content, "COMMENTS (2)") {
+		t.Error("content should contain 'COMMENTS (2)' section header")
+	}
+	if !strings.Contains(content, "claude (Toast)") {
+		t.Error("content should contain comment author")
+	}
+	if !strings.Contains(content, "JWT validation") {
+		t.Error("content should contain comment body")
+	}
+	if !strings.Contains(content, "overseer") {
+		t.Error("content should contain second comment author")
+	}
+}
+
+func TestCommentsNotShownWhenEmpty(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "mg-001", Title: "No Comments", Status: data.StatusOpen,
+			Priority: data.PriorityMedium, IssueType: data.TypeTask,
+			CreatedAt: time.Now()},
+	}
+	d := NewDetail(80, 40, issues)
+	d.SetIssue(&issues[0])
+
+	content := d.renderContent()
+
+	if strings.Contains(content, "COMMENTS") {
+		t.Error("content should not contain COMMENTS section when no comments")
+	}
+}
+
+func TestCommentsClearedOnIssueSwitch(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "mg-001", Title: "Issue 1", Status: data.StatusInProgress,
+			Priority: data.PriorityMedium, IssueType: data.TypeTask, CreatedAt: time.Now()},
+		{ID: "mg-002", Title: "Issue 2", Status: data.StatusOpen,
+			Priority: data.PriorityMedium, IssueType: data.TypeTask, CreatedAt: time.Now()},
+	}
+	d := NewDetail(80, 40, issues)
+	d.SetIssue(&issues[0])
+
+	comments := []gastown.Comment{
+		{ID: "c-1", Author: "test", Body: "Hello"},
+	}
+	d.SetComments("mg-001", comments)
+
+	if len(d.Comments) != 1 {
+		t.Fatal("comments should be set")
+	}
+
+	// Switch to different issue — comments should clear
+	d.SetIssue(&issues[1])
+
+	if d.Comments != nil {
+		t.Error("comments should be cleared when switching issues")
+	}
+	if d.CommentsIssueID != "" {
+		t.Errorf("CommentsIssueID should be empty, got %q", d.CommentsIssueID)
+	}
+}
+
+func TestSetCommentsUpdatesContent(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "mg-001", Title: "Test", Status: data.StatusInProgress,
+			Priority: data.PriorityMedium, IssueType: data.TypeTask, CreatedAt: time.Now()},
+	}
+	d := NewDetail(80, 40, issues)
+	d.SetIssue(&issues[0])
+
+	comments := []gastown.Comment{
+		{ID: "c-1", Author: "reviewer", Body: "Looks good"},
+	}
+	d.SetComments("mg-001", comments)
+
+	if d.CommentsIssueID != "mg-001" {
+		t.Fatalf("CommentsIssueID = %q, want %q", d.CommentsIssueID, "mg-001")
+	}
+	if len(d.Comments) != 1 {
+		t.Fatalf("expected 1 comment, got %d", len(d.Comments))
+	}
+}

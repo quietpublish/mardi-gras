@@ -28,6 +28,8 @@ type Detail struct {
 	MoleculeDAG        *gastown.DAGInfo
 	MoleculeProgress   *gastown.MoleculeProgress
 	MoleculeIssueID    string // which issue the molecule data belongs to
+	Comments           []gastown.Comment
+	CommentsIssueID    string // which issue the comments belong to
 }
 
 // NewDetail creates a detail panel.
@@ -51,6 +53,11 @@ func (d *Detail) SetIssue(issue *data.Issue) {
 		d.MoleculeProgress = nil
 		d.MoleculeIssueID = ""
 	}
+	// Clear stale comments when switching issues
+	if issue == nil || issue.ID != d.CommentsIssueID {
+		d.Comments = nil
+		d.CommentsIssueID = ""
+	}
 	d.Viewport.SetContent(d.renderContent())
 	d.Viewport.GotoTop()
 }
@@ -60,6 +67,15 @@ func (d *Detail) SetMolecule(issueID string, dag *gastown.DAGInfo, progress *gas
 	d.MoleculeDAG = dag
 	d.MoleculeProgress = progress
 	d.MoleculeIssueID = issueID
+	if d.Issue != nil {
+		d.Viewport.SetContent(d.renderContent())
+	}
+}
+
+// SetComments updates the comments for the current issue.
+func (d *Detail) SetComments(issueID string, comments []gastown.Comment) {
+	d.Comments = comments
+	d.CommentsIssueID = issueID
 	if d.Issue != nil {
 		d.Viewport.SetContent(d.renderContent())
 	}
@@ -292,6 +308,12 @@ func (d *Detail) renderContent() string {
 		}
 	}
 
+	// Gate status (when agent is awaiting-gate)
+	if gateSection := d.renderGateStatus(); gateSection != "" {
+		lines = append(lines, "")
+		lines = append(lines, gateSection)
+	}
+
 	// Molecule DAG section
 	if d.MoleculeDAG != nil && d.MoleculeIssueID == issue.ID {
 		lines = append(lines, "")
@@ -301,6 +323,12 @@ func (d *Detail) renderContent() string {
 	// Activity section (timestamps + agent info)
 	lines = append(lines, "")
 	lines = append(lines, d.renderActivity())
+
+	// Comments section
+	if len(d.Comments) > 0 && d.CommentsIssueID == issue.ID {
+		lines = append(lines, "")
+		lines = append(lines, d.renderComments())
+	}
 
 	return strings.Join(lines, "\n")
 }
@@ -468,6 +496,62 @@ func (d *Detail) renderActivity() string {
 		lines = append(lines, fmt.Sprintf("  %s  %s",
 			timeStyle.Render(formatTime(*issue.ClosedAt)),
 			ui.MolStepDone.Render("Closed")))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// renderGateStatus renders the gate waiting section when an agent is awaiting-gate.
+func (d *Detail) renderGateStatus() string {
+	if d.Issue == nil || d.TownStatus == nil {
+		return ""
+	}
+	a := d.TownStatus.AgentForIssue(d.Issue.ID)
+	if a == nil || a.State != "awaiting-gate" {
+		return ""
+	}
+
+	var lines []string
+	lines = append(lines, ui.DetailSection.Render("GATE"))
+
+	gateStyle := lipgloss.NewStyle().Foreground(ui.BrightGold)
+	agentLabel := lipgloss.NewStyle().Foreground(ui.Muted).Render(fmt.Sprintf("[agent: %s]", a.Name))
+	lines = append(lines, fmt.Sprintf("  %s %s",
+		gateStyle.Render(ui.SymDeferred+" Waiting on gate"),
+		agentLabel))
+
+	return strings.Join(lines, "\n")
+}
+
+// renderComments renders the comments section.
+func (d *Detail) renderComments() string {
+	var lines []string
+	lines = append(lines, ui.DetailSection.Render(fmt.Sprintf("COMMENTS (%d)", len(d.Comments))))
+
+	timeStyle := lipgloss.NewStyle().Foreground(ui.Muted)
+	authorStyle := lipgloss.NewStyle().Foreground(ui.Light).Bold(true)
+	bodyStyle := lipgloss.NewStyle().Foreground(ui.Light)
+	bodyWidth := max(d.Width-12, 20)
+
+	for _, c := range d.Comments {
+		// Author + time
+		timeLabel := c.Time
+		if timeLabel == "" {
+			timeLabel = ""
+		}
+		header := fmt.Sprintf("  %s  %s",
+			authorStyle.Render(truncate(c.Author, 20)),
+			timeStyle.Render(timeLabel))
+		lines = append(lines, header)
+
+		// Body (wrapped)
+		if c.Body != "" {
+			wrapped := wordWrap(c.Body, bodyWidth)
+			for _, bline := range strings.Split(wrapped, "\n") {
+				lines = append(lines, "    "+bodyStyle.Render(bline))
+			}
+		}
+		lines = append(lines, "") // blank line between comments
 	}
 
 	return strings.Join(lines, "\n")

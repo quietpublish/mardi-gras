@@ -100,6 +100,17 @@ type Model struct {
 	mailReplying  bool
 	mailReplyID   string
 	mailReplyInput textinput.Model
+
+	// Mail compose state (two-step: subject then body)
+	mailComposing      bool
+	mailComposeStep    int // 0 = subject, 1 = body
+	mailComposeAddress string
+	mailComposeSubject string
+	mailComposeInput   textinput.Model
+
+	// Problems view
+	showProblems bool
+	problems     views.Problems
 }
 
 // New creates a new app model from loaded issues.
@@ -252,6 +263,12 @@ type mailArchiveResultMsg struct {
 	err       error
 }
 
+type mailSendResultMsg struct {
+	address string
+	subject string
+	err     error
+}
+
 type mailMarkReadResultMsg struct {
 	messageID string
 	err       error
@@ -266,6 +283,22 @@ type moleculeDAGMsg struct {
 
 type moleculeStepDoneMsg struct {
 	result *gastown.StepDoneResult
+	err    error
+}
+
+type commentsMsg struct {
+	issueID  string
+	comments []gastown.Comment
+	err      error
+}
+
+type costsMsg struct {
+	costs *gastown.CostsOutput
+	err   error
+}
+
+type activityMsg struct {
+	events []gastown.Event
 	err    error
 }
 
@@ -402,6 +435,56 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	// Forward all messages to mail compose input when active
+	if m.mailComposing {
+		if km, ok := msg.(tea.KeyMsg); ok {
+			switch km.String() {
+			case "ctrl+c":
+				return m, tea.Quit
+			case "esc":
+				m.mailComposing = false
+				m.mailComposeAddress = ""
+				m.mailComposeSubject = ""
+				return m, nil
+			case "enter":
+				if m.mailComposeStep == 0 {
+					// Save subject, switch to body input
+					subject := m.mailComposeInput.Value()
+					if subject == "" {
+						return m, nil
+					}
+					m.mailComposeSubject = subject
+					m.mailComposeStep = 1
+					m.mailComposeInput = textinput.New()
+					m.mailComposeInput.Prompt = ui.InputPrompt.Render("message> ")
+					m.mailComposeInput.Placeholder = "Message body..."
+					m.mailComposeInput.TextStyle = ui.InputText
+					m.mailComposeInput.Cursor.Style = ui.InputCursor
+					m.mailComposeInput.Width = 50
+					m.mailComposeInput.Focus()
+					return m, textinput.Blink
+				}
+				// Step 1: send the message
+				m.mailComposing = false
+				address := m.mailComposeAddress
+				subject := m.mailComposeSubject
+				body := m.mailComposeInput.Value()
+				m.mailComposeAddress = ""
+				m.mailComposeSubject = ""
+				if body == "" {
+					return m, nil
+				}
+				return m, func() tea.Msg {
+					err := gastown.MailSend(address, subject, body)
+					return mailSendResultMsg{address: address, subject: subject, err: err}
+				}
+			}
+		}
+		var cmd tea.Cmd
+		m.mailComposeInput, cmd = m.mailComposeInput.Update(msg)
+		return m, cmd
+	}
+
 	// Forward all messages to convoy name input when active
 	if m.convoyCreating {
 		if km, ok := msg.(tea.KeyMsg); ok {
@@ -484,6 +567,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.lastFileMod = msg.LastMod
 		}
 		m.rebuildParade()
+		m.recomputeVelocity()
 		return m, tea.Batch(cmds...)
 
 	case data.FileUnchangedMsg:
@@ -525,6 +609,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.propagateAgentState()
 			if m.showGasTown {
 				m.gasTown.SetStatus(m.townStatus, m.gtEnv)
+				m.recomputeVelocity()
+			}
+			if m.showProblems {
+				m.problems.SetProblems(gastown.DetectProblems(m.townStatus))
 			}
 			// Check if selected issue now has an agent → fetch molecule
 			if cmd := m.maybeFetchMolecule(); cmd != nil {
@@ -767,6 +855,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toast = toast
 		return m, tea.Batch(cmd, fetchMailInbox)
 
+	case mailSendResultMsg:
+		if msg.err != nil {
+			toast, cmd := components.ShowToast(
+				fmt.Sprintf("Send failed: %s", msg.err),
+				components.ToastError, toastDuration,
+			)
+			m.toast = toast
+			return m, cmd
+		}
+		display := msg.subject
+		if len(display) > 30 {
+			display = display[:27] + "..."
+		}
+		toast, cmd := components.ShowToast(
+			fmt.Sprintf("Sent to %s: %s", msg.address, display),
+			components.ToastSuccess, toastDuration,
+		)
+		m.toast = toast
+		return m, tea.Batch(cmd, fetchMailInbox)
+
 	case mailMarkReadResultMsg:
 		if msg.err == nil {
 			// Refresh mail to update read status
@@ -807,6 +915,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, fetchMoleculeDAG(issueID))
 		}
 		return m, tea.Batch(cmds...)
+
+	case commentsMsg:
+		if msg.err == nil && len(msg.comments) > 0 {
+			if m.detail.Issue != nil && m.detail.Issue.ID == msg.issueID {
+				m.detail.SetComments(msg.issueID, msg.comments)
+			}
+		}
+		return m, nil
+
+	case costsMsg:
+		if msg.err == nil && msg.costs != nil {
+			m.gasTown.SetCosts(msg.costs)
+			m.recomputeVelocity()
+		}
+		return m, nil
+
+	case activityMsg:
+		if msg.err == nil && len(msg.events) > 0 {
+			m.gasTown.SetEvents(msg.events)
+		}
+		return m, nil
 
 	case views.GasTownActionMsg:
 		return m.handleGasTownAction(msg)
@@ -911,10 +1040,20 @@ func (m Model) handleFilteringKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// When Problems panel is focused, route its keys before global handlers
+	if m.showProblems && m.activPane == PaneDetail {
+		switch msg.String() {
+		case "j", "k", "up", "down", "g", "G", "n", "h", "K":
+			var cmd tea.Cmd
+			m.problems, cmd = m.problems.Update(msg)
+			return m, cmd
+		}
+	}
+
 	// When Gas Town panel is focused, route its keys before global handlers
 	if m.showGasTown && m.activPane == PaneDetail {
 		switch msg.String() {
-		case "j", "k", "up", "down", "g", "G", "n", "h", "K", "tab", "enter", "l", "x", "r", "d":
+		case "j", "k", "up", "down", "g", "G", "n", "h", "K", "tab", "enter", "l", "x", "r", "d", "w":
 			var cmd tea.Cmd
 			m.gasTown, cmd = m.gasTown.Update(msg)
 			return m, cmd
@@ -974,12 +1113,24 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.showGasTown = !m.showGasTown
 		if m.showGasTown {
+			m.showProblems = false
 			m.gasTown.SetStatus(m.townStatus, m.gtEnv)
-			cmds := []tea.Cmd{fetchConvoyList, fetchMailInbox}
+			cmds := []tea.Cmd{fetchConvoyList, fetchMailInbox, fetchCosts, fetchActivity}
 			if m.townStatus == nil {
 				cmds = append(cmds, pollAgentState(m.gtEnv, m.inTmux))
 			}
 			return m, tea.Batch(cmds...)
+		}
+		return m, nil
+
+	case "p":
+		if !m.gtEnv.Available {
+			return m, nil
+		}
+		m.showProblems = !m.showProblems
+		if m.showProblems {
+			m.showGasTown = false
+			m.problems.SetProblems(gastown.DetectProblems(m.townStatus))
 		}
 		return m, nil
 
@@ -1215,8 +1366,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "enter":
 			m.activPane = PaneDetail
 			m.detail.Focused = true
+			var cmds []tea.Cmd
 			if cmd := m.maybeFetchMolecule(); cmd != nil {
-				return m, cmd
+				cmds = append(cmds, cmd)
+			}
+			if cmd := m.maybeFetchComments(); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			if len(cmds) > 0 {
+				return m, tea.Batch(cmds...)
 			}
 		}
 		return m, nil
@@ -1612,6 +1770,24 @@ func (m Model) handleGasTownAction(msg views.GasTownActionMsg) (tea.Model, tea.C
 			err := gastown.MailMarkRead(msgID)
 			return mailMarkReadResultMsg{messageID: msgID, err: err}
 		}
+
+	case "mail_compose":
+		address := msg.Agent.Address
+		if address == "" {
+			address = msg.Agent.Name
+		}
+		m.mailComposing = true
+		m.mailComposeStep = 0
+		m.mailComposeAddress = address
+		m.mailComposeSubject = ""
+		m.mailComposeInput = textinput.New()
+		m.mailComposeInput.Prompt = ui.InputPrompt.Render("subject> ")
+		m.mailComposeInput.Placeholder = "Subject for " + msg.Agent.Name + "..."
+		m.mailComposeInput.TextStyle = ui.InputText
+		m.mailComposeInput.Cursor.Style = ui.InputCursor
+		m.mailComposeInput.Width = 50
+		m.mailComposeInput.Focus()
+		return m, textinput.Blink
 	}
 	return m, nil
 }
@@ -1672,6 +1848,19 @@ func (m *Model) maybeFetchMolecule() tea.Cmd {
 	return fetchMoleculeDAG(issue.ID)
 }
 
+// maybeFetchComments returns a Cmd to fetch comments for the selected issue.
+func (m *Model) maybeFetchComments() tea.Cmd {
+	issue := m.parade.SelectedIssue
+	if issue == nil {
+		return nil
+	}
+	// Don't re-fetch if we already have comments for this issue
+	if m.detail.CommentsIssueID == issue.ID && len(m.detail.Comments) > 0 {
+		return nil
+	}
+	return fetchComments(issue.ID)
+}
+
 // layout recalculates dimensions for all sub-components.
 func (m *Model) layout() {
 	headerH := 2
@@ -1693,11 +1882,13 @@ func (m *Model) layout() {
 		AgentCount:       len(m.activeAgents),
 		TownStatus:       m.townStatus,
 		GasTownAvailable: m.gtEnv.Available,
+		ProblemCount:     len(gastown.DetectProblems(m.townStatus)),
 	}
 
 	m.parade.SetSize(paradeW, bodyH)
 	m.detail.SetSize(detailW, bodyH)
 	m.gasTown.SetSize(detailW, bodyH)
+	m.problems.SetSize(detailW, bodyH)
 	m.detail.AllIssues = m.issues
 	m.detail.IssueMap = data.BuildIssueMap(m.issues)
 	m.detail.BlockingTypes = m.blockingTypes
@@ -1746,6 +1937,7 @@ func (m *Model) rebuildParade() {
 		AgentCount:       len(m.activeAgents),
 		TownStatus:       m.townStatus,
 		GasTownAvailable: m.gtEnv.Available,
+		ProblemCount:     len(gastown.DetectProblems(m.townStatus)),
 	}
 
 	m.parade = views.NewParade(filteredIssues, paradeW, bodyH, m.blockingTypes)
@@ -1797,6 +1989,16 @@ func (m *Model) restoreParadeSelection(issueID string) {
 	}
 }
 
+// recomputeVelocity recalculates velocity metrics from current data
+// and pushes them to the Gas Town panel (only when visible).
+func (m *Model) recomputeVelocity() {
+	if !m.showGasTown {
+		return
+	}
+	v := gastown.ComputeVelocity(m.issues, m.townStatus, m.gasTown.GetCosts())
+	m.gasTown.SetVelocity(v)
+}
+
 // propagateAgentState pushes active agent info to all sub-views.
 func (m *Model) propagateAgentState() {
 	m.parade.ActiveAgents = m.activeAgents
@@ -1843,6 +2045,25 @@ func fetchMailInbox() tea.Msg {
 	return mailInboxMsg{messages: msgs, err: err}
 }
 
+// fetchComments returns a Cmd that fetches comments for an issue.
+func fetchComments(issueID string) tea.Cmd {
+	return func() tea.Msg {
+		comments, err := gastown.FetchComments(issueID)
+		return commentsMsg{issueID: issueID, comments: comments, err: err}
+	}
+}
+
+func fetchCosts() tea.Msg {
+	costs, err := gastown.FetchCosts()
+	return costsMsg{costs: costs, err: err}
+}
+
+func fetchActivity() tea.Msg {
+	path := gastown.EventsPath()
+	events, err := gastown.LoadRecentEvents(path, 20)
+	return activityMsg{events: events, err: err}
+}
+
 // fetchMoleculeDAG returns a Cmd that fetches molecule DAG and progress for an issue.
 func fetchMoleculeDAG(issueID string) tea.Cmd {
 	return func() tea.Msg {
@@ -1864,7 +2085,9 @@ func (m Model) View() string {
 	header := m.header.View()
 
 	rightPanel := m.detail.View()
-	if m.showGasTown && m.gtEnv.Available {
+	if m.showProblems && m.gtEnv.Available {
+		rightPanel = m.problems.View()
+	} else if m.showGasTown && m.gtEnv.Available {
 		rightPanel = m.gasTown.View()
 	}
 
@@ -1885,6 +2108,11 @@ func (m Model) View() string {
 			Padding(0, 1).
 			Width(m.width).
 			Render(m.nudgeInput.View())
+	} else if m.mailComposing {
+		bottomBar = lipgloss.NewStyle().
+			Padding(0, 1).
+			Width(m.width).
+			Render(m.mailComposeInput.View())
 	} else if m.mailReplying {
 		bottomBar = lipgloss.NewStyle().
 			Padding(0, 1).

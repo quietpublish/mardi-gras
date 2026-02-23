@@ -47,6 +47,7 @@ func (h Help) View() string {
 				{key: "tab", desc: "Switch active pane"},
 				{key: "?", desc: "Toggle help"},
 				{key: ": / Ctrl+K", desc: "Open command palette"},
+				{key: "p", desc: "Toggle problems view (gt)"},
 			},
 		},
 		{
@@ -131,6 +132,7 @@ func (h Help) View() string {
 				{key: "l", desc: "Land convoy"},
 				{key: "x", desc: "Close convoy"},
 				{key: "r", desc: "Reply to selected message"},
+				{key: "w", desc: "Compose new message to agent"},
 				{key: "d", desc: "Archive selected message"},
 				{key: "C", desc: "Create convoy from selection"},
 			},
