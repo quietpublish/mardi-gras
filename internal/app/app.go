@@ -90,6 +90,11 @@ type Model struct {
 	nudging     bool
 	nudgeInput  textinput.Model
 	nudgeTarget string
+
+	// Convoy creation state
+	convoyCreating  bool
+	convoyInput     textinput.Model
+	convoyIssueIDs  []string
 }
 
 // New creates a new app model from loaded issues.
@@ -207,6 +212,26 @@ type decommissionResultMsg struct {
 	err     error
 }
 
+type convoyListMsg struct {
+	convoys []gastown.ConvoyDetail
+	err     error
+}
+
+type convoyLandResultMsg struct {
+	convoyID string
+	err      error
+}
+
+type convoyCloseResultMsg struct {
+	convoyID string
+	err      error
+}
+
+type convoyCreateResultMsg struct {
+	name string
+	err  error
+}
+
 // mutateResultMsg is sent when a bd CLI mutation completes.
 type mutateResultMsg struct {
 	issueID string
@@ -308,6 +333,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.nudgeInput, cmd = m.nudgeInput.Update(msg)
+		return m, cmd
+	}
+
+	// Forward all messages to convoy name input when active
+	if m.convoyCreating {
+		if km, ok := msg.(tea.KeyMsg); ok {
+			switch km.String() {
+			case "ctrl+c":
+				return m, tea.Quit
+			case "esc":
+				m.convoyCreating = false
+				m.convoyIssueIDs = nil
+				return m, nil
+			case "enter":
+				m.convoyCreating = false
+				name := m.convoyInput.Value()
+				ids := m.convoyIssueIDs
+				m.convoyIssueIDs = nil
+				if name == "" {
+					return m, nil
+				}
+				return m, func() tea.Msg {
+					_, err := gastown.ConvoyCreate(name, ids)
+					return convoyCreateResultMsg{name: name, err: err}
+				}
+			}
+		}
+		var cmd tea.Cmd
+		m.convoyInput, cmd = m.convoyInput.Update(msg)
 		return m, cmd
 	}
 
@@ -551,6 +605,60 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toast = toast
 		return m, tea.Batch(cmd, pollAgentState(m.gtEnv, m.inTmux))
 
+	case convoyListMsg:
+		if msg.err == nil {
+			m.gasTown.SetConvoyDetails(msg.convoys)
+		}
+		return m, nil
+
+	case convoyCreateResultMsg:
+		if msg.err != nil {
+			toast, cmd := components.ShowToast(
+				fmt.Sprintf("Convoy create failed: %s", msg.err),
+				components.ToastError, toastDuration,
+			)
+			m.toast = toast
+			return m, cmd
+		}
+		toast, cmd := components.ShowToast(
+			fmt.Sprintf("Convoy %q created", msg.name),
+			components.ToastSuccess, toastDuration,
+		)
+		m.toast = toast
+		return m, tea.Batch(cmd, fetchConvoyList)
+
+	case convoyLandResultMsg:
+		if msg.err != nil {
+			toast, cmd := components.ShowToast(
+				fmt.Sprintf("Convoy land failed: %s", msg.err),
+				components.ToastError, toastDuration,
+			)
+			m.toast = toast
+			return m, cmd
+		}
+		toast, cmd := components.ShowToast(
+			fmt.Sprintf("Convoy %s landed", msg.convoyID),
+			components.ToastSuccess, toastDuration,
+		)
+		m.toast = toast
+		return m, tea.Batch(cmd, fetchConvoyList, pollAgentState(m.gtEnv, m.inTmux))
+
+	case convoyCloseResultMsg:
+		if msg.err != nil {
+			toast, cmd := components.ShowToast(
+				fmt.Sprintf("Convoy close failed: %s", msg.err),
+				components.ToastError, toastDuration,
+			)
+			m.toast = toast
+			return m, cmd
+		}
+		toast, cmd := components.ShowToast(
+			fmt.Sprintf("Convoy %s closed", msg.convoyID),
+			components.ToastSuccess, toastDuration,
+		)
+		m.toast = toast
+		return m, tea.Batch(cmd, fetchConvoyList)
+
 	case views.GasTownActionMsg:
 		return m.handleGasTownAction(msg)
 
@@ -657,7 +765,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// When Gas Town panel is focused, route its keys before global handlers
 	if m.showGasTown && m.activPane == PaneDetail {
 		switch msg.String() {
-		case "j", "k", "up", "down", "g", "G", "n", "h", "K":
+		case "j", "k", "up", "down", "g", "G", "n", "h", "K", "tab", "enter", "l", "x":
 			var cmd tea.Cmd
 			m.gasTown, cmd = m.gasTown.Update(msg)
 			return m, cmd
@@ -718,10 +826,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.showGasTown = !m.showGasTown
 		if m.showGasTown {
 			m.gasTown.SetStatus(m.townStatus, m.gtEnv)
-			// If status hasn't arrived yet (slow gt), trigger a fetch
+			cmds := []tea.Cmd{fetchConvoyList}
 			if m.townStatus == nil {
-				return m, pollAgentState(m.gtEnv, m.inTmux)
+				cmds = append(cmds, pollAgentState(m.gtEnv, m.inTmux))
 			}
+			return m, tea.Batch(cmds...)
 		}
 		return m, nil
 
@@ -880,6 +989,34 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.creating = true
 		m.createForm = components.NewCreateForm(m.width, m.height)
 		return m, m.createForm.Init()
+
+	case "C":
+		if !m.gtEnv.Available {
+			return m, nil
+		}
+		var ids []string
+		if selected := m.parade.SelectedIssues(); len(selected) > 0 {
+			ids = make([]string, len(selected))
+			for i, iss := range selected {
+				ids[i] = iss.ID
+			}
+			m.parade.ClearSelection()
+		} else if m.parade.SelectedIssue != nil {
+			ids = []string{m.parade.SelectedIssue.ID}
+		}
+		if len(ids) == 0 {
+			return m, nil
+		}
+		m.convoyCreating = true
+		m.convoyIssueIDs = ids
+		m.convoyInput = textinput.New()
+		m.convoyInput.Prompt = ui.InputPrompt.Render("convoy> ")
+		m.convoyInput.Placeholder = fmt.Sprintf("Name for convoy (%d issues)...", len(ids))
+		m.convoyInput.TextStyle = ui.InputText
+		m.convoyInput.Cursor.Style = ui.InputCursor
+		m.convoyInput.Width = 50
+		m.convoyInput.Focus()
+		return m, textinput.Blink
 
 	case ":", "ctrl+k":
 		m.showPalette = true
@@ -1145,6 +1282,7 @@ func (m Model) buildPaletteCommands() []components.PaletteCommand {
 			components.PaletteCommand{Name: "Toggle Gas Town", Desc: "Show/hide Gas Town panel", Key: "^g", Action: components.ActionToggleGasTown},
 			components.PaletteCommand{Name: "Sling with formula", Desc: "Pick formula and sling to polecat", Key: "s", Action: components.ActionSlingFormula},
 			components.PaletteCommand{Name: "Nudge agent", Desc: "Nudge agent with message", Key: "n", Action: components.ActionNudgeAgent},
+			components.PaletteCommand{Name: "Create convoy", Desc: "Create convoy from selected issues", Key: "C", Action: components.ActionCreateConvoy},
 		)
 	}
 
@@ -1211,6 +1349,8 @@ func (m Model) executePaletteAction(action components.PaletteAction) (tea.Model,
 			m.gasTown.SetStatus(m.townStatus, m.gtEnv)
 		}
 		return m, nil
+	case components.ActionCreateConvoy:
+		return m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'C'}})
 	case components.ActionHelp:
 		m.showHelp = true
 		return m, nil
@@ -1268,6 +1408,20 @@ func (m Model) handleGasTownAction(msg views.GasTownActionMsg) (tea.Model, tea.C
 		return m, func() tea.Msg {
 			err := gastown.Decommission(address)
 			return decommissionResultMsg{address: msg.Agent.Name, err: err}
+		}
+
+	case "convoy_land":
+		convoyID := msg.ConvoyID
+		return m, func() tea.Msg {
+			err := gastown.ConvoyLand(convoyID)
+			return convoyLandResultMsg{convoyID: convoyID, err: err}
+		}
+
+	case "convoy_close":
+		convoyID := msg.ConvoyID
+		return m, func() tea.Msg {
+			err := gastown.ConvoyClose(convoyID)
+			return convoyCloseResultMsg{convoyID: convoyID, err: err}
 		}
 	}
 	return m, nil
@@ -1470,6 +1624,12 @@ func pollAgentState(gtEnv gastown.Env, inTmux bool) tea.Cmd {
 	}
 }
 
+// fetchConvoyList returns a Cmd that fetches convoy details via gt convoy list.
+func fetchConvoyList() tea.Msg {
+	convoys, err := gastown.ConvoyList()
+	return convoyListMsg{convoys: convoys, err: err}
+}
+
 // View implements tea.Model.
 func (m Model) View() string {
 	if !m.ready {
@@ -1500,6 +1660,11 @@ func (m Model) View() string {
 			Padding(0, 1).
 			Width(m.width).
 			Render(m.nudgeInput.View())
+	} else if m.convoyCreating {
+		bottomBar = lipgloss.NewStyle().
+			Padding(0, 1).
+			Width(m.width).
+			Render(m.convoyInput.View())
 	} else if m.filtering || m.filterInput.Value() != "" {
 		bottomBar = lipgloss.NewStyle().
 			Padding(0, 1).

@@ -362,6 +362,281 @@ func TestProgressBar(t *testing.T) {
 	}
 }
 
+func TestGasTownSectionToggle(t *testing.T) {
+	g := NewGasTown(100, 30)
+	agents := []gastown.AgentRuntime{
+		{Name: "alpha", Role: "polecat"},
+	}
+	status := &gastown.TownStatus{Agents: agents}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	// Add convoy details so tab toggle is possible
+	g.SetConvoyDetails([]gastown.ConvoyDetail{
+		{ID: "cv-1", Title: "Sprint 1", Status: "open", Completed: 2, Total: 5},
+	})
+
+	if g.Section() != SectionAgents {
+		t.Fatal("initial section should be SectionAgents")
+	}
+
+	// Tab to convoys
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if g.Section() != SectionConvoys {
+		t.Fatal("after tab, section should be SectionConvoys")
+	}
+
+	// Tab back to agents
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if g.Section() != SectionAgents {
+		t.Fatal("after second tab, section should be SectionAgents")
+	}
+}
+
+func TestGasTownConvoyCursor(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	convoys := []gastown.ConvoyDetail{
+		{ID: "cv-1", Title: "Alpha", Status: "open", Completed: 1, Total: 3},
+		{ID: "cv-2", Title: "Bravo", Status: "open", Completed: 0, Total: 2},
+		{ID: "cv-3", Title: "Charlie", Status: "closed", Completed: 4, Total: 4},
+	}
+	g.SetConvoyDetails(convoys)
+
+	// Switch to convoy section
+	g.section = SectionConvoys
+
+	if g.convoyCursor != 0 {
+		t.Fatalf("initial convoy cursor = %d, want 0", g.convoyCursor)
+	}
+
+	// Move down
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if g.convoyCursor != 1 {
+		t.Fatalf("after j, convoy cursor = %d, want 1", g.convoyCursor)
+	}
+
+	// Move down
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if g.convoyCursor != 2 {
+		t.Fatalf("after j j, convoy cursor = %d, want 2", g.convoyCursor)
+	}
+
+	// Can't go past end
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if g.convoyCursor != 2 {
+		t.Fatalf("cursor should clamp at end, got %d", g.convoyCursor)
+	}
+
+	// Move up
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	if g.convoyCursor != 1 {
+		t.Fatalf("after k, convoy cursor = %d, want 1", g.convoyCursor)
+	}
+
+	// Jump to top
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	if g.convoyCursor != 0 {
+		t.Fatalf("after g, convoy cursor = %d, want 0", g.convoyCursor)
+	}
+
+	// Jump to bottom
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	if g.convoyCursor != 2 {
+		t.Fatalf("after G, convoy cursor = %d, want 2", g.convoyCursor)
+	}
+}
+
+func TestGasTownConvoyExpandCollapse(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	convoys := []gastown.ConvoyDetail{
+		{
+			ID: "cv-1", Title: "Sprint", Status: "open", Completed: 1, Total: 2,
+			Tracked: []gastown.TrackedIssueInfo{
+				{ID: "bd-1", Title: "Fix bug", Status: "closed"},
+				{ID: "bd-2", Title: "Add feature", Status: "in_progress", Worker: "toast"},
+			},
+		},
+	}
+	g.SetConvoyDetails(convoys)
+	g.section = SectionConvoys
+
+	if g.expandedConvoy != -1 {
+		t.Fatalf("initial expanded = %d, want -1", g.expandedConvoy)
+	}
+
+	// Enter expands
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if g.expandedConvoy != 0 {
+		t.Fatalf("after enter, expanded = %d, want 0", g.expandedConvoy)
+	}
+
+	// Enter again collapses
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if g.expandedConvoy != -1 {
+		t.Fatalf("after second enter, expanded = %d, want -1", g.expandedConvoy)
+	}
+}
+
+func TestGasTownSelectedConvoy(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	// No convoys → nil
+	if g.SelectedConvoy() != nil {
+		t.Fatal("expected nil convoy when none set")
+	}
+
+	convoys := []gastown.ConvoyDetail{
+		{ID: "cv-1", Title: "Alpha"},
+		{ID: "cv-2", Title: "Bravo"},
+	}
+	g.SetConvoyDetails(convoys)
+
+	// Still nil when in agents section
+	if g.SelectedConvoy() != nil {
+		t.Fatal("expected nil convoy when in agents section")
+	}
+
+	// Switch to convoy section
+	g.section = SectionConvoys
+	c := g.SelectedConvoy()
+	if c == nil || c.ID != "cv-1" {
+		t.Fatalf("expected convoy cv-1, got %v", c)
+	}
+
+	g, _ = g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	c = g.SelectedConvoy()
+	if c == nil || c.ID != "cv-2" {
+		t.Fatalf("expected convoy cv-2, got %v", c)
+	}
+}
+
+func TestGasTownActionConvoyLand(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	convoys := []gastown.ConvoyDetail{
+		{ID: "cv-1", Title: "Sprint", Status: "open"},
+	}
+	g.SetConvoyDetails(convoys)
+	g.section = SectionConvoys
+
+	g, cmd := g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	if cmd == nil {
+		t.Fatal("expected cmd from convoy land action")
+	}
+	msg := cmd()
+	action, ok := msg.(GasTownActionMsg)
+	if !ok {
+		t.Fatalf("expected GasTownActionMsg, got %T", msg)
+	}
+	if action.Type != "convoy_land" {
+		t.Fatalf("expected type 'convoy_land', got %q", action.Type)
+	}
+	if action.ConvoyID != "cv-1" {
+		t.Fatalf("expected convoy ID 'cv-1', got %q", action.ConvoyID)
+	}
+}
+
+func TestGasTownActionConvoyClose(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	convoys := []gastown.ConvoyDetail{
+		{ID: "cv-2", Title: "Cleanup", Status: "open"},
+	}
+	g.SetConvoyDetails(convoys)
+	g.section = SectionConvoys
+
+	g, cmd := g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	if cmd == nil {
+		t.Fatal("expected cmd from convoy close action")
+	}
+	msg := cmd()
+	action, ok := msg.(GasTownActionMsg)
+	if !ok {
+		t.Fatalf("expected GasTownActionMsg, got %T", msg)
+	}
+	if action.Type != "convoy_close" {
+		t.Fatalf("expected type 'convoy_close', got %q", action.Type)
+	}
+	if action.ConvoyID != "cv-2" {
+		t.Fatalf("expected convoy ID 'cv-2', got %q", action.ConvoyID)
+	}
+}
+
+func TestGasTownConvoyCursorClamp(t *testing.T) {
+	g := NewGasTown(100, 30)
+	g.section = SectionConvoys
+
+	// Start with 3 convoys, cursor at 2
+	convoys := []gastown.ConvoyDetail{
+		{ID: "cv-1"}, {ID: "cv-2"}, {ID: "cv-3"},
+	}
+	g.SetConvoyDetails(convoys)
+	g.convoyCursor = 2
+
+	// Now reduce to 1 convoy — cursor should clamp
+	g.SetConvoyDetails([]gastown.ConvoyDetail{{ID: "cv-1"}})
+	if g.convoyCursor != 0 {
+		t.Fatalf("convoy cursor should clamp to 0, got %d", g.convoyCursor)
+	}
+}
+
+func TestGasTownConvoyDetailsRender(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	convoys := []gastown.ConvoyDetail{
+		{
+			ID: "cv-1", Title: "Sprint delivery", Status: "open",
+			Completed: 3, Total: 5,
+			Tracked: []gastown.TrackedIssueInfo{
+				{ID: "bd-1", Title: "Fix login", Status: "closed"},
+			},
+		},
+	}
+	g.SetConvoyDetails(convoys)
+
+	view := g.View()
+	if !strings.Contains(view, "Sprint delivery") {
+		t.Fatal("view should contain convoy detail title")
+	}
+	if !strings.Contains(view, "3/5") {
+		t.Fatal("view should contain progress 3/5")
+	}
+}
+
+func TestGasTownConvoyNoActionInAgentSection(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{
+		{Name: "test", Role: "polecat"},
+	}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	convoys := []gastown.ConvoyDetail{{ID: "cv-1", Title: "Test"}}
+	g.SetConvoyDetails(convoys)
+
+	// l and x should not produce cmd when in agents section
+	_, cmd := g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	if cmd != nil {
+		t.Fatal("l should not produce cmd in agents section")
+	}
+	_, cmd = g.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	if cmd != nil {
+		t.Fatal("x should not produce cmd in agents section")
+	}
+}
+
 func TestTruncateGT(t *testing.T) {
 	tests := []struct {
 		input  string

@@ -120,11 +120,16 @@ func (h Help) View() string {
 		{
 			title: "GAS TOWN PANEL (ctrl+g)",
 			bindings: []helpBinding{
-				{key: "j / k", desc: "Navigate agents"},
-				{key: "g / G", desc: "Jump to first/last agent"},
+				{key: "j / k", desc: "Navigate agents/convoys"},
+				{key: "g / G", desc: "Jump to first/last"},
+				{key: "tab", desc: "Switch section (agents/convoys)"},
 				{key: "n", desc: "Nudge selected agent"},
 				{key: "h", desc: "Handoff work from agent"},
 				{key: "K", desc: "Decommission polecat"},
+				{key: "enter", desc: "Expand/collapse convoy"},
+				{key: "l", desc: "Land convoy"},
+				{key: "x", desc: "Close convoy"},
+				{key: "C", desc: "Create convoy from selection"},
 			},
 		},
 	}
