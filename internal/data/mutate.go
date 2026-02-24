@@ -2,23 +2,22 @@ package data
 
 import (
 	"fmt"
-	"os/exec"
 	"strings"
 )
 
 // SetStatus runs `bd update <id> --status=<status>` to change an issue's status.
 func SetStatus(issueID string, status Status) error {
-	return exec.Command("bd", "update", issueID, "--status="+string(status)).Run()
+	return execWithTimeout(timeoutShort, "bd", "update", issueID, "--status="+string(status))
 }
 
 // CloseIssue runs `bd close <id>` to close an issue.
 func CloseIssue(issueID string) error {
-	return exec.Command("bd", "close", issueID).Run()
+	return execWithTimeout(timeoutShort, "bd", "close", issueID)
 }
 
 // SetPriority runs `bd update <id> --priority=<n>` to change priority.
 func SetPriority(issueID string, priority Priority) error {
-	return exec.Command("bd", "update", issueID, fmt.Sprintf("--priority=%d", priority)).Run()
+	return execWithTimeout(timeoutShort, "bd", "update", issueID, fmt.Sprintf("--priority=%d", priority))
 }
 
 // CreateIssue runs `bd create` with the given parameters and returns the new issue ID.
@@ -29,7 +28,7 @@ func CreateIssue(title string, issueType IssueType, priority Priority) (string, 
 		"--type=" + string(issueType),
 		fmt.Sprintf("--priority=%d", priority),
 	}
-	out, err := exec.Command("bd", args...).Output()
+	out, err := runWithTimeout(timeoutShort, "bd", args...)
 	if err != nil {
 		return "", fmt.Errorf("bd create: %w", err)
 	}

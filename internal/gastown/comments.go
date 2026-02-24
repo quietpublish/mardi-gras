@@ -3,7 +3,6 @@ package gastown
 import (
 	"encoding/json"
 	"fmt"
-	"os/exec"
 )
 
 // Comment represents a single comment on a beads issue.
@@ -16,7 +15,7 @@ type Comment struct {
 
 // FetchComments runs `bd comments <issueID> --json` and parses the output.
 func FetchComments(issueID string) ([]Comment, error) {
-	out, err := exec.Command("bd", "comments", issueID, "--json").Output()
+	out, err := runWithTimeout(TimeoutMedium, "bd", "comments", issueID, "--json")
 	if err != nil {
 		return nil, fmt.Errorf("bd comments: %w", err)
 	}

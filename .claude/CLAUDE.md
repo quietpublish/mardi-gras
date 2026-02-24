@@ -24,7 +24,7 @@ Always run `make test` after changes. Run `make lint` before committing.
 | `internal/components` | Header, footer, help overlay, command palette, toast notifications, issue create form, float utility |
 | `internal/ui` | Theme colors, styles, symbols, HOP badges — no logic. Includes `RoleColor()`, `AgentStateColor()`, DAG connector symbols |
 | `internal/data` | JSONL loading, issue types, filtering, focus mode, file watcher, mutations (`bd` CLI), cross-rig deps, HOP types |
-| `internal/gastown` | Gas Town integration (see below). No internal deps — stdlib + `encoding/json` only |
+| `internal/gastown` | Gas Town integration (see below). Core files have no internal deps; analytics files import `internal/data` |
 | `internal/agent` | Claude Code launch, tmux window dispatch |
 | `internal/tmux` | `mg --status` widget for tmux status bar |
 

@@ -9,7 +9,7 @@ import (
 func TestLoadSampleIssues(t *testing.T) {
 	// Find sample data relative to project root
 	path := filepath.Join("..", "..", "testdata", "sample.jsonl")
-	issues, err := LoadIssues(path)
+	issues, _, err := LoadIssues(path)
 	if err != nil {
 		t.Fatalf("LoadIssues: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestLoadSampleIssues(t *testing.T) {
 
 func TestGroupByParade(t *testing.T) {
 	path := filepath.Join("..", "..", "testdata", "sample.jsonl")
-	issues, err := LoadIssues(path)
+	issues, _, err := LoadIssues(path)
 	if err != nil {
 		t.Fatalf("LoadIssues: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestGroupByParade(t *testing.T) {
 
 func TestIsBlocked(t *testing.T) {
 	path := filepath.Join("..", "..", "testdata", "sample.jsonl")
-	issues, err := LoadIssues(path)
+	issues, _, err := LoadIssues(path)
 	if err != nil {
 		t.Fatalf("LoadIssues: %v", err)
 	}
@@ -103,7 +103,7 @@ func issueIDs(issues []Issue) []string {
 
 func TestEvaluateDependencies(t *testing.T) {
 	path := filepath.Join("..", "..", "testdata", "sample.jsonl")
-	issues, err := LoadIssues(path)
+	issues, _, err := LoadIssues(path)
 	if err != nil {
 		t.Fatalf("LoadIssues: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestEvaluateDependencies_DeDupe(t *testing.T) {
 func TestParadeGroup_InProgressBlocked(t *testing.T) {
 	// mg-012: in_progress but blocked by mg-001 → should be Stalled, not Rolling
 	path := filepath.Join("..", "..", "testdata", "sample.jsonl")
-	issues, err := LoadIssues(path)
+	issues, _, err := LoadIssues(path)
 	if err != nil {
 		t.Fatalf("LoadIssues: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestParadeGroup_InProgressBlocked(t *testing.T) {
 func TestParadeGroup_DanglingDep(t *testing.T) {
 	// mg-011: open, depends on mg-999 (not found) → Stalled
 	path := filepath.Join("..", "..", "testdata", "sample.jsonl")
-	issues, err := LoadIssues(path)
+	issues, _, err := LoadIssues(path)
 	if err != nil {
 		t.Fatalf("LoadIssues: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestParadeGroup_DanglingDep(t *testing.T) {
 func TestParadeGroup_CustomBlockTypes(t *testing.T) {
 	// When "discovered-from" is added to blocking types, mg-014 should be Stalled
 	path := filepath.Join("..", "..", "testdata", "sample.jsonl")
-	issues, err := LoadIssues(path)
+	issues, _, err := LoadIssues(path)
 	if err != nil {
 		t.Fatalf("LoadIssues: %v", err)
 	}
@@ -277,7 +277,7 @@ func TestLoadRealBeads(t *testing.T) {
 		t.Skip("no real beads data available (set BEADS_JSONL to override)")
 	}
 
-	issues, err := LoadIssues(path)
+	issues, _, err := LoadIssues(path)
 	if err != nil {
 		t.Fatalf("LoadIssues (real data): %v", err)
 	}

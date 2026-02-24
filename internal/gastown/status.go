@@ -3,7 +3,6 @@ package gastown
 import (
 	"encoding/json"
 	"fmt"
-	"os/exec"
 )
 
 // TownStatus is the normalized view of `gt status --json`.
@@ -86,7 +85,7 @@ type rawHook struct {
 // FetchStatus runs `gt status --json` and parses the output.
 // Returns nil TownStatus (not error) if gt is not available.
 func FetchStatus() (*TownStatus, error) {
-	out, err := exec.Command("gt", "status", "--json").Output()
+	out, err := runWithTimeout(TimeoutLong, "gt", "status", "--json")
 	if err != nil {
 		return nil, fmt.Errorf("gt status: %w", err)
 	}

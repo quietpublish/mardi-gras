@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"context"
 	"os/exec"
 	"time"
 
@@ -113,6 +114,9 @@ type Model struct {
 
 	// Data source mode (JSONL file watcher vs bd CLI polling)
 	sourceMode data.SourceMode
+
+	// Single-flight gate for gt status polls
+	gtPollInFlight bool
 }
 
 // New creates a new app model from loaded issues.
@@ -142,31 +146,42 @@ func New(issues []data.Issue, source data.Source, blockingTypes map[string]bool)
 		prevMap[iss.ID] = iss.Status
 	}
 
+	gtEnv := gastown.Detect()
+
 	return Model{
-		issues:        issues,
-		groups:        groups,
-		activPane:     PaneParade,
-		watchPath:     watchPath,
-		pathExplicit:  pathExplicit,
-		lastFileMod:   lastFileMod,
-		blockingTypes: blockingTypes,
-		filterInput:   ti,
-		claudeAvail:   agent.Available(),
-		projectDir:    projectDir,
-		inTmux:        agent.InTmux() && agent.TmuxAvailable(),
-		activeAgents:  make(map[string]string),
-		gtEnv:         gastown.Detect(),
-		changedIDs:    make(map[string]bool),
-		prevIssueMap:  prevMap,
-		sourceMode:    source.Mode,
+		issues:         issues,
+		groups:         groups,
+		activPane:      PaneParade,
+		watchPath:      watchPath,
+		pathExplicit:   pathExplicit,
+		lastFileMod:    lastFileMod,
+		blockingTypes:  blockingTypes,
+		filterInput:    ti,
+		claudeAvail:    agent.Available(),
+		projectDir:     projectDir,
+		inTmux:         agent.InTmux() && agent.TmuxAvailable(),
+		activeAgents:   make(map[string]string),
+		gtEnv:          gtEnv,
+		gtPollInFlight: gtEnv.Available, // Init() launches the first poll; gate subsequent ones
+		changedIDs:     make(map[string]bool),
+		prevIssueMap:   prevMap,
+		sourceMode:     source.Mode,
 	}
 }
 
 // Init implements tea.Model.
+// NOTE: Init is a value receiver (tea.Model interface), so pointer-method mutations
+// are lost. We call poll functions directly and pre-set gtPollInFlight in New().
 func (m Model) Init() tea.Cmd {
+	var agentPoll tea.Cmd
+	if m.gtEnv.Available {
+		agentPoll = pollGTStatus
+	} else if m.inTmux {
+		agentPoll = pollTmuxAgentState
+	}
 	return tea.Batch(
 		m.startPoll(),
-		pollAgentState(m.gtEnv, m.inTmux),
+		agentPoll,
 	)
 }
 
@@ -555,7 +570,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case data.FileChangedMsg:
 		cmds := []tea.Cmd{
 			m.startPoll(),
-			pollAgentState(m.gtEnv, m.inTmux),
+			m.gatedPollAgentState(),
+		}
+
+		// Warn if malformed lines were skipped
+		if msg.Skipped > 0 {
+			toast, toastCmd := components.ShowToast(
+				fmt.Sprintf("Skipped %d malformed line(s)", msg.Skipped),
+				components.ToastWarn, toastDuration,
+			)
+			m.toast = toast
+			cmds = append(cmds, toastCmd)
 		}
 
 		// Diff against previous state for change indicators
@@ -592,18 +617,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !msg.LastMod.IsZero() {
 			m.lastFileMod = msg.LastMod
 		}
-		return m, tea.Batch(m.startPoll(), pollAgentState(m.gtEnv, m.inTmux))
+		return m, tea.Batch(m.startPoll(), m.gatedPollAgentState())
 
 	case data.FileWatchErrorMsg:
-		cmds := []tea.Cmd{m.startPoll(), pollAgentState(m.gtEnv, m.inTmux)}
+		cmds := []tea.Cmd{m.startPoll(), m.gatedPollAgentState()}
+		label := fmt.Sprintf("Load failed: %s", msg.Err)
 		if m.sourceMode == data.SourceCLI {
-			toast, toastCmd := components.ShowToast(
-				fmt.Sprintf("bd list failed: %s", msg.Err),
-				components.ToastError, toastDuration,
-			)
-			m.toast = toast
-			cmds = append(cmds, toastCmd)
+			label = fmt.Sprintf("bd list failed: %s", msg.Err)
 		}
+		toast, toastCmd := components.ShowToast(label, components.ToastError, toastDuration)
+		m.toast = toast
+		cmds = append(cmds, toastCmd)
 		return m, tea.Batch(cmds...)
 
 	case agentLaunchedMsg:
@@ -630,6 +654,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case townStatusMsg:
+		m.gtPollInFlight = false
 		if msg.err == nil && msg.status != nil {
 			m.townStatus = msg.status
 			m.activeAgents = msg.status.ActiveAgentMap()
@@ -663,7 +688,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		toast, cmd := components.ShowToast(label, components.ToastSuccess, toastDuration)
 		m.toast = toast
-		return m, tea.Batch(cmd, pollAgentState(m.gtEnv, m.inTmux))
+		return m, tea.Batch(cmd, m.gatedPollAgentState())
 
 	case formulaListMsg:
 		if msg.err != nil || len(msg.formulas) == 0 {
@@ -718,7 +743,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			components.ToastSuccess, toastDuration,
 		)
 		m.toast = toast
-		return m, tea.Batch(cmd, pollAgentState(m.gtEnv, m.inTmux))
+		return m, tea.Batch(cmd, m.gatedPollAgentState())
 
 	case multiSlingResultMsg:
 		if msg.err != nil {
@@ -735,7 +760,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		toast, cmd := components.ShowToast(label, components.ToastSuccess, toastDuration)
 		m.toast = toast
-		return m, tea.Batch(cmd, pollAgentState(m.gtEnv, m.inTmux))
+		return m, tea.Batch(cmd, m.gatedPollAgentState())
 
 	case nudgeResultMsg:
 		if msg.err != nil {
@@ -772,7 +797,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			components.ToastSuccess, toastDuration,
 		)
 		m.toast = toast
-		return m, tea.Batch(cmd, pollAgentState(m.gtEnv, m.inTmux))
+		return m, tea.Batch(cmd, m.gatedPollAgentState())
 
 	case decommissionResultMsg:
 		if msg.err != nil {
@@ -788,7 +813,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			components.ToastSuccess, toastDuration,
 		)
 		m.toast = toast
-		return m, tea.Batch(cmd, pollAgentState(m.gtEnv, m.inTmux))
+		return m, tea.Batch(cmd, m.gatedPollAgentState())
 
 	case convoyListMsg:
 		if msg.err == nil {
@@ -826,7 +851,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			components.ToastSuccess, toastDuration,
 		)
 		m.toast = toast
-		return m, tea.Batch(cmd, fetchConvoyList, pollAgentState(m.gtEnv, m.inTmux))
+		return m, tea.Batch(cmd, fetchConvoyList, m.gatedPollAgentState())
 
 	case convoyCloseResultMsg:
 		if msg.err != nil {
@@ -944,7 +969,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case commentsMsg:
-		if msg.err == nil && len(msg.comments) > 0 {
+		if msg.err == nil {
 			if m.detail.Issue != nil && m.detail.Issue.ID == msg.issueID {
 				m.detail.SetComments(msg.issueID, msg.comments)
 			}
@@ -1010,7 +1035,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agentFinishedMsg:
 		// Reset lastFileMod to force reload on next poll cycle.
 		m.lastFileMod = time.Time{}
-		return m, tea.Batch(m.startPollImmediate(), pollAgentState(m.gtEnv, m.inTmux))
+		return m, tea.Batch(m.startPollImmediate(), m.gatedPollAgentState())
 	}
 
 	// Forward to detail viewport (or Gas Town viewport) when focused
@@ -1144,7 +1169,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.gasTown.SetStatus(m.townStatus, m.gtEnv)
 			cmds := []tea.Cmd{fetchConvoyList, fetchMailInbox, fetchCosts, fetchActivity}
 			if m.townStatus == nil {
-				cmds = append(cmds, pollAgentState(m.gtEnv, m.inTmux))
+				cmds = append(cmds, m.gatedPollAgentState())
 			}
 			return m, tea.Batch(cmds...)
 		}
@@ -1589,7 +1614,9 @@ func (m Model) createAndSwitchBranch() (tea.Model, tea.Cmd) {
 	branch := data.BranchName(*issue)
 	issueCopy := *issue
 	return m, func() tea.Msg {
-		err := exec.Command("git", "checkout", "-b", branch).Run()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		err := exec.CommandContext(ctx, "git", "checkout", "-b", branch).Run()
 		action := fmt.Sprintf("branch: %s", branch)
 		if err != nil {
 			return mutateResultMsg{issueID: issueCopy.ID, action: action, err: err}
@@ -1881,8 +1908,8 @@ func (m *Model) maybeFetchComments() tea.Cmd {
 	if issue == nil {
 		return nil
 	}
-	// Don't re-fetch if we already have comments for this issue
-	if m.detail.CommentsIssueID == issue.ID && len(m.detail.Comments) > 0 {
+	// Don't re-fetch if we already have comments cached for this issue
+	if m.detail.CommentsIssueID == issue.ID {
 		return nil
 	}
 	return fetchComments(issue.ID)
@@ -2046,24 +2073,36 @@ func (m *Model) propagateAgentState() {
 	}
 }
 
-// pollAgentState returns a Cmd that queries either Gas Town or raw tmux for agent state.
-func pollAgentState(gtEnv gastown.Env, inTmux bool) tea.Cmd {
-	if gtEnv.Available {
-		return func() tea.Msg {
-			status, err := gastown.FetchStatus()
-			return townStatusMsg{status: status, err: err}
+// gatedPollAgentState returns a Cmd that queries Gas Town or raw tmux for agent state.
+// It uses a single-flight gate to prevent overlapping gt status polls (gt status --json
+// takes ~9s, and this is called from 3 watcher handlers + 8 user-action handlers).
+func (m *Model) gatedPollAgentState() tea.Cmd {
+	if m.gtEnv.Available {
+		if m.gtPollInFlight {
+			return nil
 		}
+		m.gtPollInFlight = true
+		return pollGTStatus
 	}
-	if !inTmux {
-		return nil
+	if m.inTmux {
+		return pollTmuxAgentState
 	}
-	return func() tea.Msg {
-		agents, err := agent.ListAgentWindows()
-		if err != nil {
-			return agentStatusMsg{activeAgents: make(map[string]string)}
-		}
-		return agentStatusMsg{activeAgents: agents}
+	return nil
+}
+
+// pollGTStatus fetches Gas Town status via gt status --json.
+func pollGTStatus() tea.Msg {
+	status, err := gastown.FetchStatus()
+	return townStatusMsg{status: status, err: err}
+}
+
+// pollTmuxAgentState queries tmux for @mg_agent windows.
+func pollTmuxAgentState() tea.Msg {
+	agents, err := agent.ListAgentWindows()
+	if err != nil {
+		return agentStatusMsg{activeAgents: make(map[string]string)}
 	}
+	return agentStatusMsg{activeAgents: agents}
 }
 
 // fetchConvoyList returns a Cmd that fetches convoy details via gt convoy list.

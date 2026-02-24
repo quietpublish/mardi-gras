@@ -33,6 +33,7 @@ func EventsPath() string {
 
 // LoadRecentEvents reads the event log and returns the last `limit` events
 // in reverse chronological order (newest first).
+// Uses a ring buffer so memory usage is O(limit), not O(file_size).
 // Returns nil, nil if the file does not exist or is empty.
 func LoadRecentEvents(path string, limit int) ([]Event, error) {
 	f, err := os.Open(path)
@@ -44,7 +45,12 @@ func LoadRecentEvents(path string, limit int) ([]Event, error) {
 	}
 	defer f.Close()
 
-	var all []Event
+	if limit <= 0 {
+		return nil, nil
+	}
+
+	ring := make([]Event, limit)
+	count := 0
 	scanner := bufio.NewScanner(f)
 	// Allow long lines (some payloads can be large)
 	scanner.Buffer(make([]byte, 0, 64*1024), 256*1024)
@@ -57,23 +63,23 @@ func LoadRecentEvents(path string, limit int) ([]Event, error) {
 		if err := json.Unmarshal(line, &ev); err != nil {
 			continue // skip malformed lines
 		}
-		all = append(all, ev)
+		ring[count%limit] = ev
+		count++
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
 
-	if len(all) == 0 {
+	if count == 0 {
 		return nil, nil
 	}
 
-	// Take the last `limit` and reverse to newest-first
-	start := max(len(all)-limit, 0)
-	tail := all[start:]
-
-	result := make([]Event, len(tail))
-	for i, ev := range tail {
-		result[len(tail)-1-i] = ev
+	// Extract in order, then reverse to newest-first
+	n := min(count, limit)
+	result := make([]Event, n)
+	start := count - n
+	for i := 0; i < n; i++ {
+		result[n-1-i] = ring[(start+i)%limit]
 	}
 	return result, nil
 }

@@ -3,7 +3,6 @@ package gastown
 import (
 	"encoding/json"
 	"fmt"
-	"os/exec"
 )
 
 // CostsOutput represents the parsed output of `gt costs --json`.
@@ -38,7 +37,7 @@ type RigCost struct {
 
 // FetchCosts runs `gt costs --json` and parses the output.
 func FetchCosts() (*CostsOutput, error) {
-	out, err := exec.Command("gt", "costs", "--json").Output()
+	out, err := runWithTimeout(TimeoutMedium, "gt", "costs", "--json")
 	if err != nil {
 		return nil, fmt.Errorf("gt costs: %w", err)
 	}

@@ -3,7 +3,6 @@ package gastown
 import (
 	"encoding/json"
 	"fmt"
-	"os/exec"
 )
 
 // MailMessage represents a message from gt mail inbox --json.
@@ -28,7 +27,7 @@ func MailInbox(unreadOnly bool) ([]MailMessage, error) {
 	if unreadOnly {
 		args = append(args, "--unread")
 	}
-	out, err := exec.Command("gt", args...).Output()
+	out, err := runWithTimeout(TimeoutMedium, "gt", args...)
 	if err != nil {
 		return nil, fmt.Errorf("gt mail inbox: %w", err)
 	}
@@ -41,7 +40,7 @@ func MailInbox(unreadOnly bool) ([]MailMessage, error) {
 
 // MailRead fetches a single message by ID via `gt mail read <id> --json`.
 func MailRead(messageID string) (*MailMessage, error) {
-	out, err := exec.Command("gt", "mail", "read", messageID, "--json").Output()
+	out, err := runWithTimeout(TimeoutShort, "gt", "mail", "read", messageID, "--json")
 	if err != nil {
 		return nil, fmt.Errorf("gt mail read: %w", err)
 	}
@@ -54,7 +53,7 @@ func MailRead(messageID string) (*MailMessage, error) {
 
 // MailReply replies to a message via `gt mail reply <id> -m <body>`.
 func MailReply(messageID, body string) error {
-	out, err := exec.Command("gt", "mail", "reply", messageID, "-m", body).CombinedOutput()
+	out, err := runCombinedWithTimeout(TimeoutShort, "gt", "mail", "reply", messageID, "-m", body)
 	if err != nil {
 		return fmt.Errorf("gt mail reply: %w (%s)", err, string(out))
 	}
@@ -63,7 +62,7 @@ func MailReply(messageID, body string) error {
 
 // MailSend sends a new message via `gt mail send <address> -s <subject> -m <body>`.
 func MailSend(address, subject, body string) error {
-	out, err := exec.Command("gt", "mail", "send", address, "-s", subject, "-m", body).CombinedOutput()
+	out, err := runCombinedWithTimeout(TimeoutShort, "gt", "mail", "send", address, "-s", subject, "-m", body)
 	if err != nil {
 		return fmt.Errorf("gt mail send: %w (%s)", err, string(out))
 	}
@@ -72,7 +71,7 @@ func MailSend(address, subject, body string) error {
 
 // MailArchive archives a message via `gt mail archive <id>`.
 func MailArchive(messageID string) error {
-	out, err := exec.Command("gt", "mail", "archive", messageID).CombinedOutput()
+	out, err := runCombinedWithTimeout(TimeoutShort, "gt", "mail", "archive", messageID)
 	if err != nil {
 		return fmt.Errorf("gt mail archive: %w (%s)", err, string(out))
 	}
@@ -81,7 +80,7 @@ func MailArchive(messageID string) error {
 
 // MailMarkRead marks a message as read via `gt mail mark-read <id>`.
 func MailMarkRead(messageID string) error {
-	out, err := exec.Command("gt", "mail", "mark-read", messageID).CombinedOutput()
+	out, err := runCombinedWithTimeout(TimeoutShort, "gt", "mail", "mark-read", messageID)
 	if err != nil {
 		return fmt.Errorf("gt mail mark-read: %w (%s)", err, string(out))
 	}

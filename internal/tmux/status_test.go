@@ -9,7 +9,7 @@ import (
 )
 
 func TestStatusLineFormat(t *testing.T) {
-	issues, err := data.LoadIssues("../../testdata/sample.jsonl")
+	issues, _, err := data.LoadIssues("../../testdata/sample.jsonl")
 	if err != nil {
 		t.Fatalf("LoadIssues: %v", err)
 	}

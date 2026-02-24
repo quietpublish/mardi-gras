@@ -13,6 +13,7 @@ import (
 type FileChangedMsg struct {
 	Issues  []Issue
 	LastMod time.Time
+	Skipped int // Count of malformed JSONL lines skipped during load
 }
 
 // FileUnchangedMsg signals a completed watch poll without changes.
@@ -45,11 +46,11 @@ func WatchFile(path string, lastMod time.Time) tea.Cmd {
 			return FileUnchangedMsg{LastMod: lastMod}
 		}
 
-		issues, err := LoadIssues(path)
+		issues, skipped, err := LoadIssues(path)
 		if err != nil {
 			return FileWatchErrorMsg{Err: err}
 		}
-		return FileChangedMsg{Issues: issues, LastMod: modTime}
+		return FileChangedMsg{Issues: issues, LastMod: modTime, Skipped: skipped}
 	})
 }
 

@@ -3,7 +3,6 @@ package data
 import (
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -39,7 +38,7 @@ func (s Source) Label() string {
 
 // FetchIssuesCLI runs `bd list --json --limit 0 --all` and parses the result.
 func FetchIssuesCLI() ([]Issue, error) {
-	out, err := exec.Command("bd", "list", "--json", "--limit", "0", "--all").Output()
+	out, err := runWithTimeout(timeoutMedium, "bd", "list", "--json", "--limit", "0", "--all")
 	if err != nil {
 		return nil, fmt.Errorf("bd list --json: %w", err)
 	}

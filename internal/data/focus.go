@@ -2,7 +2,6 @@ package data
 
 import (
 	"os"
-	"os/exec"
 	"sort"
 	"strings"
 )
@@ -65,7 +64,7 @@ func currentUser() string {
 	if user := os.Getenv("USER"); user != "" {
 		return user
 	}
-	out, err := exec.Command("git", "config", "user.name").Output()
+	out, err := runWithTimeout(timeoutShort, "git", "config", "user.name")
 	if err == nil {
 		return strings.TrimSpace(string(out))
 	}

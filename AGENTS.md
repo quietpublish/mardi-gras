@@ -31,7 +31,7 @@
 - If `AgentRuntime.State` is empty, default to "idle". Gas Town v0.8.0+ always provides State.
 - Gas Town rig names cannot contain hyphens (use underscores).
 - Crew workspaces have `.beads/redirect` not `issues.jsonl` — mg walks up the directory tree to find the actual data file.
-- The `gastown` package has no internal dependencies (stdlib + `encoding/json` only). Keep it that way.
+- The core `gastown` package (status, sling, convoy, mail, molecule, problems, detect) has no internal dependencies. Analytics files (velocity, predict, scorecard, recommend) import `internal/data` for issue types.
 
 ## Build, Test, and Development Commands
 

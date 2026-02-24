@@ -9,10 +9,12 @@ import (
 )
 
 // LoadIssues reads and parses a Beads JSONL file.
-func LoadIssues(path string) ([]Issue, error) {
+// Malformed lines are skipped rather than aborting the entire load.
+// Returns the parsed issues, the count of skipped lines, and any scanner error.
+func LoadIssues(path string) ([]Issue, int, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("open issues file: %w", err)
+		return nil, 0, fmt.Errorf("open issues file: %w", err)
 	}
 	defer f.Close()
 
@@ -20,25 +22,25 @@ func LoadIssues(path string) ([]Issue, error) {
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 
-	lineNum := 0
+	skipped := 0
 	for scanner.Scan() {
-		lineNum++
 		line := scanner.Bytes()
 		if len(line) == 0 {
 			continue
 		}
 		var issue Issue
 		if err := json.Unmarshal(line, &issue); err != nil {
-			return nil, fmt.Errorf("parse issue at line %d: %w", lineNum, err)
+			skipped++
+			continue
 		}
 		issues = append(issues, issue)
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("scan issues file: %w", err)
+		return nil, skipped, fmt.Errorf("scan issues file: %w", err)
 	}
 
 	SortIssues(issues)
-	return issues, nil
+	return issues, skipped, nil
 }
 
 // SortIssues sorts by: active first, then priority (ascending), then recency.

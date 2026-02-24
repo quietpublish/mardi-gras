@@ -63,10 +63,14 @@ func main() {
 			os.Exit(1)
 		}
 	default:
-		issues, err = data.LoadIssues(source.Path)
+		var skipped int
+		issues, skipped, err = data.LoadIssues(source.Path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error loading issues from %s: %v\n", source.Path, err)
 			os.Exit(1)
+		}
+		if skipped > 0 {
+			fmt.Fprintf(os.Stderr, "Warning: skipped %d malformed line(s) in %s\n", skipped, source.Path)
 		}
 	}
 
