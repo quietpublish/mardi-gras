@@ -66,6 +66,11 @@ type GasTown struct {
 	// Liveness tick state
 	tickCount      int                  // incremented every tick for animations
 	workStartTimes map[string]time.Time // agent name -> when they started working
+
+	// Activity sparkline data (computed from events)
+	agentHistograms map[string][]int // agent name -> bucketed event counts
+	agentEventCount map[string]int   // agent name -> total event count
+	maxEventCount   int              // max event count across all agents (for heat scaling)
 }
 
 // NewGasTown creates a Gas Town panel.
@@ -183,9 +188,19 @@ func (g *GasTown) GetConvoys() []gastown.ConvoyDetail {
 	return g.convoyDetails
 }
 
-// SetEvents updates the activity event feed.
+// SetEvents updates the activity event feed and recomputes sparkline data.
 func (g *GasTown) SetEvents(events []gastown.Event) {
 	g.events = events
+
+	// Compute per-agent histograms (8 buckets over last 24h)
+	g.agentHistograms = gastown.AgentActivityHistogram(events, 8, 24*time.Hour)
+	g.agentEventCount = gastown.AgentEventCount(events)
+	g.maxEventCount = 0
+	for _, c := range g.agentEventCount {
+		if c > g.maxEventCount {
+			g.maxEventCount = c
+		}
+	}
 }
 
 // SetVelocity updates the velocity metrics.
@@ -596,9 +611,9 @@ func (g *GasTown) renderAgentRoster(width int) string {
 	roleW := 14
 	stateW := 16 // extra room for "● working 15m"
 
-	// Header row
+	// Header row (extra space for heat indicator column)
 	headerStyle := lipgloss.NewStyle().Foreground(ui.Dim).Bold(true)
-	header := fmt.Sprintf("  %-*s %-*s %-*s %s",
+	header := fmt.Sprintf("   %-*s %-*s %-*s %s",
 		nameW, "Name", roleW, "Role", stateW, "State", "Work")
 	lines = append(lines, headerStyle.Render(header))
 	lines = append(lines, lipgloss.NewStyle().Foreground(ui.Dim).Render(
@@ -655,8 +670,12 @@ func (g *GasTown) renderAgentRoster(width int) string {
 		}
 		nameStr := nameStyle.Render(fmt.Sprintf("%-*s", nameW, name))
 
-		// Work title (truncated)
-		workWidth := max(width-nameW-roleW-stateW-6, 8)
+		// Heat indicator (single char showing activity level)
+		heat := ui.HeatChar(g.agentEventCount[a.Name], g.maxEventCount)
+
+		// Work title (truncated) — leave room for sparkline
+		sparkW := 8
+		workWidth := max(width-nameW-roleW-stateW-sparkW-9, 4) // 9 = spaces + heat + mail padding
 		work := a.WorkTitle
 		if work == "" && a.HookBead != "" {
 			work = a.HookBead
@@ -666,6 +685,12 @@ func (g *GasTown) renderAgentRoster(width int) string {
 		}
 		work = truncateGT(work, workWidth)
 		workStyle := lipgloss.NewStyle().Foreground(ui.Muted)
+
+		// Activity sparkline (8-char mini graph)
+		sparkline := ""
+		if hist, ok := g.agentHistograms[a.Name]; ok {
+			sparkline = " " + ui.RenderSparkline(hist, sparkW)
+		}
 
 		// Mail indicator
 		mailStr := ""
@@ -680,8 +705,8 @@ func (g *GasTown) renderAgentRoster(width int) string {
 			prefix = ui.ItemCursor.Render(ui.Cursor+" ") + ""
 		}
 
-		row := fmt.Sprintf("%s%s %s %s %s%s",
-			prefix, nameStr, roleStr, stateStr, workStyle.Render(work), mailStr)
+		row := fmt.Sprintf("%s%s%s %s %s %s%s%s",
+			prefix, heat, nameStr, roleStr, stateStr, workStyle.Render(work), sparkline, mailStr)
 
 		if isSelected {
 			row = ui.GasTownAgentSelected.Width(width).Render(row)
@@ -778,6 +803,16 @@ func (g *GasTown) renderConvoyDetails(width int) string {
 			}
 		}
 		lines = append(lines, barLine)
+
+		// Compact pipeline visualization (when collapsed)
+		if !isExpanded && len(c.Tracked) > 0 {
+			statuses := make([]string, len(c.Tracked))
+			for j, t := range c.Tracked {
+				statuses[j] = t.Status
+			}
+			pipeWidth := max(width-8, 10)
+			lines = append(lines, "    "+ui.ConvoyPipeline(statuses, pipeWidth))
+		}
 
 		// Expanded: show tracked issues
 		if isExpanded && len(c.Tracked) > 0 {
