@@ -117,6 +117,9 @@ type Model struct {
 
 	// Single-flight gate for gt status polls
 	gtPollInFlight bool
+
+	// Gas Town panel liveness tick
+	gasTownTicking bool
 }
 
 // New creates a new app model from loaded issues.
@@ -344,6 +347,9 @@ type mutateResultMsg struct {
 
 // changeIndicatorExpiredMsg clears change indicators after timeout.
 type changeIndicatorExpiredMsg struct{}
+
+// gasTownTickMsg drives liveness animations (breathing dots, duration timers).
+type gasTownTickMsg struct{}
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -1023,6 +1029,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case gasTownTickMsg:
+		m.gasTown.Tick()
+		// Keep ticking while panel is visible
+		if m.showGasTown {
+			return m, gasTownTickCmd()
+		}
+		m.gasTownTicking = false
+		return m, nil
+
 	case components.ToastDismissMsg:
 		m.toast = components.Toast{}
 		return m, nil
@@ -1170,6 +1185,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			cmds := []tea.Cmd{fetchConvoyList, fetchMailInbox, fetchCosts, fetchActivity}
 			if m.townStatus == nil {
 				cmds = append(cmds, m.gatedPollAgentState())
+			}
+			if !m.gasTownTicking {
+				cmds = append(cmds, gasTownTickCmd())
+				m.gasTownTicking = true
 			}
 			return m, tea.Batch(cmds...)
 		}
@@ -1727,6 +1746,10 @@ func (m Model) executePaletteAction(action components.PaletteAction) (tea.Model,
 		m.showGasTown = !m.showGasTown
 		if m.showGasTown {
 			m.gasTown.SetStatus(m.townStatus, m.gtEnv)
+			if !m.gasTownTicking {
+				m.gasTownTicking = true
+				return m, gasTownTickCmd()
+			}
 		}
 		return m, nil
 	case components.ActionCreateConvoy:
@@ -2093,6 +2116,15 @@ func (m *Model) gatedPollAgentState() tea.Cmd {
 		return pollTmuxAgentState
 	}
 	return nil
+}
+
+const gasTownTickInterval = 1 * time.Second
+
+// gasTownTickCmd returns a Cmd that fires a gasTownTickMsg after the interval.
+func gasTownTickCmd() tea.Cmd {
+	return tea.Tick(gasTownTickInterval, func(time.Time) tea.Msg {
+		return gasTownTickMsg{}
+	})
 }
 
 // pollGTStatus fetches Gas Town status via gt status --json.

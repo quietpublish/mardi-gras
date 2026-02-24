@@ -653,7 +653,7 @@ func (d *Detail) renderComments() string {
 	return strings.Join(lines, "\n")
 }
 
-// moleculeProgressBar renders a progress bar for molecule steps.
+// moleculeProgressBar renders a progress bar for molecule steps with Mardi Gras gradient.
 func moleculeProgressBar(done, total, width int) string {
 	if total <= 0 || width <= 0 {
 		return strings.Repeat(ui.SymProgressEmpty, width)
@@ -661,10 +661,10 @@ func moleculeProgressBar(done, total, width int) string {
 	filled := max(min(done*width/total, width), 0)
 	empty := width - filled
 
-	filledStyle := lipgloss.NewStyle().Foreground(ui.BrightGreen)
 	emptyStyle := lipgloss.NewStyle().Foreground(ui.Dim)
 
-	return filledStyle.Render(strings.Repeat(ui.SymProgress, filled)) +
+	filledStr := strings.Repeat(ui.SymProgress, filled)
+	return ui.ApplyPartialMardiGrasGradient(filledStr, width) +
 		emptyStyle.Render(strings.Repeat(ui.SymProgressEmpty, empty))
 }
 

@@ -62,6 +62,10 @@ type GasTown struct {
 
 	// Convoy predictions
 	predictions []gastown.ConvoyPrediction
+
+	// Liveness tick state
+	tickCount      int                  // incremented every tick for animations
+	workStartTimes map[string]time.Time // agent name -> when they started working
 }
 
 // NewGasTown creates a Gas Town panel.
@@ -71,6 +75,7 @@ func NewGasTown(width, height int) GasTown {
 		height:         height,
 		expandedConvoy: -1,
 		expandedMail:   -1,
+		workStartTimes: make(map[string]time.Time),
 	}
 }
 
@@ -82,12 +87,41 @@ func (g *GasTown) SetSize(width, height int) {
 
 // SetStatus updates the panel with fresh Gas Town state.
 func (g *GasTown) SetStatus(status *gastown.TownStatus, env gastown.Env) {
+	// Track work start times: record when agents transition to "working"
+	if status != nil {
+		currentWorking := make(map[string]bool)
+		for _, a := range status.Agents {
+			if a.State == "working" {
+				currentWorking[a.Name] = true
+				if _, tracked := g.workStartTimes[a.Name]; !tracked {
+					g.workStartTimes[a.Name] = time.Now()
+				}
+			}
+		}
+		// Clean up agents that stopped working
+		for name := range g.workStartTimes {
+			if !currentWorking[name] {
+				delete(g.workStartTimes, name)
+			}
+		}
+	}
+
 	g.status = status
 	g.env = env
 	// Clamp cursor to valid range when agent list changes
 	if status != nil && g.agentCursor >= len(status.Agents) {
 		g.agentCursor = max(len(status.Agents)-1, 0)
 	}
+}
+
+// Tick advances the liveness animation state.
+func (g *GasTown) Tick() {
+	g.tickCount++
+}
+
+// TickCount returns the current tick for external use.
+func (g *GasTown) TickCount() int {
+	return g.tickCount
 }
 
 // SetConvoyDetails updates the convoy detail list from gt convoy list --json.
@@ -456,7 +490,7 @@ func (g GasTown) View() string {
 }
 
 func (g *GasTown) renderContent() string {
-	contentWidth := max(g.width-4, 20)
+	contentWidth := max(g.width-3, 20) // border (1) + padding (1) + right margin (1)
 
 	if g.status == nil {
 		msg := ui.SymTown + " Gas Town not available"
@@ -475,7 +509,7 @@ func (g *GasTown) renderContent() string {
 	sections = append(sections, g.renderAgentRoster(contentWidth))
 
 	if len(g.status.Rigs) > 0 {
-		sections = append(sections, renderRigs(g.status.Rigs))
+		sections = append(sections, renderRigs(g.status.Rigs, contentWidth))
 	}
 
 	if len(g.convoyDetails) > 0 {
@@ -550,12 +584,7 @@ func (g *GasTown) renderAgentRoster(width int) string {
 	agents := g.status.Agents
 	var lines []string
 
-	// Section title with focus indicator
-	titleStr := "AGENTS"
-	if g.section == SectionAgents {
-		titleStr = ui.Cursor + " AGENTS"
-	}
-	lines = append(lines, ui.GasTownTitle.Render(titleStr))
+	lines = append(lines, ui.SectionDivider("AGENTS", width, g.section == SectionAgents))
 
 	if len(agents) == 0 {
 		lines = append(lines, ui.GasTownLabel.Render("  No agents registered"))
@@ -565,7 +594,7 @@ func (g *GasTown) renderAgentRoster(width int) string {
 	// Column widths
 	nameW := 14
 	roleW := 14
-	stateW := 12
+	stateW := 16 // extra room for "● working 15m"
 
 	// Header row
 	headerStyle := lipgloss.NewStyle().Foreground(ui.Dim).Bold(true)
@@ -578,7 +607,7 @@ func (g *GasTown) renderAgentRoster(width int) string {
 	for i, a := range agents {
 		isSelected := g.section == SectionAgents && i == g.agentCursor
 
-		// State symbol + color
+		// State symbol + color (with breathing dot for working agents)
 		stateSym := ui.SymIdle
 		switch a.State {
 		case "working":
@@ -594,8 +623,22 @@ func (g *GasTown) renderAgentRoster(width int) string {
 		case "paused", "muted":
 			stateSym = ui.SymPaused
 		}
-		stateStyle := lipgloss.NewStyle().Foreground(ui.AgentStateColor(a.State))
-		stateStr := stateStyle.Render(fmt.Sprintf("%-*s", stateW, stateSym+" "+a.State))
+
+		stateColor := ui.AgentStateColor(a.State)
+		// Breathing effect: working agents alternate bright/dim on tick
+		if a.State == "working" && g.tickCount%2 == 1 {
+			stateColor = ui.DimGreen
+		}
+		stateStyle := lipgloss.NewStyle().Foreground(stateColor)
+
+		// Append work duration for working agents
+		stateLabel := stateSym + " " + a.State
+		if a.State == "working" {
+			if started, ok := g.workStartTimes[a.Name]; ok {
+				stateLabel += " " + formatDuration(time.Since(started))
+			}
+		}
+		stateStr := stateStyle.Render(fmt.Sprintf("%-*s", stateW, stateLabel))
 
 		// Role with color
 		roleStyle := lipgloss.NewStyle().Foreground(ui.RoleColor(a.Role))
@@ -650,10 +693,10 @@ func (g *GasTown) renderAgentRoster(width int) string {
 	return strings.Join(lines, "\n")
 }
 
-func renderRigs(rigs []gastown.RigStatus) string {
+func renderRigs(rigs []gastown.RigStatus, width int) string {
 	var lines []string
 
-	lines = append(lines, ui.GasTownTitle.Render("RIGS"))
+	lines = append(lines, ui.SectionDivider("RIGS", width, false))
 
 	for _, r := range rigs {
 		var badges []string
@@ -684,11 +727,7 @@ func renderRigs(rigs []gastown.RigStatus) string {
 func (g *GasTown) renderConvoyDetails(width int) string {
 	var lines []string
 
-	titleStr := "CONVOYS"
-	if g.section == SectionConvoys {
-		titleStr = ui.Cursor + " CONVOYS"
-	}
-	lines = append(lines, ui.GasTownTitle.Render(titleStr))
+	lines = append(lines, ui.SectionDivider("CONVOYS", width, g.section == SectionConvoys))
 
 	for i, c := range g.convoyDetails {
 		isSelected := g.section == SectionConvoys && i == g.convoyCursor
@@ -790,10 +829,7 @@ func (g *GasTown) renderMail(width int) string {
 	if unread > 0 {
 		titleStr = fmt.Sprintf("MAIL (%d unread)", unread)
 	}
-	if g.section == SectionMail {
-		titleStr = ui.Cursor + " " + titleStr
-	}
-	lines = append(lines, ui.GasTownTitle.Render(titleStr))
+	lines = append(lines, ui.SectionDivider(titleStr, width, g.section == SectionMail))
 
 	for i, m := range g.mailMessages {
 		isSelected := g.section == SectionMail && i == g.mailCursor
@@ -883,7 +919,7 @@ func (g *GasTown) renderMail(width int) string {
 func renderConvoys(convoys []gastown.ConvoyInfo, width int) string {
 	var lines []string
 
-	lines = append(lines, ui.GasTownTitle.Render("CONVOYS"))
+	lines = append(lines, ui.SectionDivider("CONVOYS", width, false))
 
 	for _, c := range convoys {
 		statusStyle := lipgloss.NewStyle().Foreground(ui.Muted)
@@ -913,9 +949,8 @@ func (g *GasTown) renderCosts(width int) string {
 	if c.Period != "" {
 		totalLabel = fmt.Sprintf("%s: $%.2f", c.Period, c.Total.Cost)
 	}
-	header := fmt.Sprintf("COSTS%s",
-		lipgloss.NewStyle().Foreground(ui.Muted).Render("  "+totalLabel))
-	lines = append(lines, ui.GasTownTitle.Render(header))
+	lines = append(lines, ui.SectionDivider("COSTS", width, false))
+	lines = append(lines, "  "+lipgloss.NewStyle().Foreground(ui.Muted).Render(totalLabel))
 
 	if len(c.ByRole) > 0 {
 		for _, rc := range c.ByRole {
@@ -940,11 +975,11 @@ func (g *GasTown) renderCosts(width int) string {
 }
 
 // renderVelocity renders the workflow velocity metrics section.
-func (g *GasTown) renderVelocity(_ int) string {
+func (g *GasTown) renderVelocity(width int) string {
 	v := g.velocity
 	var lines []string
 
-	lines = append(lines, ui.GasTownTitle.Render("VELOCITY"))
+	lines = append(lines, ui.SectionDivider("VELOCITY", width, false))
 
 	// Issues line
 	labelStyle := lipgloss.NewStyle().Foreground(ui.Dim)
@@ -987,10 +1022,9 @@ func (g *GasTown) renderVelocity(_ int) string {
 func (g *GasTown) renderActivity(width int) string {
 	var lines []string
 
-	header := fmt.Sprintf("ACTIVITY%s",
-		lipgloss.NewStyle().Foreground(ui.Muted).Render(
-			fmt.Sprintf("  last %d events", len(g.events))))
-	lines = append(lines, ui.GasTownTitle.Render(header))
+	lines = append(lines, ui.SectionDivider("ACTIVITY", width, false))
+	lines = append(lines, "  "+lipgloss.NewStyle().Foreground(ui.Muted).Render(
+		fmt.Sprintf("last %d events", len(g.events))))
 
 	for _, ev := range g.events {
 		ts := formatEventTime(ev.Timestamp)
@@ -998,7 +1032,7 @@ func (g *GasTown) renderActivity(width int) string {
 		detail := eventDetail(ev, width-24)
 
 		tsStyle := lipgloss.NewStyle().Foreground(ui.Dim)
-		labelStyle := lipgloss.NewStyle().Foreground(ui.BrightGold)
+		labelStyle := lipgloss.NewStyle().Foreground(eventColor(ev))
 		detailStyle := lipgloss.NewStyle().Foreground(ui.Light)
 
 		line := fmt.Sprintf("  %s  %s  %s",
@@ -1030,6 +1064,26 @@ func eventLabel(ev gastown.Event) string {
 		return "patrol"
 	default:
 		return ev.Type
+	}
+}
+
+// eventColor returns a theme color for an event type.
+func eventColor(ev gastown.Event) lipgloss.Color {
+	switch ev.Type {
+	case "sling":
+		return ui.BrightGreen // dispatch = forward motion
+	case "session_death":
+		return ui.StateBackoff // death = red
+	case "nudge":
+		return ui.BrightGold // nudge = attention
+	case "handoff":
+		return ui.BrightPurple // handoff = transition
+	case "session_start", "spawn":
+		return ui.StateSpawn // start = cyan
+	case "patrol_started":
+		return ui.RoleDeacon // patrol = blue (deacon activity)
+	default:
+		return ui.Muted
 	}
 }
 
@@ -1097,6 +1151,18 @@ func shortenActor(s string) string {
 	return s
 }
 
+// formatDuration renders a duration as a compact human-readable label.
+func formatDuration(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	default:
+		return fmt.Sprintf("%dh%dm", int(d.Hours()), int(d.Minutes())%60)
+	}
+}
+
 // formatEventTime formats an RFC3339 timestamp as a relative time string.
 func formatEventTime(ts string) string {
 	t, err := time.Parse(time.RFC3339, ts)
@@ -1117,13 +1183,12 @@ func formatEventTime(ts string) string {
 }
 
 // renderScorecards renders the HOP agent quality scorecards section.
-func (g *GasTown) renderScorecards(_ int) string {
+func (g *GasTown) renderScorecards(width int) string {
 	var lines []string
 
-	header := fmt.Sprintf("SCORECARDS%s",
-		lipgloss.NewStyle().Foreground(ui.Muted).Render(
-			fmt.Sprintf("  %d agents", len(g.scorecards))))
-	lines = append(lines, ui.GasTownTitle.Render(header))
+	lines = append(lines, ui.SectionDivider("SCORECARDS", width, false))
+	lines = append(lines, "  "+lipgloss.NewStyle().Foreground(ui.Muted).Render(
+		fmt.Sprintf("%d agents", len(g.scorecards))))
 
 	labelStyle := lipgloss.NewStyle().Foreground(ui.Dim)
 	nameStyle := lipgloss.NewStyle().Foreground(ui.Light)
@@ -1168,7 +1233,7 @@ func (g *GasTown) renderHints() string {
 	return "\n" + ui.GasTownHint.Render(hint)
 }
 
-// progressBar renders a unicode block progress bar.
+// progressBar renders a unicode block progress bar with Mardi Gras gradient.
 func progressBar(done, total, width int) string {
 	if total <= 0 || width <= 0 {
 		return strings.Repeat(ui.SymProgressEmpty, width)
@@ -1176,10 +1241,10 @@ func progressBar(done, total, width int) string {
 	filled := max(min(done*width/total, width), 0)
 	empty := width - filled
 
-	filledStyle := lipgloss.NewStyle().Foreground(ui.BrightGreen)
 	emptyStyle := lipgloss.NewStyle().Foreground(ui.Dim)
 
-	return filledStyle.Render(strings.Repeat(ui.SymProgress, filled)) +
+	filledStr := strings.Repeat(ui.SymProgress, filled)
+	return ui.ApplyPartialMardiGrasGradient(filledStr, width) +
 		emptyStyle.Render(strings.Repeat(ui.SymProgressEmpty, empty))
 }
 

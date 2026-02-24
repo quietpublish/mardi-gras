@@ -1,6 +1,10 @@
 package ui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 // Pre-built styles for the Mardi Gras theme.
 var (
@@ -309,4 +313,35 @@ func StateBadge(state string) string {
 	return lipgloss.NewStyle().
 		Foreground(AgentStateColor(state)).
 		Render(sym + " " + state)
+}
+
+// SectionDivider renders a btop-style section divider: ── ⚜ TITLE ──────────
+// When focused, the fleur-de-lis and cursor glow bright gold.
+func SectionDivider(title string, width int, focused bool) string {
+	// Visible prefix: "── ⚜ " or "> ── ⚜ " when focused
+	cursorPrefix := ""
+	extraWidth := 0
+	if focused {
+		cursorPrefix = lipgloss.NewStyle().Bold(true).Foreground(BrightGold).Render(Cursor) + " "
+		extraWidth = 2 // "> "
+	}
+
+	usedWidth := extraWidth + 5 + len([]rune(title)) + 1
+	trailWidth := max(width-usedWidth, 3)
+	trail := strings.Repeat(BoxHorizontal, trailWidth)
+
+	ruleStyle := lipgloss.NewStyle().Foreground(Dim)
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(BrightGold)
+
+	fleurColor := DimGold
+	if focused {
+		fleurColor = BrightGold
+	}
+	fleurStyle := lipgloss.NewStyle().Foreground(fleurColor)
+
+	return "\n" + cursorPrefix +
+		ruleStyle.Render(BoxHorizontal+BoxHorizontal+" ") +
+		fleurStyle.Render(FleurDeLis) + " " +
+		titleStyle.Render(title) + " " +
+		ruleStyle.Render(trail)
 }
