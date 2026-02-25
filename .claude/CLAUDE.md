@@ -73,6 +73,32 @@ When running in tmux, `mg` launches Claude agents in new tmux windows. Agents ar
 
 When Gas Town is available, `a` dispatches via `gt sling` instead of raw Claude sessions. The Gas Town panel provides additional agent lifecycle controls: nudge (`n`), handoff (`h`), decommission (`K`).
 
+## Releasing
+
+Releases are automated via GoReleaser + GitHub Actions. Pushing a semver tag triggers the pipeline.
+
+```bash
+# 1. Ensure main is clean and tests pass
+make test
+go vet ./...
+
+# 2. Tag the release (use annotated tags with a summary)
+git tag -a v0.X.Y -m "v0.X.Y: short summary"
+
+# 3. Push the tag — this triggers .github/workflows/release.yml
+git push origin v0.X.Y
+
+# 4. Monitor the release workflow
+gh run list --limit 1
+gh run watch <run-id> --exit-status
+```
+
+The workflow runs `goreleaser` which builds binaries for linux/darwin/windows (amd64/arm64), creates a GitHub Release with auto-generated changelog, and updates the Homebrew tap (`matt-wright86/homebrew-tap`).
+
+**Versioning**: Semver. Bump minor (0.X.0) for feature releases, patch (0.0.X) for bug-fix-only releases.
+
+**Config files**: `.goreleaser.yaml` (build matrix, changelog groups, Homebrew formula), `.github/workflows/release.yml` (CI trigger).
+
 ## Git
 
 - Create feature branches off `main` — the `main` branch is protected.
