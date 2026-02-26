@@ -1201,6 +1201,31 @@ func TestGasTownNoScorecardsSection(t *testing.T) {
 	}
 }
 
+func TestGasTownAgentAliasDisplayed(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{
+		Agents: []gastown.AgentRuntime{
+			{Name: "mardi_gras-polecats-quartz", Role: "polecat", State: "working", AgentAlias: "quartz", AgentInfo: "claude/opus"},
+			{Name: "crew-alpha", Role: "crew", State: "idle"},
+		},
+	}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	view := g.View()
+	// Should show the alias "quartz" instead of the full name
+	if !strings.Contains(view, "quartz") {
+		t.Fatal("view should contain agent alias 'quartz'")
+	}
+	// Agent info tag should still appear
+	if !strings.Contains(view, "claude/opus") {
+		t.Fatal("view should contain agent info 'claude/opus'")
+	}
+	// Agent without alias should show full name
+	if !strings.Contains(view, "crew-alpha") {
+		t.Fatal("view should contain full name 'crew-alpha' for agent without alias")
+	}
+}
+
 func TestGasTownMailComposeNoActionInConvoySection(t *testing.T) {
 	g := NewGasTown(100, 30)
 	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
