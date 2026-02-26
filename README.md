@@ -87,17 +87,17 @@ mg --version
 
 Mardi Gras auto-detects your data source — no daemon, no config file. It supports two modes:
 
-- **JSONL mode**: reads `.beads/issues.jsonl` directly (walks up directories to find it)
-- **CLI mode**: falls back to `bd list --json` when JSONL isn't available (Beads v0.56+ with Dolt)
+- **CLI mode** (preferred): uses `bd list --json` when `bd` is on PATH (Beads v0.56+ with Dolt)
+- **JSONL mode** (legacy): reads `.beads/issues.jsonl` directly (walks up directories to find it)
 
-Both modes poll for changes automatically, so if an agent updates an issue while you're watching, the parade reshuffles in real time. The default blocking types are `blocks` and `conditional-blocks`.
+Both modes poll for changes automatically, so if an agent updates an issue while you're watching, the parade reshuffles in real time. The `--path` flag forces JSONL mode for a specific file. The default blocking types are `blocks` and `conditional-blocks`.
 
 ## Live Updates
 
 Mardi Gras polls for changes on a short interval. No OS-specific file watchers. No daemons. No background services.
 
-- **JSONL mode**: polls file modtime every 1.2 seconds
 - **CLI mode**: runs `bd list --json` every 5 seconds
+- **JSONL mode**: polls file modtime every 1.2 seconds (legacy)
 - External edits (agents, scripts, `bd` commands) are picked up automatically
 - Current view state is preserved on refresh (selection, closed section toggle, active filter query)
 - The footer shows your data source and how fresh it is
