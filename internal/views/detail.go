@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -690,23 +691,23 @@ func (d *Detail) renderMetadata() string {
 
 		// Show any extra metadata values not in the schema
 		if hasMetadata {
-			for key := range issue.Metadata {
-				if _, inSchema := schema.Fields[key]; !inSchema {
-					val := fmt.Sprintf("%v", issue.Metadata[key])
-					lines = append(lines, d.row(
-						key+":",
-						lipgloss.NewStyle().Foreground(ui.Muted).Render(val),
-					))
-				}
+			extraKeys := sortedMetadataKeys(issue.Metadata, schema.Fields)
+			for _, key := range extraKeys {
+				val := fmt.Sprintf("%v", issue.Metadata[key])
+				lines = append(lines, d.row(
+					key+":",
+					ui.MetaFieldType.Render(val),
+				))
 			}
 		}
 	} else if hasMetadata {
 		// No schema, but issue has metadata — show raw values
 		lines = append(lines, ui.DetailSection.Render("METADATA"))
-		for key, val := range issue.Metadata {
+		keys := sortedMetadataKeys(issue.Metadata, nil)
+		for _, key := range keys {
 			lines = append(lines, d.row(
 				key+":",
-				ui.DetailValue.Render(fmt.Sprintf("%v", val)),
+				ui.DetailValue.Render(fmt.Sprintf("%v", issue.Metadata[key])),
 			))
 		}
 	}
@@ -728,7 +729,7 @@ func (d *Detail) renderMetadataField(fieldName string, field data.MetadataFieldS
 	// Required marker
 	reqMarker := ""
 	if field.Required {
-		reqMarker = lipgloss.NewStyle().Foreground(ui.StatusStalled).Render("*")
+		reqMarker = ui.MetaRequired.Render("*")
 	}
 
 	// Check for actual value on the issue
@@ -739,27 +740,39 @@ func (d *Detail) renderMetadataField(fieldName string, field data.MetadataFieldS
 		}
 	}
 
-	nameStyle := lipgloss.NewStyle().Foreground(ui.Light)
-	typeStyle := lipgloss.NewStyle().Foreground(ui.Muted)
-
 	if valueStr != "" {
 		// Show: name* type = value
-		valStyle := lipgloss.NewStyle().Foreground(ui.BrightGreen)
 		return fmt.Sprintf("  %s%s %s = %s",
-			nameStyle.Render(fieldName), reqMarker,
-			typeStyle.Render(descriptor),
-			valStyle.Render(valueStr))
+			ui.MetaFieldName.Render(fieldName), reqMarker,
+			ui.MetaFieldType.Render(descriptor),
+			ui.MetaFieldValue.Render(valueStr))
 	}
 
 	// No value — show: name* type  (with dimmer style if optional)
 	if field.Required {
 		return fmt.Sprintf("  %s%s %s",
-			nameStyle.Render(fieldName), reqMarker,
-			typeStyle.Render(descriptor))
+			ui.MetaFieldName.Render(fieldName), reqMarker,
+			ui.MetaFieldType.Render(descriptor))
 	}
 	return fmt.Sprintf("  %s %s",
-		lipgloss.NewStyle().Foreground(ui.Muted).Render(fieldName),
-		typeStyle.Render(descriptor))
+		ui.MetaFieldNameDim.Render(fieldName),
+		ui.MetaFieldType.Render(descriptor))
+}
+
+// sortedMetadataKeys returns metadata keys sorted alphabetically,
+// excluding any keys present in schemaFields (if non-nil).
+func sortedMetadataKeys(metadata map[string]interface{}, schemaFields map[string]data.MetadataFieldSchema) []string {
+	keys := make([]string, 0, len(metadata))
+	for key := range metadata {
+		if schemaFields != nil {
+			if _, inSchema := schemaFields[key]; inSchema {
+				continue
+			}
+		}
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // moleculeProgressBar renders a progress bar for molecule steps with Mardi Gras gradient.

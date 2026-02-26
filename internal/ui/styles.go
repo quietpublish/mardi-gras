@@ -216,6 +216,22 @@ var (
 	EphemeralBadge = lipgloss.NewStyle().
 			Foreground(EphemeralColor)
 
+	// Metadata fields
+	MetaFieldName = lipgloss.NewStyle().
+			Foreground(Light)
+
+	MetaFieldNameDim = lipgloss.NewStyle().
+				Foreground(Muted)
+
+	MetaFieldType = lipgloss.NewStyle().
+			Foreground(Muted)
+
+	MetaFieldValue = lipgloss.NewStyle().
+			Foreground(BrightGreen)
+
+	MetaRequired = lipgloss.NewStyle().
+			Foreground(StatusStalled)
+
 	// Filter Input
 	InputPrompt = lipgloss.NewStyle().
 			Foreground(BrightGold).

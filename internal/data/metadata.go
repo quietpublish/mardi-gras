@@ -52,7 +52,7 @@ func LoadMetadataSchema(projectDir string) *MetadataSchema {
 		return nil
 	}
 
-	beadsDir := resolveBeadsDir(filepath.Join(projectDir, ".beads"))
+	beadsDir := ResolveBeadsDir(filepath.Join(projectDir, ".beads"))
 	configPath := filepath.Join(beadsDir, "config.yaml")
 
 	raw, err := os.ReadFile(configPath)
@@ -77,9 +77,9 @@ func LoadMetadataSchema(projectDir string) *MetadataSchema {
 	return schema
 }
 
-// resolveBeadsDir follows a redirect file if present.
+// ResolveBeadsDir follows a redirect file if present.
 // .beads/redirect contains a relative path to the actual beads directory.
-func resolveBeadsDir(beadsDir string) string {
+func ResolveBeadsDir(beadsDir string) string {
 	redirectPath := filepath.Join(beadsDir, "redirect")
 	content, err := os.ReadFile(redirectPath)
 	if err != nil {
