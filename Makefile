@@ -4,7 +4,7 @@ GO := go
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -ldflags "-s -w -X main.version=$(VERSION)"
 
-.PHONY: build run run-sample test clean dev tidy fmt lint
+.PHONY: build run run-sample test clean dev screenshot tidy fmt lint
 
 build:
 	$(GO) build $(LDFLAGS) -o $(BINARY) ./cmd/mg
@@ -24,6 +24,11 @@ clean:
 
 dev: build
 	./$(BINARY) --path testdata/sample.jsonl
+
+screenshot: build
+	@echo "Launching mg with screenshot dataset..."
+	@echo "Tip: resize terminal to ~120x38 for best results"
+	./$(BINARY) --path testdata/screenshot.jsonl
 
 tidy:
 	$(GO) mod tidy

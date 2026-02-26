@@ -16,7 +16,7 @@ Optional (for Gas Town features):
 ## Getting Started
 
 ```bash
-git clone https://github.com/matt-wright86/mardi-gras.git
+git clone https://github.com/quietpublish/mardi-gras.git
 cd mardi-gras
 make build
 ```
@@ -132,7 +132,7 @@ All visual constants live in `internal/ui/`:
 ### Package Boundaries
 
 - `data` and `ui` have no internal dependencies beyond stdlib and lipgloss — keep them that way.
-- `gastown` has no internal dependencies — stdlib and `encoding/json` only.
+- Core `gastown` files (status, sling, convoy, mail, molecule, problems, detect) have no internal dependencies. Analytics files (velocity, predict, scorecard, recommend) import `internal/data` for issue types.
 - No package imports `app` — it is the root.
 - **Prefer expanding existing packages** over creating new ones. New packages need a clear reason.
 

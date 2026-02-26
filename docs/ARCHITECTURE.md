@@ -1,8 +1,8 @@
 # Architecture Overview
 
-Mardi Gras is a terminal UI (TUI) that visualizes [Beads](https://github.com/matt-wright86/beads) issues as a parade — a motion-based metaphor where issues flow through four stages rather than sitting in static columns.
+Mardi Gras is a terminal UI (TUI) that visualizes [Beads](https://github.com/steveyegge/beads) issues as a parade — a motion-based metaphor where issues flow through four stages rather than sitting in static columns.
 
-Built with [BubbleTea](https://github.com/charmbracelet/bubbletea) (Elm architecture for Go), it reads a `.beads/issues.jsonl` file, groups issues by parade status, and renders a two-pane interface with live file watching. When [Gas Town](https://github.com/steveyegge/gastown) is available, it becomes a full agent control surface with convoy management, mail, cost analytics, and operational intelligence.
+Built with [BubbleTea](https://github.com/charmbracelet/bubbletea) (Elm architecture for Go), it supports two data sources: direct `.beads/issues.jsonl` reading and `bd list --json` CLI fallback (for Beads v0.56+ with Dolt). It groups issues by parade status and renders a two-pane interface with live polling. When [Gas Town](https://github.com/steveyegge/gastown) is available, it becomes a full agent control surface with convoy management, mail, cost analytics, and operational intelligence.
 
 ## Package Layout
 
@@ -19,10 +19,11 @@ internal/
     issue.go              Domain types: Issue, Status, Priority, Dependency, DepEval
     loader.go             JSONL parsing, sorting, parade grouping
     filter.go             Query filtering (type:, priority:, free-text)
-    watcher.go            File polling (1.2s interval, change detection)
+    watcher.go            File polling (1.2s JSONL / 5s CLI interval, change detection)
     source.go             Data source abstraction (JSONL vs CLI), bd list fetcher
     focus.go              Focus mode filtering (my work + top priority)
     mutate.go             Issue mutations via bd CLI (status, priority, create, claim)
+    metadata.go           Beads config parsing, metadata schema, ResolveBeadsDir
     exec.go               Timeout helpers for bd/git commands (short/medium tiers)
     crossrig.go           Cross-rig dependency detection and rendering
     hop.go                HOP (Hierarchy of Proof) quality score types
@@ -100,8 +101,11 @@ components
   --> data     (Issue types for create form)
   --> ui       (styles, symbols)
 
-gastown
+gastown (core: status, sling, convoy, mail, molecule, problems, detect)
   --> (stdlib + encoding/json only, no internal deps)
+
+gastown (analytics: velocity, predict, scorecard, recommend)
+  --> data     (Issue types for metrics computation)
 
 data
   --> (stdlib only, no internal deps)
@@ -110,7 +114,7 @@ ui
   --> (lipgloss only, no internal deps)
 ```
 
-No package imports `app` — it is the root. `data`, `gastown`, and `ui` have no internal dependencies beyond the standard library and lipgloss.
+No package imports `app` — it is the root. `data` and `ui` have no internal dependencies beyond the standard library and lipgloss. Core `gastown` files are dependency-free; analytics files import `data` for issue types.
 
 ## BubbleTea Model Structure
 
@@ -309,7 +313,7 @@ issue.ParadeGroup(issueMap, blockingTypes):
   open + blocked?            --> Stalled
 ```
 
-"Blocked" is determined by `EvaluateDependencies`: an issue is blocked if it has any dependency where the type is in `blockingTypes` (default: `"blocks"`) and the target issue is either missing or still open.
+"Blocked" is determined by `EvaluateDependencies`: an issue is blocked if it has any dependency where the type is in `blockingTypes` (default: `"blocks"` and `"conditional-blocks"`) and the target issue is either missing or still open.
 
 ### 3. Dependency evaluation (data/issue.go)
 
@@ -325,7 +329,7 @@ For each dependency edge (deduped by type|dependsOnID):
 DepEval.IsBlocked = len(BlockingIDs) > 0 || len(MissingIDs) > 0
 ```
 
-Eight dependency types are supported: blocks, blocked-by, related, duplicates, supersedes, parent-child, discovered-from, depends-on. The `--block-types` flag controls which types are treated as blockers (default: `blocks` only).
+Nine dependency types are supported: blocks, conditional-blocks, blocked-by, related, duplicates, supersedes, parent-child, discovered-from, depends-on. The `--block-types` flag controls which types are treated as blockers (default: `blocks` and `conditional-blocks`).
 
 ### 4. Live updates (data/watcher.go, source.go)
 
@@ -374,9 +378,9 @@ Features activate progressively: Beads-only (no gt) → Gas Town available (gt o
 
 ### Status Polling (status.go)
 
-`FetchStatus()` runs `gt status --json` and parses the result. Key gotcha: `gt status --json` takes **~9 seconds** to complete. The JSON nests agents under `rigs[].agents`; `normalizeStatus()` flattens them into a single `Agents` slice for the UI. Top-level agents are HQ-level (mayor, deacon); rig agents include polecats, crew, witness, refinery.
+`FetchStatus()` runs `gt status --json` and parses the result. A single-flight gate (`gtPollInFlight` in the app model) prevents overlapping polls. Key gotcha: `gt status --json` takes **~9 seconds** to complete. The JSON nests agents under `rigs[].agents`; `normalizeStatus()` flattens them into a single `Agents` slice for the UI. Top-level agents are HQ-level (mayor, deacon); rig agents include polecats, crew, witness, refinery.
 
-If `AgentRuntime.State` is empty, it defaults to "idle". Gas Town v0.8.0+ always provides State; the `Running` field was removed upstream.
+`AgentRuntime` includes `Running`, `State`, `AgentInfo` (runtime/model), `AgentAlias` (short name), and `FirstSubject` (first unread mail subject). If `State` is empty, it defaults to "idle".
 
 ### Sling & Dispatch (sling.go)
 
@@ -450,8 +454,9 @@ DepEval        (computed from EvaluateDependencies)
   IsBlocked, NextBlockerID
 
 AgentRuntime   (from gastown/status.go)
-  Name, Address, Role, State
+  Name, Address, Role, Rig, Running, State
   HasWork, WorkTitle, HookBead, UnreadMail
+  AgentInfo, AgentAlias, FirstSubject
 
 TownStatus     (from gastown/status.go)
   Agents []AgentRuntime  (flattened from all rigs)

@@ -1,8 +1,8 @@
 # ⚜ Mardi Gras
 
-[![CI](https://github.com/matt-wright86/mardi-gras/actions/workflows/ci.yml/badge.svg)](https://github.com/matt-wright86/mardi-gras/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/matt-wright86/mardi-gras)](https://github.com/matt-wright86/mardi-gras/releases/latest)
-[![Go](https://img.shields.io/github/go-mod/go-version/matt-wright86/mardi-gras)](https://go.dev/)
+[![CI](https://github.com/quietpublish/mardi-gras/actions/workflows/ci.yml/badge.svg)](https://github.com/quietpublish/mardi-gras/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/quietpublish/mardi-gras)](https://github.com/quietpublish/mardi-gras/releases/latest)
+[![Go](https://img.shields.io/github/go-mod/go-version/quietpublish/mardi-gras)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Your Beads issues deserve a parade — not a spreadsheet.**
@@ -12,6 +12,7 @@ Mardi Gras is a terminal UI for [Beads](https://github.com/steveyegge/beads) tha
 It's fast, visual, and joyful.
 One binary. No config. Just `mg`.
 
+<!-- Screenshot: run `make screenshot` and resize to ~120x38 for best results -->
 ![Mardi Gras TUI](docs/screenshots/mardi-gras.png)
 
 Think of your project as a parade route:
@@ -57,42 +58,49 @@ go install github.com/matt-wright86/mardi-gras/cmd/mg@latest
 ### From source
 
 ```bash
-git clone https://github.com/matt-wright86/mardi-gras.git
+git clone https://github.com/quietpublish/mardi-gras.git
 cd mardi-gras
 make build
 ```
 
 ### GitHub Releases
 
-Pre-built binaries for Linux, macOS, and Windows are available on the [Releases](https://github.com/matt-wright86/mardi-gras/releases) page.
+Pre-built binaries for Linux, macOS, and Windows are available on the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
 ## Usage
 
 ```bash
-# Auto-detect .beads/issues.jsonl in current directory
+# Auto-detect data source in current directory
 mg
 
-# Point at a specific project
+# Point at a specific JSONL file
 mg --path /path/to/.beads/issues.jsonl
 
 # Treat additional dependency types as blockers
-mg --block-types blocks,discovered-from
+mg --block-types blocks,conditional-blocks,discovered-from
 # or via environment variable
-MG_BLOCK_TYPES=blocks,parent-child mg
+MG_BLOCK_TYPES=blocks,conditional-blocks,parent-child mg
 
 # Check version
 mg --version
 ```
 
-Mardi Gras reads your `.beads/issues.jsonl` directly — no daemon, no database, no config file. It polls for changes automatically, so if an agent updates an issue while you're watching, the parade reshuffles in real time.
+Mardi Gras auto-detects your data source — no daemon, no config file. It supports two modes:
+
+- **JSONL mode**: reads `.beads/issues.jsonl` directly (walks up directories to find it)
+- **CLI mode**: falls back to `bd list --json` when JSONL isn't available (Beads v0.56+ with Dolt)
+
+Both modes poll for changes automatically, so if an agent updates an issue while you're watching, the parade reshuffles in real time. The default blocking types are `blocks` and `conditional-blocks`.
 
 ## Live Updates
 
-Mardi Gras polls your JSONL file on a short interval. No OS-specific file watchers. No daemons. No background services.
+Mardi Gras polls for changes on a short interval. No OS-specific file watchers. No daemons. No background services.
 
-- External edits (agents, scripts, `bd` commands) are picked up automatically.
-- Current view state is preserved on refresh where possible (selection, closed section toggle, active filter query).
-- The footer shows your data source and how fresh it is.
+- **JSONL mode**: polls file modtime every 1.2 seconds
+- **CLI mode**: runs `bd list --json` every 5 seconds
+- External edits (agents, scripts, `bd` commands) are picked up automatically
+- Current view state is preserved on refresh (selection, closed section toggle, active filter query)
+- The footer shows your data source and how fresh it is
 
 ## Keybindings
 
@@ -215,7 +223,7 @@ Stalled issues show a "next blocker" hint so you can see at a glance what's hold
 Press `enter` on any issue to focus the detail pane. It shows everything about the selected issue:
 
 - **Metadata** — type, priority, assignee, due dates with overdue/due-soon badges
-- **Dependencies** — eight types (blocks, blocked-by, related, duplicates, supersedes, parent-child, discovered-from, depends-on) grouped by status: waiting, missing, resolved, and non-blocking
+- **Dependencies** — nine types (blocks, conditional-blocks, blocked-by, related, duplicates, supersedes, parent-child, discovered-from, depends-on) grouped by status: waiting, missing, resolved, and non-blocking
 - **Comments & Timeline** — full conversation history with timestamps
 - **Molecule DAG** — multi-step workflows rendered as a visual flow graph with parallel branching (`┌─ ├─ └─`) and connector lines between tiers
 - **HOP Quality** — reputation stars, crystal/ephemeral badges, and validator verdicts for agent-produced work
@@ -354,8 +362,8 @@ It is a visual lens on top of Beads. Beads remains the source of truth.
 ## Possible Future Ideas
 
 - Color themes (Catppuccin, Dracula)
-- Bead throw celebration animation on task close
-- Real-time streaming updates (SSE)
+- Direct Dolt connection for sub-second polling
+- Multi-runtime agent dispatch (Gemini CLI, Copilot CLI)
 
 No promises. Just dreams. PRs welcome.
 
