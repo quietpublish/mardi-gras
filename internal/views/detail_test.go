@@ -794,3 +794,130 @@ func TestSetCommentsUpdatesContent(t *testing.T) {
 		t.Fatalf("expected 1 comment, got %d", len(d.Comments))
 	}
 }
+
+func TestMetadataSchemaRendered(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "mg-001", Title: "Test Issue", Status: data.StatusOpen,
+			Priority: data.PriorityMedium, IssueType: data.TypeTask,
+			CreatedAt: time.Now()},
+	}
+	d := NewDetail(80, 40, issues)
+	min0 := 0.0
+	max100 := 100.0
+	d.MetadataSchema = &data.MetadataSchema{
+		Mode: "warn",
+		Fields: map[string]data.MetadataFieldSchema{
+			"team": {
+				Type:     data.MetaEnum,
+				Required: true,
+				Values:   []string{"platform", "frontend", "backend"},
+			},
+			"priority_score": {
+				Type: data.MetaInt,
+				Min:  &min0,
+				Max:  &max100,
+			},
+		},
+	}
+	d.SetIssue(&issues[0])
+
+	content := d.renderContent()
+
+	if !strings.Contains(content, "METADATA") {
+		t.Error("content should contain METADATA section")
+	}
+	if !strings.Contains(content, "warn") {
+		t.Error("content should contain mode 'warn'")
+	}
+	if !strings.Contains(content, "team") {
+		t.Error("content should contain field name 'team'")
+	}
+	if !strings.Contains(content, "enum") {
+		t.Error("content should contain field type 'enum'")
+	}
+	if !strings.Contains(content, "priority_score") {
+		t.Error("content should contain field name 'priority_score'")
+	}
+}
+
+func TestMetadataNotRenderedWithoutSchema(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "mg-001", Title: "No Metadata", Status: data.StatusOpen,
+			Priority: data.PriorityMedium, IssueType: data.TypeTask,
+			CreatedAt: time.Now()},
+	}
+	d := NewDetail(80, 40, issues)
+	d.SetIssue(&issues[0])
+
+	content := d.renderContent()
+
+	if strings.Contains(content, "METADATA") {
+		t.Error("content should not contain METADATA section without schema")
+	}
+}
+
+func TestMetadataWithIssueValues(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "mg-001", Title: "With Metadata", Status: data.StatusOpen,
+			Priority: data.PriorityMedium, IssueType: data.TypeTask,
+			CreatedAt: time.Now(),
+			Metadata: map[string]interface{}{
+				"team":   "frontend",
+				"urgent": true,
+			},
+		},
+	}
+	d := NewDetail(80, 40, issues)
+	d.MetadataSchema = &data.MetadataSchema{
+		Mode: "warn",
+		Fields: map[string]data.MetadataFieldSchema{
+			"team": {
+				Type:     data.MetaEnum,
+				Required: true,
+				Values:   []string{"platform", "frontend", "backend"},
+			},
+			"urgent": {
+				Type: data.MetaBool,
+			},
+		},
+	}
+	d.SetIssue(&issues[0])
+
+	content := d.renderContent()
+
+	if !strings.Contains(content, "METADATA") {
+		t.Error("content should contain METADATA section")
+	}
+	if !strings.Contains(content, "frontend") {
+		t.Error("content should contain metadata value 'frontend'")
+	}
+	if !strings.Contains(content, "true") {
+		t.Error("content should contain metadata value 'true'")
+	}
+}
+
+func TestMetadataRawValuesWithoutSchema(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "mg-001", Title: "Raw Metadata", Status: data.StatusOpen,
+			Priority: data.PriorityMedium, IssueType: data.TypeTask,
+			CreatedAt: time.Now(),
+			Metadata: map[string]interface{}{
+				"custom_field": "value123",
+			},
+		},
+	}
+	d := NewDetail(80, 40, issues)
+	d.SetIssue(&issues[0])
+
+	content := d.renderContent()
+
+	if !strings.Contains(content, "METADATA") {
+		t.Error("content should contain METADATA section for raw metadata")
+	}
+	if !strings.Contains(content, "custom_field") {
+		t.Error("content should contain raw metadata key")
+	}
+	if !strings.Contains(content, "value123") {
+		t.Error("content should contain raw metadata value")
+	}
+}

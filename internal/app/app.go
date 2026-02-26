@@ -123,6 +123,9 @@ type Model struct {
 
 	// Bead string shimmer animation
 	beadOffset int
+
+	// Metadata schema from .beads/config.yaml
+	metadataSchema *data.MetadataSchema
 }
 
 // New creates a new app model from loaded issues.
@@ -153,6 +156,7 @@ func New(issues []data.Issue, source data.Source, blockingTypes map[string]bool)
 	}
 
 	gtEnv := gastown.Detect()
+	metaSchema := data.LoadMetadataSchema(projectDir)
 
 	return Model{
 		issues:         issues,
@@ -172,6 +176,7 @@ func New(issues []data.Issue, source data.Source, blockingTypes map[string]bool)
 		changedIDs:     make(map[string]bool),
 		prevIssueMap:   prevMap,
 		sourceMode:     source.Mode,
+		metadataSchema: metaSchema,
 	}
 }
 
@@ -1986,6 +1991,7 @@ func (m *Model) layout() {
 	m.detail.AllIssues = m.issues
 	m.detail.IssueMap = data.BuildIssueMap(m.issues)
 	m.detail.BlockingTypes = m.blockingTypes
+	m.detail.MetadataSchema = m.metadataSchema
 
 	if len(m.parade.Items) == 0 {
 		m.parade = views.NewParade(m.issues, paradeW, bodyH, m.blockingTypes)

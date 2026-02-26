@@ -30,6 +30,7 @@ type Detail struct {
 	MoleculeIssueID    string // which issue the molecule data belongs to
 	Comments           []gastown.Comment
 	CommentsIssueID    string // which issue the comments belong to
+	MetadataSchema     *data.MetadataSchema
 }
 
 // NewDetail creates a detail panel.
@@ -292,6 +293,12 @@ func (d *Detail) renderContent() string {
 		lines = append(lines, "")
 		lines = append(lines, ui.DetailSection.Render("DESCRIPTION"))
 		lines = append(lines, d.renderMarkdown(issue.Description))
+	}
+
+	// Metadata (from issue data, rendered against schema)
+	if metaSection := d.renderMetadata(); metaSection != "" {
+		lines = append(lines, "")
+		lines = append(lines, metaSection)
 	}
 
 	// Close reason
@@ -651,6 +658,108 @@ func (d *Detail) renderComments() string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// renderMetadata renders the metadata section, showing schema fields and issue values.
+func (d *Detail) renderMetadata() string {
+	issue := d.Issue
+	schema := d.MetadataSchema
+
+	// If no schema and no issue metadata, nothing to render
+	hasMetadata := issue != nil && len(issue.Metadata) > 0
+	hasSchema := schema != nil && len(schema.Fields) > 0
+	if !hasSchema && !hasMetadata {
+		return ""
+	}
+
+	var lines []string
+
+	if hasSchema {
+		// Render schema header with mode badge
+		header := "METADATA"
+		if schema.Mode != "" && schema.Mode != "none" {
+			header += fmt.Sprintf(" [%s]", schema.Mode)
+		}
+		lines = append(lines, ui.DetailSection.Render(header))
+
+		fieldNames := schema.SortedFieldNames()
+		for _, name := range fieldNames {
+			field := schema.Fields[name]
+			lines = append(lines, d.renderMetadataField(name, field, issue))
+		}
+
+		// Show any extra metadata values not in the schema
+		if hasMetadata {
+			for key := range issue.Metadata {
+				if _, inSchema := schema.Fields[key]; !inSchema {
+					val := fmt.Sprintf("%v", issue.Metadata[key])
+					lines = append(lines, d.row(
+						key+":",
+						lipgloss.NewStyle().Foreground(ui.Muted).Render(val),
+					))
+				}
+			}
+		}
+	} else if hasMetadata {
+		// No schema, but issue has metadata — show raw values
+		lines = append(lines, ui.DetailSection.Render("METADATA"))
+		for key, val := range issue.Metadata {
+			lines = append(lines, d.row(
+				key+":",
+				ui.DetailValue.Render(fmt.Sprintf("%v", val)),
+			))
+		}
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// renderMetadataField renders a single metadata field with schema type and issue value.
+func (d *Detail) renderMetadataField(fieldName string, field data.MetadataFieldSchema, issue *data.Issue) string {
+	typeLabel := field.FieldTypeLabel()
+	constraint := field.ConstraintLabel()
+
+	// Build the type+constraint descriptor
+	descriptor := typeLabel
+	if constraint != "" {
+		descriptor += " " + constraint
+	}
+
+	// Required marker
+	reqMarker := ""
+	if field.Required {
+		reqMarker = lipgloss.NewStyle().Foreground(ui.StatusStalled).Render("*")
+	}
+
+	// Check for actual value on the issue
+	valueStr := ""
+	if issue != nil && issue.Metadata != nil {
+		if val, ok := issue.Metadata[fieldName]; ok {
+			valueStr = fmt.Sprintf("%v", val)
+		}
+	}
+
+	nameStyle := lipgloss.NewStyle().Foreground(ui.Light)
+	typeStyle := lipgloss.NewStyle().Foreground(ui.Muted)
+
+	if valueStr != "" {
+		// Show: name* type = value
+		valStyle := lipgloss.NewStyle().Foreground(ui.BrightGreen)
+		return fmt.Sprintf("  %s%s %s = %s",
+			nameStyle.Render(fieldName), reqMarker,
+			typeStyle.Render(descriptor),
+			valStyle.Render(valueStr))
+	}
+
+	// No value — show: name* type  (with dimmer style if optional)
+	if field.Required {
+		return fmt.Sprintf("  %s%s %s",
+			nameStyle.Render(fieldName), reqMarker,
+			typeStyle.Render(descriptor))
+	}
+	return fmt.Sprintf("  %s %s",
+		lipgloss.NewStyle().Foreground(ui.Muted).Render(fieldName),
+		typeStyle.Render(descriptor))
 }
 
 // moleculeProgressBar renders a progress bar for molecule steps with Mardi Gras gradient.
