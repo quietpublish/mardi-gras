@@ -659,7 +659,7 @@ func (g *GasTown) renderAgentRoster(width int) string {
 		roleStyle := lipgloss.NewStyle().Foreground(ui.RoleColor(a.Role))
 		roleStr := roleStyle.Render(fmt.Sprintf("%-*s", roleW, a.Role))
 
-		// Name
+		// Name (with agent info tag if available)
 		nameStyle := lipgloss.NewStyle().Foreground(ui.Light)
 		if isSelected {
 			nameStyle = nameStyle.Bold(true).Foreground(ui.White)
@@ -669,6 +669,9 @@ func (g *GasTown) renderAgentRoster(width int) string {
 			name = name[:nameW-1] + "…"
 		}
 		nameStr := nameStyle.Render(fmt.Sprintf("%-*s", nameW, name))
+		if a.AgentInfo != "" {
+			nameStr += lipgloss.NewStyle().Foreground(ui.Dim).Render("["+a.AgentInfo+"]") + " "
+		}
 
 		// Heat indicator (single char showing activity level)
 		heat := ui.HeatChar(g.agentEventCount[a.Name], g.maxEventCount)
@@ -679,6 +682,9 @@ func (g *GasTown) renderAgentRoster(width int) string {
 		work := a.WorkTitle
 		if work == "" && a.HookBead != "" {
 			work = a.HookBead
+		}
+		if work == "" && a.FirstSubject != "" {
+			work = ui.SymMail + " " + a.FirstSubject
 		}
 		if work == "" {
 			work = "-"

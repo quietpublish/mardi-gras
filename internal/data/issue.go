@@ -57,7 +57,7 @@ type Dependency struct {
 }
 
 // DefaultBlockingTypes is the set of dependency types that count as blockers.
-var DefaultBlockingTypes = map[string]bool{"blocks": true}
+var DefaultBlockingTypes = map[string]bool{"blocks": true, "conditional-blocks": true}
 
 // DepStatus classifies a single dependency edge after evaluation.
 type DepStatus int

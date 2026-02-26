@@ -48,7 +48,7 @@ func DetectProblems(status *TownStatus) []Problem {
 		}
 
 		// Zombie: agent not running but has hooked work
-		if a.State == "" && a.HookBead != "" {
+		if !a.Running && a.HookBead != "" {
 			problems = append(problems, Problem{
 				Type:     "zombie",
 				Agent:    a,

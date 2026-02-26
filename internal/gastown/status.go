@@ -15,16 +15,22 @@ type TownStatus struct {
 
 // AgentRuntime represents a single Gas Town agent.
 type AgentRuntime struct {
-	Name    string `json:"name"`
-	Role    string `json:"role"`
-	Rig     string `json:"rig"`
-	HasWork bool   `json:"has_work"`
+	Name      string `json:"name"`
+	Role      string `json:"role"`
+	Rig       string `json:"rig"`
+	Running   bool   `json:"running"`
+	HasWork   bool   `json:"has_work"`
 	WorkTitle string `json:"work_title"`
 	HookBead  string `json:"hook_bead"`
 	State     string `json:"state"`
 	Mail      int    `json:"unread_mail"`
 	Address   string `json:"address"`
 	Session   string `json:"session"`
+
+	// Agent display metadata (populated by gt's resolveAgentDisplay).
+	AgentInfo    string `json:"agent_info,omitempty"`     // runtime/model, e.g. "claude/opus"
+	AgentAlias   string `json:"agent_alias,omitempty"`    // short name, e.g. "opus-46"
+	FirstSubject string `json:"first_subject,omitempty"`  // first unread mail subject
 }
 
 // RigStatus represents a Gas Town rig (project).
