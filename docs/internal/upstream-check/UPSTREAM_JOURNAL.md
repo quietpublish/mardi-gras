@@ -4,6 +4,16 @@ Chronological log of upstream checks for Beads and Gas Town. Each entry links to
 
 ---
 
+## 2026-03-05
+
+**Scope**: both | **Doc**: [upstream-check-2026-03-05.md](upstream-check-2026-03-05.md)
+
+Quiet day — no new releases. Beads main has ~11 post-v0.58.0 commits (docs, Nix flake, doctor warning suppression, idle-monitor fix). Gas Town main has ~14 non-backup commits (hook_bead removal confirmed, cursor hooks merged, enriched convoy dashboard, context-budget guard). Several interesting open PRs: GitHub Issues integration (#2373 on Beads), polecat JSON state reconciliation (#2379 on GT), daemon pressure checks (#2370 on GT).
+
+**Breaking**: None for mg. **Action items**: All monitoring/tracking — no code changes needed. Carry forward: upgrade bd to 0.58.0, upgrade gt to 0.10.0, dogs in roster, `bd show --current` in header.
+
+---
+
 ## 2026-03-04
 
 **Scope**: both | **Doc**: [upstream-check-2026-03-04.md](upstream-check-2026-03-04.md)
