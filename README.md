@@ -1,7 +1,7 @@
 # ⚜ Mardi Gras
 
 [![CI](https://github.com/quietpublish/mardi-gras/actions/workflows/ci.yml/badge.svg)](https://github.com/quietpublish/mardi-gras/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/quietpublish/mardi-gras)](https://github.com/quietpublish/mardi-gras/releases/latest)
+[![Release](https://img.shields.io/github/v/tag/quietpublish/mardi-gras?label=release)](https://github.com/quietpublish/mardi-gras/releases/latest)
 [![Go](https://img.shields.io/github/go-mod/go-version/quietpublish/mardi-gras)](https://go.dev/)
 [![Beads](https://img.shields.io/badge/Beads-%E2%89%A5%20v0.58-blueviolet)](https://github.com/steveyegge/beads)
 [![Gas Town](https://img.shields.io/badge/Gas%20Town-%E2%89%A5%20v0.10-blue)](https://github.com/steveyegge/gastown)
