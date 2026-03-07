@@ -21,6 +21,9 @@ go.work.sum
 *~
 .DS_Store
 
+# Debug
+mg-debug.log
+
 # GoReleaser
 /dist/
 
