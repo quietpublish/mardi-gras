@@ -143,10 +143,11 @@ func FetchDoctorDiagnostics() (*DoctorResult, error) {
 	return &result, nil
 }
 
-// FetchIssueDetail runs `bd show <id> --json` and returns the enriched issue.
+// FetchIssueDetail runs `bd show <id> --long --json` and returns the enriched issue.
 // Returns fields not available from bd list: notes, design, acceptance_criteria.
+// The --long flag requests extended metadata (agent identity, gate fields, etc.).
 func FetchIssueDetail(issueID string) (*Issue, error) {
-	out, err := runWithTimeout(timeoutShort, "bd", "show", issueID, "--json")
+	out, err := runWithTimeout(timeoutShort, "bd", "show", issueID, "--long", "--json")
 	if err != nil {
 		return nil, fmt.Errorf("bd show: %w", err)
 	}
