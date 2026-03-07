@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/tag/quietpublish/mardi-gras?label=release)](https://github.com/quietpublish/mardi-gras/releases/latest)
 [![Go](https://img.shields.io/github/go-mod/go-version/quietpublish/mardi-gras)](https://go.dev/)
 [![Beads](https://img.shields.io/badge/Beads-%E2%89%A5%20v0.58-blueviolet)](https://github.com/steveyegge/beads)
-[![Gas Town](https://img.shields.io/badge/Gas%20Town-%E2%89%A5%20v0.10-blue)](https://github.com/steveyegge/gastown)
+[![Gas Town](https://img.shields.io/badge/Gas%20Town-%E2%89%A5%20v0.11-blue)](https://github.com/steveyegge/gastown)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Your Beads issues deserve a parade — not a spreadsheet.**
@@ -85,11 +85,14 @@ MG_BLOCK_TYPES=blocks,conditional-blocks,parent-child mg
 
 # Check version
 mg --version
+
+# Enable debug logging (creates mg-debug.log in cwd)
+MG_DEBUG=1 mg
 ```
 
 Mardi Gras auto-detects your data source — no daemon, no config file. It supports two modes:
 
-- **CLI mode** (preferred): uses `bd list --json` when `bd` is on PATH (Beads v0.56+ with Dolt)
+- **CLI mode** (preferred): uses `bd list --json` when `bd` is on PATH (Beads v0.56+; **avoid v0.59.0** which has a known `--json` bug)
 - **JSONL mode** (legacy): reads `.beads/issues.jsonl` directly (walks up directories to find it)
 
 Both modes poll for changes automatically, so if an agent updates an issue while you're watching, the parade reshuffles in real time. The `--path` flag forces JSONL mode for a specific file. The default blocking types are `blocks` and `conditional-blocks`.
@@ -225,7 +228,7 @@ Stalled issues show a "next blocker" hint so you can see at a glance what's hold
 Press `enter` on any issue to focus the detail pane. It shows everything about the selected issue:
 
 - **Metadata** — type, priority, assignee, due dates with overdue/due-soon badges
-- **Rich fields** — notes, design, and acceptance criteria fetched on demand via `bd show`
+- **Rich fields** — notes, design, and acceptance criteria fetched on demand via `bd show --long`
 - **Dependencies** — nine types (blocks, conditional-blocks, blocked-by, related, duplicates, supersedes, parent-child, discovered-from, depends-on) grouped by status: waiting, missing, resolved, and non-blocking
 - **Comments & Timeline** — full conversation history with timestamps
 - **Molecule DAG** — multi-step workflows rendered as a visual flow graph with parallel branching (`┌─ ├─ └─`) and connector lines between tiers
@@ -235,7 +238,7 @@ Press `m` in the detail pane to mark the active molecule step as done.
 
 ## Command Palette
 
-Press `:` or `Ctrl+K` to open a fuzzy-match command palette. Type to filter available actions, then press `enter` to execute. The palette provides access to the same actions available through keybindings, useful when you forget a shortcut.
+Press `:` or `Ctrl+K` to open a fuzzy-match command palette. Type to filter available actions, then press `enter` to execute. The palette provides access to the same actions available through keybindings, plus palette-only actions like **Cascade close** (close an issue and all its children, requires Gas Town v0.11+).
 
 ## tmux Integration
 
@@ -307,7 +310,7 @@ Press `ctrl+g` to replace the detail pane with the Gas Town dashboard. It has th
 
 **Agent Roster** — all agents across rigs with role badges, state (working/idle/backoff), current work assignment, and unread mail count. From here you can nudge (`n`), handoff (`h`), or decommission (`K`) agents.
 
-**Convoys** — delivery batches shown as progress bars with status badges. Expand a convoy with `enter` to see its issues, then land (`l`) or close (`x`) it. Create new convoys from multi-selected issues with `C`.
+**Convoys** — delivery batches shown as progress bars with status badges, progress percentage, ready/active counts, and assignees (Gas Town v0.11+). Expand a convoy with `enter` to see its issues, then land (`l`) or close (`x`) it. Create new convoys from multi-selected issues with `C`.
 
 **Mail** — inbox showing messages between agents. Expand a message with `enter`, reply with `r`, compose a new message with `w`, or archive with `d`.
 
