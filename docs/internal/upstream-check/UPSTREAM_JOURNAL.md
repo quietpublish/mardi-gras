@@ -4,6 +4,16 @@ Chronological log of upstream checks for Beads and Gas Town. Each entry links to
 
 ---
 
+## 2026-03-07
+
+**Scope**: both | **Doc**: [upstream-check-2026-03-07.md](upstream-check-2026-03-07.md)
+
+New releases: Beads v0.59.0 and Gas Town v0.11.0. **Critical bug found**: bd v0.59.0 made `--tree` the default display mode, which silently breaks `--json` flag — mg's `bd list --json` would fail. Fix exists on main (PR #2432) but is unreleased. Gas Town v0.11.0 ships `--cascade` close, stuck detection moved to Dog plugin, polecat JSON state reconciliation, enriched convoy dashboard, and Cursor hooks support.
+
+**Breaking**: bd v0.59.0 breaks `bd list --json` (critical). **Action items**: 1) Do NOT upgrade bd to v0.59.0 — stay on v0.58.0. 2) Track bd v0.59.1 for --json fix. 3) Upgrade gt to v0.11.0 (safe). 4) Consider bd version check in mg source.
+
+---
+
 ## 2026-03-05
 
 **Scope**: both | **Doc**: [upstream-check-2026-03-05.md](upstream-check-2026-03-05.md)
