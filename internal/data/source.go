@@ -75,7 +75,7 @@ func parseBdVersionWarning(output string) string {
 func FetchIssuesCLI() ([]Issue, error) {
 	out, err := runWithTimeout(timeoutMedium, "bd", "list", "--json", "--limit", "0", "--all")
 	if err != nil {
-		return nil, fmt.Errorf("bd list --json: %w", err)
+		return nil, wrapExitError("bd list --json", err)
 	}
 	var issues []Issue
 	if err := json.Unmarshal(out, &issues); err != nil {
@@ -133,7 +133,7 @@ func FetchDoctorDiagnostics() (*DoctorResult, error) {
 	if err != nil {
 		// bd doctor exits non-zero when problems found — still has valid JSON on stdout
 		if out == nil {
-			return nil, fmt.Errorf("bd doctor: %w", err)
+			return nil, wrapExitError("bd doctor", err)
 		}
 	}
 	var result DoctorResult
@@ -149,7 +149,7 @@ func FetchDoctorDiagnostics() (*DoctorResult, error) {
 func FetchIssueDetail(issueID string) (*Issue, error) {
 	out, err := runWithTimeout(timeoutShort, "bd", "show", issueID, "--long", "--json")
 	if err != nil {
-		return nil, fmt.Errorf("bd show: %w", err)
+		return nil, wrapExitError("bd show", err)
 	}
 	var issues []Issue
 	if err := json.Unmarshal(out, &issues); err != nil {

@@ -36,7 +36,7 @@ func CreateIssue(title string, issueType IssueType, priority Priority) (string, 
 	}
 	out, err := runWithTimeout(timeoutShort, "bd", args...)
 	if err != nil {
-		return "", fmt.Errorf("bd create: %w", err)
+		return "", wrapExitError("bd create", err)
 	}
 	// bd create prints the new issue ID
 	return strings.TrimSpace(string(out)), nil
