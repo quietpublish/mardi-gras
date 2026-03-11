@@ -139,9 +139,16 @@ func (h Help) View() string {
 		},
 	}
 
+	var titleBlock string
+	if contentWidth >= 44 {
+		titleBlock = renderTitle(contentWidth)
+	} else {
+		titleBlock = ui.HelpTitle.Width(contentWidth).Render("[ MARDI GRAS HELP ]")
+	}
+
 	header := lipgloss.JoinVertical(
 		lipgloss.Left,
-		ui.HelpTitle.Width(contentWidth).Render("[ MARDI GRAS HELP ]"),
+		titleBlock,
 		ui.HelpSubtitle.Width(contentWidth).Render("Navigation and filter shortcuts"),
 	)
 
@@ -196,6 +203,39 @@ func (h Help) renderSection(width int, section helpSection, keyWidth int) string
 		strings.Join(rows, "\n"),
 	)
 	return content
+}
+
+// asciiTitle is a compact block-element rendering of "Mardi Gras".
+var asciiTitle = [3]string{
+	`░█▄█░█▀█░█▀▄░█▀▄░▀█▀░░░█▀▀░█▀▄░█▀█░█▀▀`,
+	`░█░█░█▀█░█▀▄░█░█░░█░░░░█░█░█▀▄░█▀█░▀▀█`,
+	`░▀░▀░▀░▀░▀░▀░▀▀░░▀▀▀░░░▀▀▀░▀░▀░▀░▀░▀▀▀`,
+}
+
+// renderTitle renders the ASCII title with Mardi Gras color stripes.
+// Each row cycles through purple → gold → green.
+func renderTitle(maxWidth int) string {
+	colors := [3]lipgloss.Style{
+		lipgloss.NewStyle().Foreground(ui.BrightPurple).Bold(true),
+		lipgloss.NewStyle().Foreground(ui.BrightGold).Bold(true),
+		lipgloss.NewStyle().Foreground(ui.BrightGreen).Bold(true),
+	}
+
+	rows := make([]string, len(asciiTitle))
+	for i, line := range asciiTitle {
+		runes := []rune(line)
+		if len(runes) > maxWidth {
+			runes = runes[:maxWidth]
+		}
+		styled := colors[i%3].Render(string(runes))
+		// Center within maxWidth
+		pad := (maxWidth - len(runes)) / 2
+		if pad > 0 {
+			styled = strings.Repeat(" ", pad) + styled
+		}
+		rows[i] = styled
+	}
+	return strings.Join(rows, "\n")
 }
 
 func (h Help) maxKeyWidth(sections []helpSection) int {
