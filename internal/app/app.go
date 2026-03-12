@@ -125,6 +125,10 @@ type Model struct {
 	showProblems bool
 	problems     views.Problems
 
+	// Recovery confirmation dialog
+	recovering     bool
+	recoveryDialog components.RecoveryDialog
+
 	// Data source mode (JSONL file watcher vs bd CLI polling)
 	sourceMode data.SourceMode
 
@@ -555,6 +559,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		logRoute("createForm forward")
 		var cmd tea.Cmd
 		m.createForm, cmd = m.createForm.Update(msg)
+		return m, cmd
+	}
+
+	// Forward all messages to recovery dialog when active
+	if m.recovering {
+		if km, ok := msg.(tea.KeyPressMsg); ok && km.String() == "ctrl+c" {
+			logRoute("recoveryDialog ctrl+c -> quit")
+			return m, tea.Quit
+		}
+		logRoute("recoveryDialog forward")
+		var cmd tea.Cmd
+		m.recoveryDialog, cmd = m.recoveryDialog.Update(msg)
 		return m, cmd
 	}
 
@@ -1140,6 +1156,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case views.RecoveryActionMsg:
 		return m.handleRecoveryAction(msg)
+
+	case components.RecoveryDialogResult:
+		if msg.Cancelled {
+			m.recovering = false
+			return m, nil
+		}
+		return m.executeRecovery(msg)
 
 	case recoveryResultMsg:
 		return m.handleRecoveryResult(msg)
@@ -2113,20 +2136,29 @@ type recoveryResultMsg struct {
 	result  gastown.RecoveryResult
 }
 
-// handleRecoveryAction initiates rig recovery for a dead rig.
+// handleRecoveryAction shows the recovery confirmation dialog for a dead rig.
 func (m Model) handleRecoveryAction(msg views.RecoveryActionMsg) (tea.Model, tea.Cmd) {
-	rigName := msg.RigName
-	orphans := msg.Orphans
+	m.recovering = true
+	m.recoveryDialog = components.NewRecoveryDialog(msg.RigName, msg.Orphans, m.width, m.height)
+	return m, nil
+}
+
+// executeRecovery runs the actual rig recovery after user confirms.
+func (m Model) executeRecovery(result components.RecoveryDialogResult) (tea.Model, tea.Cmd) {
+	m.recovering = false
 
 	toast, toastCmd := components.ShowToast(
-		fmt.Sprintf("Recovering rig %s (%d orphans)...", rigName, len(orphans)),
+		fmt.Sprintf("Recovering rig %s (%d orphans)...", result.RigName, len(result.Orphans)),
 		components.ToastInfo, toastDuration,
 	)
 	m.toast = toast
 
+	rigName := result.RigName
+	orphans := result.Orphans
+	mode := result.Mode
 	recoverCmd := func() tea.Msg {
-		result := gastown.RecoverRig(orphans, rigName, gastown.RecoveryResling, "")
-		return recoveryResultMsg{rigName: rigName, result: result}
+		res := gastown.RecoverRig(orphans, rigName, mode, "")
+		return recoveryResultMsg{rigName: rigName, result: res}
 	}
 
 	return m, tea.Batch(toastCmd, recoverCmd)
@@ -2627,6 +2659,15 @@ func (m Model) View() tea.View {
 		formContent := lipgloss.JoinVertical(lipgloss.Left, formTitle, "", formBody, "", formHint)
 		formBox := ui.HelpOverlayBg.Width(m.width - 8).Render(formContent)
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, formBox))
+	}
+
+	if m.recovering {
+		rdTitle := ui.HelpTitle.Render("[ RIG RECOVERY ]")
+		rdBody := m.recoveryDialog.View()
+		rdHint := ui.HelpHint.Render("enter to confirm  esc to cancel")
+		rdContent := lipgloss.JoinVertical(lipgloss.Left, rdTitle, "", rdBody, "", rdHint)
+		rdBox := ui.HelpOverlayBg.Width(m.width - 8).Render(rdContent)
+		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, rdBox))
 	}
 
 	return altView(screen)

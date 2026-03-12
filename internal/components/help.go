@@ -170,7 +170,7 @@ func allSections() []helpSection {
 				{key: "n", desc: "Nudge agent on selected problem"},
 				{key: "h", desc: "Handoff from agent"},
 				{key: "K", desc: "Decommission polecat"},
-				{key: "R", desc: "Recover dead rig (release + re-sling)"},
+				{key: "R", desc: "Recover dead rig (opens confirmation)"},
 			},
 		},
 	}
