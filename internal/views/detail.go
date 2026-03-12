@@ -53,6 +53,7 @@ func NewDetail(width, height int, issues []data.Issue) Detail {
 
 // SetIssue updates the displayed issue and rebuilds content.
 func (d *Detail) SetIssue(issue *data.Issue) {
+	sameIssue := d.Issue != nil && issue != nil && d.Issue.ID == issue.ID
 	d.Issue = issue
 	// Clear stale molecule data when switching issues
 	if issue == nil || issue.ID != d.MoleculeIssueID {
@@ -70,7 +71,10 @@ func (d *Detail) SetIssue(issue *data.Issue) {
 		d.RichIssueID = ""
 	}
 	d.Viewport.SetContent(d.renderContent())
-	d.Viewport.GotoTop()
+	// Only scroll to top when switching to a different issue
+	if !sameIssue {
+		d.Viewport.GotoTop()
+	}
 }
 
 // SetMolecule updates the molecule DAG and progress for the current issue.
