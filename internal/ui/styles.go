@@ -323,6 +323,8 @@ func StateBadge(state string) string {
 		sym = SymStuck
 	case "awaiting-gate":
 		sym = SymGate
+	case "fix_needed":
+		sym = SymFixNeeded
 	case "paused", "muted":
 		sym = SymPaused
 	}

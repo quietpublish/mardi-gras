@@ -72,6 +72,7 @@ const (
 	SymSpawning      = "◐" // half-filled — session starting
 	SymGate          = "◷" // alias of SymDueDate — waiting on gate
 	SymPaused        = "⏸" // alias of SymDeferred — intentionally suspended
+	SymFixNeeded     = "🔧" // review feedback — needs rework
 	SymProgress      = "█"
 	SymProgressEmpty = "░"
 	SymDog           = "🐕"

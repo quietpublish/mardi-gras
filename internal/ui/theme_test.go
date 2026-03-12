@@ -69,6 +69,7 @@ func TestAgentStateColor(t *testing.T) {
 		{"degraded maps to backoff", "degraded", StateBackoff},
 		{"stuck", "stuck", StateStuck},
 		{"awaiting-gate", "awaiting-gate", StateGate},
+		{"fix_needed", "fix_needed", StateFixNeeded},
 		{"paused", "paused", Dim},
 		{"muted", "muted", Dim},
 		{"unknown falls back to idle", "unknown", StateIdle},
@@ -94,6 +95,7 @@ func TestAgentStateColorDistinctCategories(t *testing.T) {
 		"backoff":       AgentStateColor("backoff"),
 		"stuck":         AgentStateColor("stuck"),
 		"awaiting-gate": AgentStateColor("awaiting-gate"),
+		"fix_needed":    AgentStateColor("fix_needed"),
 		"paused":        AgentStateColor("paused"),
 	}
 
@@ -105,6 +107,9 @@ func TestAgentStateColorDistinctCategories(t *testing.T) {
 		{"idle", "backoff"},
 		{"idle", "stuck"},
 		{"stuck", "backoff"},
+		{"fix_needed", "stuck"},
+		{"fix_needed", "backoff"},
+		{"fix_needed", "working"},
 		{"spawning", "idle"},
 	}
 	for _, pair := range pairs {
