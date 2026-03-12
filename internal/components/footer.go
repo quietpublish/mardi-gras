@@ -25,6 +25,7 @@ type Footer struct {
 	LastRefresh  time.Time
 	PathExplicit bool
 	SourceMode   data.SourceMode
+	BeadsContext *data.BeadsContext
 }
 
 // ParadeBindings are the default keybindings for the parade view.
@@ -87,17 +88,22 @@ func (f Footer) View() string {
 				age = fmt.Sprintf("%dh ago", int(elapsed.Hours()))
 			}
 		}
-		sourceInfo = ui.FooterSource.Render(fmt.Sprintf("%s %s · %s", name, mode, age))
+		contextInfo := ""
+		if f.BeadsContext != nil && f.BeadsContext.Database != "" {
+			contextInfo = f.BeadsContext.Database
+			if f.BeadsContext.Backend != "" {
+				contextInfo += "/" + f.BeadsContext.Backend
+			}
+			contextInfo = " · " + contextInfo
+		}
+		sourceInfo = ui.FooterSource.Render(fmt.Sprintf("%s %s · %s%s", name, mode, age, contextInfo))
 	}
 
 	if sourceInfo != "" {
 		// Lay out: source left, keybindings right
 		sourceW := lipgloss.Width(sourceInfo)
 		keysW := lipgloss.Width(keybindings)
-		gap := f.Width - sourceW - keysW - 2 // 2 for padding
-		if gap < 1 {
-			gap = 1
-		}
+		gap := max(f.Width-sourceW-keysW-2, 1) // 2 for padding
 		content := sourceInfo + strings.Repeat(" ", gap) + keybindings
 		return ui.FooterStyle.Width(f.Width).Render(content)
 	}

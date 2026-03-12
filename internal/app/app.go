@@ -151,6 +151,9 @@ type Model struct {
 	// Metadata schema from .beads/config.yaml
 	metadataSchema *data.MetadataSchema
 
+	// Workspace identity from bd context --json (fetched at startup)
+	beadsContext *data.BeadsContext
+
 	// Doctor diagnostics from bd doctor --agent --json (fetched at startup)
 	doctorProblems []gastown.Problem
 
@@ -238,7 +241,7 @@ func (m Model) Init() tea.Cmd {
 		headerShimmerCmd(),
 	}
 	if m.sourceMode == data.SourceCLI {
-		cmds = append(cmds, fetchCurrentIssue, fetchDoctorDiagnostics)
+		cmds = append(cmds, fetchCurrentIssue, fetchDoctorDiagnostics, fetchBeadsContext)
 	}
 	return tea.Batch(cmds...)
 }
@@ -253,6 +256,16 @@ func fetchCurrentIssue() tea.Msg {
 func fetchDoctorDiagnostics() tea.Msg {
 	result, _ := data.FetchDoctorDiagnostics()
 	return doctorResultMsg{result: result}
+}
+
+type beadsContextMsg struct {
+	ctx *data.BeadsContext
+}
+
+// fetchBeadsContext runs bd context --json in the background at startup.
+func fetchBeadsContext() tea.Msg {
+	ctx, _ := data.FetchContext()
+	return beadsContextMsg{ctx: ctx}
 }
 
 // startPoll returns the appropriate polling Cmd based on sourceMode.
@@ -1252,6 +1265,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.showProblems {
 			m.problems.SetProblems(m.allProblems())
 		}
+		return m, nil
+
+	case beadsContextMsg:
+		m.beadsContext = msg.ctx
 		return m, nil
 
 	case agentFinishedMsg:
@@ -2661,6 +2678,7 @@ func (m Model) View() tea.View {
 		footer.LastRefresh = m.lastFileMod
 		footer.PathExplicit = m.pathExplicit
 		footer.SourceMode = m.sourceMode
+		footer.BeadsContext = m.beadsContext
 		bottomBar = footer.View()
 	}
 
