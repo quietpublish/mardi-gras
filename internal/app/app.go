@@ -59,6 +59,7 @@ type Model struct {
 	filterInput   textinput.Model
 	filtering     bool
 	showHelp      bool
+	help          components.Help
 	ready         bool
 	agentAvail    bool
 	agentRuntime  agent.Runtime
@@ -1257,6 +1258,12 @@ func (m Model) handleHelpKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.showHelp = false
 		return m, nil
 	default:
+		// Route page navigation to help component
+		var handled bool
+		m.help, handled = m.help.Update(msg)
+		if handled {
+			return m, nil
+		}
 		return m, nil
 	}
 }
@@ -2608,7 +2615,8 @@ func (m Model) View() tea.View {
 	}
 
 	if m.showHelp {
-		helpModal := components.NewHelp(m.width, m.height).View()
+		m.help.SetSize(m.width, m.height)
+		helpModal := m.help.View()
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, helpModal))
 	}
 

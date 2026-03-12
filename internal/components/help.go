@@ -1,17 +1,20 @@
 package components
 
 import (
+	"fmt"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/matt-wright86/mardi-gras/internal/ui"
 )
 
-// Help renders the global ? help modal.
+// Help renders the global ? help modal with pagination.
 type Help struct {
 	Width  int
 	Height int
+	page   int // current page (0-indexed)
 }
 
 type helpBinding struct {
@@ -29,17 +32,39 @@ func NewHelp(width, height int) Help {
 	return Help{Width: width, Height: height}
 }
 
-// View returns the rendered modal block positioned at the center of the terminal.
-func (h Help) View() string {
-	contentWidth := h.Width - 8
-	if contentWidth > 84 {
-		contentWidth = 84
-	}
-	if contentWidth < 44 {
-		contentWidth = 44
+// SetSize updates the help dimensions.
+func (h *Help) SetSize(width, height int) {
+	h.Width = width
+	h.Height = height
+}
+
+// Update handles key events for the help overlay (pagination).
+func (h Help) Update(msg tea.Msg) (Help, bool) {
+	km, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return h, false
 	}
 
-	sections := []helpSection{
+	pages := h.pageCount()
+
+	switch km.String() {
+	case "l", "right":
+		if h.page < pages-1 {
+			h.page++
+		}
+		return h, true
+	case "h", "left":
+		if h.page > 0 {
+			h.page--
+		}
+		return h, true
+	}
+
+	return h, false
+}
+
+func allSections() []helpSection {
+	return []helpSection{
 		{
 			title: "GLOBAL",
 			bindings: []helpBinding{
@@ -137,6 +162,91 @@ func (h Help) View() string {
 				{key: "C", desc: "Create convoy from selection"},
 			},
 		},
+		{
+			title: "PROBLEMS (p)",
+			bindings: []helpBinding{
+				{key: "j / k", desc: "Navigate problems"},
+				{key: "g / G", desc: "Jump to first/last"},
+				{key: "n", desc: "Nudge agent on selected problem"},
+				{key: "h", desc: "Handoff from agent"},
+				{key: "K", desc: "Decommission polecat"},
+				{key: "R", desc: "Recover dead rig (release + re-sling)"},
+			},
+		},
+	}
+}
+
+// sectionHeight returns the number of lines a section takes up,
+// including the title line and one blank line separator after it.
+func sectionHeight(s helpSection) int {
+	return 1 + len(s.bindings) + 1 // title + bindings + blank separator
+}
+
+// paginateSections splits sections into pages that fit within maxLines.
+func paginateSections(sections []helpSection, maxLines int) [][]helpSection {
+	if maxLines <= 0 {
+		return [][]helpSection{sections}
+	}
+
+	var pages [][]helpSection
+	var currentPage []helpSection
+	used := 0
+
+	for _, s := range sections {
+		sh := sectionHeight(s)
+		// If adding this section exceeds the page, start a new page
+		// (unless current page is empty — always add at least one section)
+		if used+sh > maxLines && len(currentPage) > 0 {
+			pages = append(pages, currentPage)
+			currentPage = nil
+			used = 0
+		}
+		currentPage = append(currentPage, s)
+		used += sh
+	}
+	if len(currentPage) > 0 {
+		pages = append(pages, currentPage)
+	}
+
+	if len(pages) == 0 {
+		pages = [][]helpSection{sections}
+	}
+	return pages
+}
+
+// bodyLines returns the available height for section content.
+func (h Help) bodyLines() int {
+	// header (title 3 lines + subtitle 1 + blank 1) + footer (blank 1 + hint 1 + page indicator 1)
+	overhead := 8
+	return max(h.Height-overhead-6, 10) // 6 for box padding/border
+}
+
+// pageCount returns the total number of pages.
+func (h Help) pageCount() int {
+	pages := paginateSections(allSections(), h.bodyLines())
+	return len(pages)
+}
+
+// View returns the rendered modal block positioned at the center of the terminal.
+func (h Help) View() string {
+	contentWidth := h.Width - 8
+	if contentWidth > 84 {
+		contentWidth = 84
+	}
+	if contentWidth < 44 {
+		contentWidth = 44
+	}
+
+	sections := allSections()
+	pages := paginateSections(sections, h.bodyLines())
+
+	// Clamp page
+	page := h.page
+	if page >= len(pages) {
+		page = len(pages) - 1
+	}
+	if page < 0 {
+		page = 0
 	}
 
 	var titleBlock string
@@ -152,8 +262,17 @@ func (h Help) View() string {
 		ui.HelpSubtitle.Width(contentWidth).Render("Navigation and filter shortcuts"),
 	)
 
-	body := h.renderSections(contentWidth, sections)
-	footer := ui.HelpHint.Width(contentWidth).Render("Press esc, q, or ? to close")
+	body := h.renderSections(contentWidth, pages[page])
+
+	// Footer with page indicator
+	footerParts := []string{}
+	if len(pages) > 1 {
+		pageStyle := lipgloss.NewStyle().Foreground(ui.Muted)
+		pageLabel := pageStyle.Render(fmt.Sprintf("Page %d/%d", page+1, len(pages)))
+		navHint := lipgloss.NewStyle().Foreground(ui.Dim).Render("  h/l or ←/→ to navigate")
+		footerParts = append(footerParts, pageLabel+navHint)
+	}
+	footerParts = append(footerParts, ui.HelpHint.Width(contentWidth).Render("Press esc, q, or ? to close"))
 
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -161,7 +280,7 @@ func (h Help) View() string {
 		"",
 		body,
 		"",
-		footer,
+		strings.Join(footerParts, "\n"),
 	)
 
 	box := ui.HelpOverlayBg.Width(contentWidth + 4).Render(content)
@@ -172,7 +291,7 @@ func (h Help) View() string {
 func (h Help) renderSections(width int, sections []helpSection) string {
 	blocks := make([]string, 0, len(sections))
 	for i := range sections {
-		blocks = append(blocks, h.renderSection(width, sections[i], h.maxKeyWidth(sections)))
+		blocks = append(blocks, h.renderSection(width, sections[i], h.maxKeyWidth(allSections())))
 	}
 	return strings.Join(blocks, "\n\n")
 }

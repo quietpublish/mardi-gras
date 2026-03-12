@@ -56,7 +56,8 @@ internal/
     mail.go               Mail inbox, reply, compose, archive, mark-read
     molecule.go           Molecule/DAG types, gt mol integration
     dagrender.go          DAG layout engine: LayoutDAG(), critical path
-    problems.go           Problem detection heuristics (stalled, backoff, zombie)
+    problems.go           Problem detection heuristics (stalled, stuck, backoff, zombie, dead_rig)
+    recovery.go           Dead-rig recovery: orphan detection, release + re-sling
     costs.go              Cost parsing from gt costs
     vitals.go             Server health + backup freshness from gt vitals
     activity.go           Activity feed event parsing
@@ -102,7 +103,7 @@ components
   --> data     (Issue types for create form)
   --> ui       (styles, symbols)
 
-gastown (core: status, sling, convoy, mail, molecule, problems, detect)
+gastown (core: status, sling, convoy, mail, molecule, problems, recovery, detect)
   --> (stdlib + encoding/json only, no internal deps)
 
 gastown (analytics: velocity, predict, scorecard, recommend)
@@ -115,7 +116,7 @@ ui
   --> (lipgloss only, no internal deps)
 ```
 
-No package imports `app` — it is the root. `data` and `ui` have no internal dependencies beyond the standard library and lipgloss. Core `gastown` files are dependency-free; analytics files import `data` for issue types.
+No package imports `app` — it is the root. `data` and `ui` have no internal dependencies beyond the standard library and lipgloss. Core `gastown` files (status, sling, convoy, mail, molecule, problems, recovery, detect) are dependency-free; analytics files import `data` for issue types.
 
 ## BubbleTea Model Structure
 
@@ -184,7 +185,7 @@ type Model struct {
 ### Lifecycle
 
 **Init()** starts two concurrent commands:
-- `m.startPoll()` — JSONL mode: `data.WatchFile(path, lastMod)` polls every 1.2s; CLI mode: `data.PollCLI(projectDir)` runs `bd list --json --flat` every 5s
+- `m.startPoll()` — JSONL mode: `data.WatchFile(path, lastMod)` polls every 1.2s; CLI mode: `data.PollCLI(projectDir)` runs `bd list --json` every 5s
 - Agent state poll — queries tmux or `gt status --json`. Uses a single-flight gate (`gtPollInFlight`) to prevent overlapping `gt status` calls (which take ~9s). Init bypasses the gate for the first poll; subsequent calls from watcher and user actions go through `gatedPollAgentState()`.
 
 **Update(msg)** routes messages. The full message set:
@@ -233,6 +234,8 @@ type Model struct {
 | `activityMsg` | Update Gas Town panel activity feed |
 | **UI feedback** | |
 | `views.GasTownActionMsg` | Dispatch Gas Town panel actions (nudge, handoff, etc.) |
+| `views.RecoveryActionMsg` | Initiate dead-rig recovery (release + re-sling orphans) |
+| `recoveryResultMsg` | Show recovery result toast, refresh Gas Town status |
 | `mutateResultMsg` | Handle status/priority change results, trigger confetti on close |
 | `confettiTickMsg` | Advance confetti animation frame |
 | `components.ToastDismissMsg` | Clear toast notification |
@@ -265,7 +268,7 @@ type Model struct {
 
 **`views.GasTown`** — Three-section control surface (agents/convoys/mail) that replaces the detail pane when active. Navigable with `tab` between sections and `j/k` within. Renders agent roster with role badges and state colors, convoy progress bars with expand/collapse, mail inbox with unread counts, cost dashboard, vitals (server health + backup freshness), activity feed, velocity metrics, scorecards, and predictions. Emits `GasTownActionMsg` for user actions.
 
-**`views.Problems`** — Overlay showing operational issues detected from Gas Town status: stalled agents, backoff loops, zombie sessions.
+**`views.Problems`** — Overlay showing operational issues detected from Gas Town status: dead rigs (with orphan list and `R` recovery action), stuck agents, stalled agents, backoff loops, zombie sessions. Dead-rig detection groups orphaned agents under a single problem instead of emitting individual zombie alerts. Also shows `bd doctor` diagnostics with suggested fix commands.
 
 **`components.Header`** — Parade group counts, progress bar, active agent count, Gas Town role badge, problem warning indicator, and the decorative bead string.
 
@@ -294,7 +297,7 @@ resolveSource(cwd, pathFlag):
     v
 Initial load based on source.Mode:
   SourceJSONL: data.LoadIssues(path)
-  SourceCLI:   data.FetchIssuesCLI(projectDir)  (bd list --json --flat --limit 0 --all)
+  SourceCLI:   data.FetchIssuesCLI(projectDir)  (bd list --json --limit 0 --all)
     |
     v
 --status mode?
@@ -340,7 +343,7 @@ Two polling strategies, selected by `sourceMode`:
 
 **JSONL mode** (`data.WatchFile`): polls file modtime every 1.2s, emits `FileChangedMsg` on change, `FileUnchangedMsg` when unchanged.
 
-**CLI mode** (`data.PollCLI`): runs `bd list --json --flat --limit 0 --all` every 5s, always emits `FileChangedMsg` (the app's `diffIssues()` detects no-ops). Errors emit `FileWatchErrorMsg` and show a toast.
+**CLI mode** (`data.PollCLI`): runs `bd list --json --limit 0 --all` every 5s, always emits `FileChangedMsg` (the app's `diffIssues()` detects no-ops). Errors emit `FileWatchErrorMsg` and show a toast.
 
 Both use `startPoll()` and `startPollImmediate()` helpers so message handlers are mode-agnostic. After mutations (status change, issue create), `startPollImmediate()` triggers an instant re-fetch regardless of mode.
 
@@ -360,7 +363,7 @@ On `FileChangedMsg`, the app reloads issues, rebuilds parade groups, diffs again
 
 ## Gas Town Integration
 
-The `internal/gastown` package handles all Gas Town interaction. Core files (status, sling, convoy, mail, molecule, problems, detect) have no internal dependencies — only stdlib and `encoding/json`. Analytics files (velocity, predict, scorecard, recommend) import `internal/data` for issue types.
+The `internal/gastown` package handles all Gas Town interaction. Core files (status, sling, convoy, mail, molecule, problems, recovery, detect) have no internal dependencies — only stdlib and `encoding/json`. Analytics files (velocity, predict, scorecard, recommend) import `internal/data` for issue types.
 
 ### Environment Detection (detect.go)
 
@@ -459,7 +462,7 @@ DepEval        (computed from EvaluateDependencies)
 
 AgentRuntime   (from gastown/status.go)
   Name, Address, Role, Rig, Running, State
-  HasWork, WorkTitle, HookBead, UnreadMail
+  HasWork, WorkTitle, HookBead, Mail (unread count)
   AgentInfo, AgentAlias, FirstSubject
 
 TownStatus     (from gastown/status.go)
@@ -467,10 +470,19 @@ TownStatus     (from gastown/status.go)
   Rigs   []RigStatus
 
 ConvoyDetail   (from gastown/convoy.go)
-  ID, Title, Status, Issues, Progress
+  ID, Title, Status, Completed, Total, ProgressPct
+  ReadyCount, ActiveCount, Assignees
+  Tracked []TrackedIssue (expanded issue details)
 
 MailMessage    (from gastown/mail.go)
-  ID, From, Subject, Body, Timestamp, Read
+  ID, From, Subject, Body, Time, Read, Priority, Type
+
+OrphanedIssue  (from gastown/recovery.go)
+  IssueID, Title, AgentName, AgentRole
+
+Problem        (from gastown/problems.go)
+  Type, Agent, Detail, Severity, Category, Fix
+  RigName, Orphans (for dead_rig problems)
 ```
 
 ## Agent Integration
@@ -565,7 +577,7 @@ Direct MySQL connection to the Dolt SQL server for sub-second polling, increment
 
 ### Multi-Runtime Agent Dispatch
 
-`agent/launch.go` currently hardcodes Claude Code. Gas Town v0.8.0 supports multiple runtimes: Gemini CLI, Copilot CLI, OpenCode. Adapting mg requires runtime detection from `AgentRuntime` metadata, per-sling runtime selection in the formula picker, and adapted prompt formatting per runtime.
+`agent/launch.go` currently hardcodes Claude Code. Gas Town v0.11.0 supports multiple runtimes: Gemini CLI, Copilot CLI, OpenCode. Adapting mg requires runtime detection from `AgentRuntime` metadata, per-sling runtime selection in the formula picker, and adapted prompt formatting per runtime.
 
 ### Gas Town Status Latency
 

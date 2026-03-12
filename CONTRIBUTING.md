@@ -4,7 +4,7 @@ Thanks for your interest in making the parade better! This guide covers everythi
 
 ## Prerequisites
 
-- **Go 1.24+** ([install](https://go.dev/doc/install))
+- **Go 1.25+** ([install](https://go.dev/doc/install))
 - **Git**
 - **golangci-lint** for linting ([install](https://golangci-lint.run/welcome/install/))
 - A Beads project, or use the included `testdata/sample.jsonl`
@@ -75,7 +75,7 @@ internal/
   views/              Parade, Detail, Gas Town panel, Problems overlay
   components/         Header, Footer, Help, Command palette, Toast, Create form
   agent/              Agent runtime detection (Claude Code, Cursor) and tmux dispatch
-  gastown/            Gas Town integration (status, sling, convoy, mail, analytics)
+  gastown/            Gas Town integration (status, sling, convoy, mail, problems, recovery, analytics)
   tmux/               tmux status line widget (--status mode)
   ui/                 Theme colors, lipgloss styles, Unicode symbols, HOP badges
 
@@ -141,7 +141,7 @@ All visual constants live in `internal/ui/`:
 ### Package Boundaries
 
 - `data` and `ui` have no internal dependencies beyond stdlib and lipgloss — keep them that way.
-- Core `gastown` files (status, sling, convoy, mail, molecule, problems, detect) have no internal dependencies. Analytics files (velocity, predict, scorecard, recommend) import `internal/data` for issue types.
+- Core `gastown` files (status, sling, convoy, mail, molecule, problems, recovery, detect) have no internal dependencies. Analytics files (velocity, predict, scorecard, recommend) import `internal/data` for issue types.
 - No package imports `app` — it is the root.
 - **Prefer expanding existing packages** over creating new ones. New packages need a clear reason.
 

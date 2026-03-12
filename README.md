@@ -184,6 +184,17 @@ Press `?` from anywhere to open the full help overlay.
 | `d`          | Archive selected message        |
 | `C`          | Create convoy from selection    |
 
+### Problems View (`p`)
+
+| Key          | Action                          |
+| ------------ | ------------------------------- |
+| `j` / `k`    | Navigate problems              |
+| `g` / `G`    | Jump to first/last             |
+| `n`          | Nudge agent on selected problem |
+| `h`          | Handoff from agent              |
+| `K`          | Decommission polecat            |
+| `R`          | Recover dead rig (release + re-sling orphans) |
+
 ## Filtering
 
 Press `/` and the bottom bar becomes a query input.
@@ -341,9 +352,13 @@ The Gas Town panel includes several data views below the interactive sections:
 Press `p` to toggle the problems view overlay. It combines two sources of diagnostics:
 
 **Agent problems** — detected from Gas Town status:
-- Stalled agents (working but no progress)
-- Backoff loops (repeated retry failures)
-- Zombie sessions (agents that stopped reporting)
+- **Dead rigs** — rigs with 0 polecats and orphaned work, shown with orphan list. Press `R` to recover (release + re-sling orphaned issues)
+- **Stuck agents** — agents explicitly requesting help
+- **Stalled agents** — agents with assigned work but sitting idle
+- **Backoff loops** — agents stuck in retry cycles
+- **Zombie sessions** — agents not running but with hooked work (suppressed on dead rigs)
+
+Dead-rig detection groups all orphaned agents under a single problem instead of emitting individual zombie alerts, reducing alarm fatigue when an entire rig is down.
 
 **Doctor diagnostics** — from `bd doctor --agent` at startup:
 - Core system health (Dolt server, config, hooks)

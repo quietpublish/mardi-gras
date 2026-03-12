@@ -7,7 +7,7 @@
 - `internal/views`: Parade (left pane), Detail (right pane), Gas Town panel, Problems overlay.
 - `internal/components`: Header, Footer, Help overlay, Command palette, Toast notifications, Create form, Float utility.
 - `internal/data`: JSONL loading, grouping, dependency/status logic, filtering, focus mode, mutations (`bd` CLI), cross-rig deps, HOP types.
-- `internal/gastown`: Gas Town integration — environment detection, `gt status` parsing, sling/nudge/handoff/decommission, convoy CRUD, mail inbox/reply/compose, molecule DAG, costs, vitals (server health + backups), activity feed, velocity, scorecards, predictions, formula recommendations.
+- `internal/gastown`: Gas Town integration — environment detection, `gt status` parsing, sling/nudge/handoff/decommission, convoy CRUD, mail inbox/reply/compose, molecule DAG, costs, vitals (server health + backups), activity feed, velocity, scorecards, predictions, formula recommendations, problem detection (stalled/stuck/backoff/zombie/dead_rig), rig recovery.
 - `internal/agent`: Claude Code prompt builder, tmux window launch/discover/kill.
 - `internal/tmux`: tmux status line widget (`mg --status` mode).
 - `internal/ui`: Theme palette (with Gas Town role/state colors), Lipgloss styles, Unicode symbols (including DAG connectors), HOP badge rendering.
@@ -29,10 +29,10 @@
 - Gas Town features activate progressively: Beads-only (no `gt`) -> Gas Town available (`gt` on PATH) -> Inside Gas Town (`GT_ROLE` env var set). Every feature must work or hide gracefully at each level.
 - `gt status --json` takes ~9 seconds. Always run as a BubbleTea `Cmd` (background goroutine), never blocking Update. Handle `nil` status gracefully — the user may interact before the command returns.
 - The JSON nests agents under `rigs[].agents`. `normalizeStatus()` in `gastown/status.go` flattens them. Top-level agents are HQ-level (mayor, deacon); rig agents include polecats, crew, witness, refinery.
-- If `AgentRuntime.State` is empty, default to "idle". Gas Town v0.8.0+ always provides State.
+- If `AgentRuntime.State` is empty, default to "idle". Gas Town v0.9.0+ always provides State.
 - Gas Town rig names cannot contain hyphens (use underscores).
 - Crew workspaces have `.beads/redirect` not `issues.jsonl` — mg walks up the directory tree to find the actual data file.
-- The core `gastown` package (status, sling, convoy, mail, molecule, problems, detect) has no internal dependencies. Analytics files (velocity, predict, scorecard, recommend) import `internal/data` for issue types.
+- The core `gastown` package (status, sling, convoy, mail, molecule, problems, recovery, detect) has no internal dependencies. Analytics files (velocity, predict, scorecard, recommend) import `internal/data` for issue types.
 
 ## Build, Test, and Development Commands
 
@@ -172,7 +172,6 @@ For more details, see README.md and docs/QUICKSTART.md.
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd sync
    git push
    git status  # MUST show "up to date with origin"
    ```
