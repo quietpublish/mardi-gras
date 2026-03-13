@@ -101,6 +101,31 @@ func parseIssuesCLIOutput(out []byte, expectedPrefix string) ([]Issue, error) {
 	return issues, nil
 }
 
+// BeadsContext holds workspace identity from `bd context --json`.
+type BeadsContext struct {
+	BeadsDir     string `json:"beads_dir"`
+	RepoRoot     string `json:"repo_root"`
+	IsRedirected bool   `json:"is_redirected"`
+	Backend      string `json:"backend"`
+	DoltMode     string `json:"dolt_mode"`
+	Database     string `json:"database"`
+	Role         string `json:"role"`
+	BdVersion    string `json:"bd_version"`
+}
+
+// FetchContext runs `bd context --json` and returns workspace identity info.
+func FetchContext() (*BeadsContext, error) {
+	out, err := runWithTimeout(timeoutShort, "bd", "context", "--json")
+	if err != nil {
+		return nil, wrapExitError("bd context", err)
+	}
+	var ctx BeadsContext
+	if err := json.Unmarshal(out, &ctx); err != nil {
+		return nil, fmt.Errorf("bd context parse: %w", err)
+	}
+	return &ctx, nil
+}
+
 func validateIssuePrefixes(issues []Issue, expectedPrefix string) error {
 	expectedPrefix = strings.TrimSpace(expectedPrefix)
 	if expectedPrefix == "" || len(issues) == 0 {

@@ -3,6 +3,9 @@ package components
 import (
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/matt-wright86/mardi-gras/internal/data"
 )
 
 func TestNewFooterParadeBindings(t *testing.T) {
@@ -123,5 +126,54 @@ func TestBulkFooterNoGasTownNoSling(t *testing.T) {
 	output := BulkFooter(80, 2, false)
 	if strings.Contains(output, "sling") {
 		t.Fatal("BulkFooter without Gas Town should not contain 'sling'")
+	}
+}
+
+func TestFooterViewWithBeadsContext(t *testing.T) {
+	f := Footer{
+		Width:       120,
+		Bindings:    ParadeBindings,
+		SourceMode:  data.SourceCLI,
+		LastRefresh: time.Now(),
+		BeadsContext: &data.BeadsContext{
+			Database: "mardi_gras",
+			Backend:  "dolt",
+		},
+	}
+	output := f.View()
+	if !strings.Contains(output, "mardi_gras/dolt") {
+		t.Fatalf("footer should contain database/backend, got: %s", output)
+	}
+}
+
+func TestFooterViewWithBeadsContextNoBackend(t *testing.T) {
+	f := Footer{
+		Width:       120,
+		Bindings:    ParadeBindings,
+		SourceMode:  data.SourceCLI,
+		LastRefresh: time.Now(),
+		BeadsContext: &data.BeadsContext{
+			Database: "mardi_gras",
+		},
+	}
+	output := f.View()
+	if !strings.Contains(output, "mardi_gras") {
+		t.Fatalf("footer should contain database name, got: %s", output)
+	}
+	if strings.Contains(output, "mardi_gras/") {
+		t.Fatalf("footer should not have trailing slash without backend, got: %s", output)
+	}
+}
+
+func TestFooterViewWithoutBeadsContext(t *testing.T) {
+	f := Footer{
+		Width:       120,
+		Bindings:    ParadeBindings,
+		SourceMode:  data.SourceCLI,
+		LastRefresh: time.Now(),
+	}
+	output := f.View()
+	if strings.Contains(output, "mardi_gras") {
+		t.Fatalf("footer should not contain context info when nil, got: %s", output)
 	}
 }
