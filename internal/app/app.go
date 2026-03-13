@@ -465,6 +465,18 @@ type mutateResultMsg struct {
 	err     error
 }
 
+// worktreeCreatedMsg is sent when a git worktree is successfully created.
+type worktreeCreatedMsg struct {
+	issueID string
+	path    string
+}
+
+// worktreeErrorMsg is sent when git worktree creation fails.
+type worktreeErrorMsg struct {
+	issueID string
+	err     error
+}
+
 // changeIndicatorExpiredMsg clears change indicators after timeout.
 type changeIndicatorExpiredMsg struct{}
 
@@ -1298,6 +1310,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
+	case worktreeCreatedMsg:
+		toast, dismissCmd := components.ShowToast(
+			fmt.Sprintf("Worktree created: %s", msg.path),
+			components.ToastSuccess,
+			3*time.Second,
+		)
+		m.toast = toast
+		m.lastFileMod = time.Time{}
+		return m, tea.Batch(dismissCmd, m.startPollImmediate())
+
+	case worktreeErrorMsg:
+		toast, dismissCmd := components.ShowToast(
+			fmt.Sprintf("Worktree error: %s", msg.err),
+			components.ToastError,
+			5*time.Second,
+		)
+		m.toast = toast
+		return m, dismissCmd
+
 	case confettiTickMsg:
 		m.confetti.Update()
 		if m.confetti.Active() {
@@ -1574,6 +1605,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.copyBranchName()
 	case "B":
 		return m.createAndSwitchBranch()
+	case "W":
+		return m.createWorktree()
 
 	case "a":
 		// Multi-sling with Gas Town
@@ -2024,6 +2057,22 @@ func createBranchCmd(ctx context.Context, projectDir, branch string) *exec.Cmd {
 	return cmd
 }
 
+// createWorktree creates a git worktree for the selected issue.
+func (m Model) createWorktree() (tea.Model, tea.Cmd) {
+	issue := m.parade.SelectedIssue
+	if issue == nil {
+		return m, nil
+	}
+	issueCopy := *issue
+	return m, func() tea.Msg {
+		path, err := data.CreateWorktree(issueCopy, m.projectDir)
+		if err != nil {
+			return worktreeErrorMsg{issueID: issueCopy.ID, err: err}
+		}
+		return worktreeCreatedMsg{issueID: issueCopy.ID, path: path}
+	}
+}
+
 // openEpicPicker opens the palette populated with all epics from the current dataset.
 func (m Model) openEpicPicker() (tea.Model, tea.Cmd) {
 	var cmds []components.PaletteCommand
@@ -2057,6 +2106,7 @@ func (m Model) buildPaletteCommands() []components.PaletteCommand {
 		{Name: "Set priority: P4 backlog", Desc: "Someday maybe", Key: "$", Action: components.ActionSetPriorityBacklog},
 		{Name: "Copy branch name", Desc: "Copy git branch to clipboard", Key: "b", Action: components.ActionCopyBranch},
 		{Name: "Create git branch", Desc: "Checkout new branch for issue", Key: "B", Action: components.ActionCreateBranch},
+		{Name: "Create worktree", Desc: "Create git worktree for issue", Key: "W", Action: components.ActionCreateWorktree},
 		{Name: "New issue", Desc: "Create a new beads issue", Key: "N", Action: components.ActionNewIssue},
 		{Name: "Toggle focus mode", Desc: "Show only my work + top priority", Key: "f", Action: components.ActionToggleFocus},
 		{Name: "Toggle closed issues", Desc: "Show/hide past the stand", Key: "c", Action: components.ActionToggleClosed},
@@ -2113,6 +2163,8 @@ func (m Model) executePaletteAction(action components.PaletteAction) (tea.Model,
 		return m.copyBranchName()
 	case components.ActionCreateBranch:
 		return m.createAndSwitchBranch()
+	case components.ActionCreateWorktree:
+		return m.createWorktree()
 	case components.ActionNewIssue:
 		m.creating = true
 		m.createForm = components.NewCreateForm(m.width, m.height)
