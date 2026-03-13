@@ -97,3 +97,26 @@ func TestParseAgentWindowsNoAgents(t *testing.T) {
 		t.Errorf("expected 0 agent windows, got %d: %v", len(agents), agents)
 	}
 }
+
+func TestPermissionRe(t *testing.T) {
+	tests := []struct {
+		line string
+		want bool
+	}{
+		{"  Allow Read tool?  /path/to/file", true},
+		{"  Allow Bash tool?  ls -la", true},
+		{"  Allow mcp__some_server tool?", true},
+		{"    Do you want to allow this action?", true},
+		{"Allow Edit tool?", true},
+		{"Working on the task...", false},
+		{"Allowing access is important", false},
+		{"agent is running claude code", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		got := permissionRe.MatchString(tt.line)
+		if got != tt.want {
+			t.Errorf("permissionRe.MatchString(%q) = %v, want %v", tt.line, got, tt.want)
+		}
+	}
+}

@@ -183,6 +183,8 @@ func (p Problems) renderProblem(idx int, prob gastown.Problem) []string {
 		}
 	case "dead_rig":
 		contextLabel = "rig " + prob.RigName
+	case "agent_exited", "agent_permission":
+		contextLabel = "tmux agent"
 	default:
 		contextLabel = fmt.Sprintf("%s %s", prob.Agent.Role, prob.Agent.Name)
 	}

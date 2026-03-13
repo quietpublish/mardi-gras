@@ -164,6 +164,10 @@ type Model struct {
 	// Doctor diagnostics from bd doctor --agent --json (fetched at startup)
 	doctorProblems []gastown.Problem
 
+	// Tmux-only agent problems (dead process, permission prompt)
+	tmuxProblems      []gastown.Problem
+	tmuxStandstillIDs map[string]string
+
 	// Shared terminal control-sequence guard (used by both the Bubble Tea
 	// filter and app-level deferred key handling).
 	oscGuard *OSCGuard
@@ -307,9 +311,11 @@ func (m *Model) activateGasTown() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// allProblems returns the combined list of Gas Town agent problems and doctor diagnostics.
+// allProblems returns the combined list of Gas Town agent problems, tmux agent
+// problems, and doctor diagnostics.
 func (m Model) allProblems() []gastown.Problem {
 	problems := gastown.DetectProblems(m.townStatus)
+	problems = append(problems, m.tmuxProblems...)
 	problems = append(problems, m.doctorProblems...)
 	return problems
 }
@@ -329,6 +335,7 @@ type agentLaunchErrorMsg struct {
 
 type agentStatusMsg struct {
 	activeAgents map[string]string
+	windowStates map[string]agent.AgentWindowState // non-nil only in tmux-only mode
 }
 
 type townStatusMsg struct {
@@ -873,10 +880,82 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case agentStatusMsg:
 		m.activeAgents = msg.activeAgents
+
+		// Build tmux-only problems and standstill IDs from window states.
+		m.tmuxProblems = nil
+		m.tmuxStandstillIDs = nil
+		if msg.windowStates != nil {
+			var problems []gastown.Problem
+			standstill := make(map[string]string)
+			for id, st := range msg.windowStates {
+				if st.Dead {
+					problems = append(problems, gastown.Problem{
+						Type:     "agent_exited",
+						Detail:   fmt.Sprintf("Agent process exited in window mg-%s", id),
+						Severity: "error",
+					})
+					standstill[id] = "exited"
+				} else if st.NeedsPermission {
+					problems = append(problems, gastown.Problem{
+						Type:     "agent_permission",
+						Detail:   fmt.Sprintf("Agent waiting for permission approval (mg-%s)", id),
+						Severity: "warn",
+					})
+					standstill[id] = "permission"
+				}
+			}
+			if len(problems) > 0 {
+				m.tmuxProblems = problems
+			}
+			if len(standstill) > 0 {
+				m.tmuxStandstillIDs = standstill
+			}
+		}
+
 		m.propagateAgentState()
+
+		// Standstill toast for tmux-only mode (mirrors townStatusMsg logic).
+		var toastCmd tea.Cmd
+		if currentStandstill := m.parade.StandstillIDs; len(currentStandstill) > 0 {
+			var newStandstill []string
+			for id, reason := range currentStandstill {
+				if prevReason, seen := m.prevStandstillIDs[id]; !seen || prevReason != reason {
+					newStandstill = append(newStandstill, id)
+				}
+			}
+			if len(newStandstill) > 0 {
+				var toastMsg string
+				if len(newStandstill) == 1 {
+					id := newStandstill[0]
+					reason := currentStandstill[id]
+					switch reason {
+					case "exited":
+						toastMsg = fmt.Sprintf("%s %s — agent process exited", ui.SymWarning, id)
+					case "permission":
+						toastMsg = fmt.Sprintf("%s %s — agent awaiting permission", ui.SymWarning, id)
+					default:
+						toastMsg = fmt.Sprintf("%s %s — agent needs attention", ui.SymWarning, id)
+					}
+				} else {
+					toastMsg = fmt.Sprintf("%s %d agents need attention", ui.SymWarning, len(newStandstill))
+				}
+				var toast components.Toast
+				toast, toastCmd = components.ShowToast(toastMsg, components.ToastWarn, toastDuration)
+				m.toast = toast
+			}
+		}
+		m.prevStandstillIDs = m.parade.StandstillIDs
+
+		var cmds []tea.Cmd
+		if toastCmd != nil {
+			cmds = append(cmds, toastCmd)
+		}
 		if !m.shimmerActive && len(m.activeAgents) > 0 {
 			m.shimmerActive = true
-			return m, headerShimmerCmd()
+			cmds = append(cmds, headerShimmerCmd())
+		}
+		if len(cmds) > 0 {
+			return m, tea.Batch(cmds...)
 		}
 		return m, nil
 
@@ -2713,8 +2792,17 @@ func (m *Model) propagateAgentState() {
 	// Build orphaned issue ID set from dead rigs
 	m.parade.OrphanedIDs = buildOrphanedIDs(m.townStatus)
 
-	// Build standstill issue ID set from agent states
-	m.parade.StandstillIDs = gastown.BuildStandstillIDs(m.townStatus)
+	// Build standstill issue ID set from agent states (Gas Town + tmux-only)
+	standstill := gastown.BuildStandstillIDs(m.townStatus)
+	if len(m.tmuxStandstillIDs) > 0 {
+		if standstill == nil {
+			standstill = make(map[string]string, len(m.tmuxStandstillIDs))
+		}
+		for id, reason := range m.tmuxStandstillIDs {
+			standstill[id] = reason
+		}
+	}
+	m.parade.StandstillIDs = standstill
 
 	if m.detail.Issue != nil {
 		m.detail.SetIssue(m.detail.Issue)
@@ -2779,13 +2867,18 @@ func pollGTStatus() tea.Msg {
 	return townStatusMsg{status: status, err: err}
 }
 
-// pollTmuxAgentState queries tmux for @mg_agent windows.
+// pollTmuxAgentState queries tmux for @mg_agent windows and inspects their health.
 func pollTmuxAgentState() tea.Msg {
-	agents, err := agent.ListAgentWindows()
+	states, err := agent.InspectAgentWindows()
 	if err != nil {
 		return agentStatusMsg{activeAgents: make(map[string]string)}
 	}
-	return agentStatusMsg{activeAgents: agents}
+	// Build the activeAgents map from inspection results.
+	active := make(map[string]string, len(states))
+	for id, st := range states {
+		active[id] = st.WindowID
+	}
+	return agentStatusMsg{activeAgents: active, windowStates: states}
 }
 
 // fetchConvoyList returns a Cmd that fetches convoy details via gt convoy list.

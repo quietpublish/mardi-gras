@@ -4,8 +4,75 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 )
+
+// AgentWindowState describes the health of a single tmux agent window.
+type AgentWindowState struct {
+	WindowID        string
+	Dead            bool // pane process has exited
+	NeedsPermission bool // pane content shows a permission prompt
+}
+
+// permissionRe matches Claude Code permission prompts in captured pane output.
+// Examples: "Allow Read tool?", "Allow Bash(…)?", "  Allow mcp__…"
+var permissionRe = regexp.MustCompile(`(?i)^\s*(Allow |Do you want to allow)`)
+
+// InspectAgentWindows checks each @mg_agent window for intervention signals:
+// dead process (pane_dead) and permission prompts (captured pane content).
+func InspectAgentWindows() (map[string]AgentWindowState, error) {
+	// List agent windows with pane_dead flag in a single tmux call.
+	out, err := tmuxCmd("list-windows", "-a",
+		"-F", "#{@mg_agent}\t#{window_id}\t#{pane_dead}").Output()
+	if err != nil {
+		return nil, fmt.Errorf("tmux list-windows: %w", err)
+	}
+
+	states := make(map[string]AgentWindowState)
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		parts := strings.SplitN(line, "\t", 3)
+		if len(parts) < 3 {
+			continue
+		}
+		tag := strings.TrimSpace(parts[0])
+		windowID := strings.TrimSpace(parts[1])
+		paneDead := strings.TrimSpace(parts[2])
+
+		if !strings.HasPrefix(tag, "mg-") || windowID == "" {
+			continue
+		}
+		issueID := strings.TrimPrefix(tag, "mg-")
+
+		st := AgentWindowState{
+			WindowID: windowID,
+			Dead:     paneDead == "1",
+		}
+
+		// Only check for permission prompts if the process is alive.
+		if !st.Dead {
+			st.NeedsPermission = checkPermissionPrompt(windowID)
+		}
+
+		states[issueID] = st
+	}
+	return states, nil
+}
+
+// checkPermissionPrompt captures the last 15 lines of a tmux pane and
+// checks for Claude Code permission prompt patterns.
+func checkPermissionPrompt(windowID string) bool {
+	out, err := tmuxCmd("capture-pane", "-t", windowID, "-p", "-l", "15").Output()
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if permissionRe.MatchString(line) {
+			return true
+		}
+	}
+	return false
+}
 
 // InTmux returns true if the current process is running inside a tmux session.
 func InTmux() bool {
