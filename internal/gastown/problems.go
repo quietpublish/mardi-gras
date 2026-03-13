@@ -129,3 +129,48 @@ type DoctorDiagnostic struct {
 	Explanation string   `json:"explanation"`
 	Commands    []string `json:"commands"`
 }
+
+// IsStandstill returns whether an agent is in a standstill state that
+// requires human intervention, and the reason string for the state.
+// Standstill states: stuck, awaiting-gate, fix_needed, and the stalled
+// heuristic (has work but idle). Backoff is excluded — it self-resolves.
+//
+// This is intentionally a superset of DetectProblems: awaiting-gate and
+// fix_needed are user-actionable but not system problems, so they are
+// surfaced via the parade standstill indicator only (not the Problems panel).
+func IsStandstill(agent AgentRuntime) (bool, string) {
+	switch agent.State {
+	case "stuck":
+		return true, "stuck"
+	case "awaiting-gate":
+		return true, "awaiting-gate"
+	case "fix_needed":
+		return true, "fix_needed"
+	case "idle":
+		if agent.HasWork {
+			return true, "stalled"
+		}
+	}
+	return false, ""
+}
+
+// BuildStandstillIDs returns a map of issue ID → standstill reason for all
+// agents that are in standstill and have a hooked issue.
+func BuildStandstillIDs(status *TownStatus) map[string]string {
+	if status == nil {
+		return nil
+	}
+	ids := make(map[string]string)
+	for _, a := range status.Agents {
+		if a.HookBead == "" {
+			continue
+		}
+		if ok, reason := IsStandstill(a); ok {
+			ids[a.HookBead] = reason
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	return ids
+}

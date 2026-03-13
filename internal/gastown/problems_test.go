@@ -196,3 +196,70 @@ func TestDetectProblemsMultiple(t *testing.T) {
 		}
 	}
 }
+
+func TestIsStandstillStates(t *testing.T) {
+	tests := []struct {
+		name       string
+		agent      AgentRuntime
+		want       bool
+		wantReason string
+	}{
+		{"stuck", AgentRuntime{State: "stuck"}, true, "stuck"},
+		{"awaiting-gate", AgentRuntime{State: "awaiting-gate"}, true, "awaiting-gate"},
+		{"fix_needed", AgentRuntime{State: "fix_needed"}, true, "fix_needed"},
+		{"stalled heuristic", AgentRuntime{HasWork: true, State: "idle"}, true, "stalled"},
+		{"working not standstill", AgentRuntime{HasWork: true, State: "working"}, false, ""},
+		{"idle without work", AgentRuntime{HasWork: false, State: "idle"}, false, ""},
+		{"backoff excluded", AgentRuntime{State: "backoff"}, false, ""},
+		{"empty state without work", AgentRuntime{}, false, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, reason := IsStandstill(tt.agent)
+			if got != tt.want {
+				t.Errorf("IsStandstill() = %v, want %v", got, tt.want)
+			}
+			if reason != tt.wantReason {
+				t.Errorf("IsStandstill() reason = %q, want %q", reason, tt.wantReason)
+			}
+		})
+	}
+}
+
+func TestBuildStandstillIDsNil(t *testing.T) {
+	ids := BuildStandstillIDs(nil)
+	if len(ids) != 0 {
+		t.Errorf("expected empty map from nil status, got %d", len(ids))
+	}
+}
+
+func TestBuildStandstillIDsMixed(t *testing.T) {
+	status := &TownStatus{
+		Agents: []AgentRuntime{
+			{Name: "a1", State: "stuck", HookBead: "mg-001", WorkTitle: "Fix auth"},
+			{Name: "a2", State: "working", HookBead: "mg-002"},                    // not standstill
+			{Name: "a3", State: "awaiting-gate", HookBead: "mg-003"},              // standstill
+			{Name: "a4", State: "fix_needed", HookBead: ""},                       // no hooked issue
+			{Name: "a5", HasWork: true, State: "idle", HookBead: "mg-005"},        // stalled
+		},
+	}
+	ids := BuildStandstillIDs(status)
+
+	// Expect mg-001 (stuck), mg-003 (awaiting-gate), mg-005 (stalled).
+	// a4 has no HookBead so is excluded.
+	if len(ids) != 3 {
+		t.Fatalf("expected 3 standstill IDs, got %d: %v", len(ids), ids)
+	}
+	if ids["mg-001"] != "stuck" {
+		t.Errorf("mg-001: got %q, want 'stuck'", ids["mg-001"])
+	}
+	if ids["mg-003"] != "awaiting-gate" {
+		t.Errorf("mg-003: got %q, want 'awaiting-gate'", ids["mg-003"])
+	}
+	if ids["mg-005"] != "stalled" {
+		t.Errorf("mg-005: got %q, want 'stalled'", ids["mg-005"])
+	}
+	if _, ok := ids["mg-002"]; ok {
+		t.Error("mg-002 should not be in standstill (working)")
+	}
+}
