@@ -59,6 +59,7 @@ type Parade struct {
 	TownStatus      *gastown.TownStatus
 	ChangedIDs      map[string]bool  // recently changed issues (change indicator dot)
 	OrphanedIDs     map[string]bool  // orphaned issues from dead rigs
+	StandstillIDs   map[string]string // issueID -> standstill reason
 	Selected        map[string]bool  // multi-selected issue IDs
 	MatchHighlights map[string][]int // issueID -> matched char indices in title (fuzzy search)
 }
@@ -422,6 +423,17 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 		orphanWidth = 2
 	}
 
+	// Standstill indicator (agent awaiting input)
+	// NB: reason "stalled" falls through to default (StateIdle) in AgentStateColor,
+	// which is intentional — the stalled heuristic is lower severity than stuck/gate/fix_needed.
+	standstillPrefix := ""
+	standstillWidth := 0
+	if reason, ok := p.StandstillIDs[issue.ID]; ok {
+		stColor := ui.AgentStateColor(reason)
+		standstillPrefix = lipgloss.NewStyle().Foreground(stColor).Render(ui.SymWarning) + " "
+		standstillWidth = 2
+	}
+
 	// Agent badge prefix
 	agentPrefix := ""
 	agentWidth := 0
@@ -498,7 +510,7 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 	innerWidth := p.Width - 4 // │ + space + content + space + │
 
 	// First, constrain the hint length if the terminal is very narrow
-	maxHint := innerWidth - 16 - agentWidth - indentWidth - dueWidth - deferWidth - orphanWidth
+	maxHint := innerWidth - 16 - agentWidth - indentWidth - dueWidth - deferWidth - orphanWidth - standstillWidth
 	if maxHint < 0 {
 		maxHint = 0
 	}
@@ -515,7 +527,7 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 	}
 
 	hintLen := lipgloss.Width(hint)
-	maxTitle := innerWidth - 16 - hintLen - agentWidth - changeWidth - selectWidth - indentWidth - dueWidth - deferWidth - qualityWidth - orphanWidth
+	maxTitle := innerWidth - 16 - hintLen - agentWidth - changeWidth - selectWidth - indentWidth - dueWidth - deferWidth - qualityWidth - orphanWidth - standstillWidth
 	if maxTitle < 0 {
 		maxTitle = 0
 	}
@@ -538,12 +550,13 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 	agePct := min(ageDays*100/30, 100) // 30 days = fully stale
 	idStyle := ui.GradientHeat.At(agePct)
 
-	line := fmt.Sprintf("%s%s %s%s%s%s%s %s %s",
+	line := fmt.Sprintf("%s%s %s%s%s%s%s%s %s %s",
 		indent,
 		symStyle.Render(sym),
 		selectPrefix,
 		changePrefix,
 		orphanPrefix,
+		standstillPrefix,
 		agentPrefix,
 		idStyle.Render(issue.ID),
 		renderedTitle,
