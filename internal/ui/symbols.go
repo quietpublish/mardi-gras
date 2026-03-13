@@ -103,6 +103,7 @@ const (
 	SymCrystal   = "◆"
 	SymEphemeral = "◇"
 	SymValidator = "⚖"
+	SymWorktree  = "⌥"
 )
 
 // superscriptDigits maps 0-9 to their Unicode superscript equivalents.
