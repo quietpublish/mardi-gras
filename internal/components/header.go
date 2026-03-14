@@ -51,6 +51,10 @@ func (h Header) View() string {
 
 		parts := []string{fmt.Sprintf("gt:%d/%d", working, totalAgents)}
 
+		if rigCount := len(h.TownStatus.Rigs); rigCount > 1 {
+			parts = append(parts, fmt.Sprintf("%drigs", rigCount))
+		}
+
 		if mail := h.TownStatus.UnreadMail(); mail > 0 {
 			parts = append(parts, fmt.Sprintf("%s%d", ui.SymMail, mail))
 		}
