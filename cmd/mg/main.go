@@ -49,6 +49,7 @@ func main() {
 	}
 	if *cmdTimeout > 0 {
 		gastown.SetCmdTimeout(*cmdTimeout)
+		data.SetCmdTimeout(*cmdTimeout)
 	}
 
 	if *showVersion {

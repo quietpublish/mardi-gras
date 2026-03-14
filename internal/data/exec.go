@@ -9,14 +9,28 @@ import (
 	"time"
 )
 
-// Timeout tiers for external command execution.
+// Default timeout tiers for external command execution.
 const (
-	// timeoutMedium is for data fetches (bd list --json).
-	timeoutMedium = 15 * time.Second
-
-	// timeoutShort is for quick mutations (bd update, bd close, bd create, git config).
-	timeoutShort = 5 * time.Second
+	defaultTimeoutMedium = 15 * time.Second // data fetches (bd list --json)
+	defaultTimeoutShort  = 5 * time.Second  // quick mutations (bd update, bd close, bd create)
 )
+
+// Runtime timeout tiers, overridable via SetCmdTimeout.
+var (
+	timeoutMedium = defaultTimeoutMedium
+	timeoutShort  = defaultTimeoutShort
+)
+
+// SetCmdTimeout overrides data-layer timeout tiers by scaling proportionally.
+// The seconds value is relative to a 30s baseline (matching gastown.SetCmdTimeout).
+func SetCmdTimeout(seconds int) {
+	if seconds <= 0 {
+		return
+	}
+	scale := float64(seconds) / 30.0
+	timeoutMedium = time.Duration(float64(defaultTimeoutMedium) * scale)
+	timeoutShort = time.Duration(float64(defaultTimeoutShort) * scale)
+}
 
 // runWithTimeout executes a command with a context timeout and returns its stdout.
 func runWithTimeout(timeout time.Duration, name string, args ...string) ([]byte, error) {
