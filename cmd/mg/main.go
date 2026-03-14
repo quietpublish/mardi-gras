@@ -28,7 +28,13 @@ func main() {
 	blockTypesFlag := flag.String("block-types", "", "Comma-separated dependency types that count as blockers (default: blocks)")
 	statusMode := flag.Bool("status", false, "Output tmux status line and exit")
 	showVersion := flag.Bool("version", false, "Print version and exit")
+	noAnimations := flag.Bool("no-animations", false, "Disable confetti and header shimmer animations")
 	flag.Parse()
+
+	// MG_NO_ANIMATIONS=1 env var as alternative to --no-animations flag
+	if !*noAnimations && os.Getenv("MG_NO_ANIMATIONS") == "1" {
+		*noAnimations = true
+	}
 
 	if *showVersion {
 		fmt.Println("mg", version)
@@ -82,7 +88,7 @@ func main() {
 
 	// Run TUI
 	guard := app.NewOSCGuard()
-	model := app.NewWithGuard(issues, source, blockingTypes, guard)
+	model := app.NewWithGuard(issues, source, blockingTypes, guard, *noAnimations)
 	p := tea.NewProgram(model, tea.WithFilter(guard.Filter()))
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

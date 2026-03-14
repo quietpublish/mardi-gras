@@ -18,7 +18,7 @@ func setupDeferredKeyModel(t *testing.T) (model Model, filter func(tea.Model, te
 		testIssue("open-1", data.StatusOpen),
 		testIssue("open-2", data.StatusOpen),
 	}
-	m := NewWithGuard(issues, data.Source{}, data.DefaultBlockingTypes, guard)
+	m := NewWithGuard(issues, data.Source{}, data.DefaultBlockingTypes, guard, false)
 	m.startedAt = time.Now().Add(-time.Second)
 
 	readyModel, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})

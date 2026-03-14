@@ -164,16 +164,20 @@ type Model struct {
 	// Deferred printable key handling for non-text-entry modes.
 	pendingKeys  []pendingDeferredKey
 	pendingKeyID uint64
+
+	// When true, confetti and header shimmer animations are disabled.
+	noAnimations bool
 }
 
 // New creates a new app model from loaded issues.
 func New(issues []data.Issue, source data.Source, blockingTypes map[string]bool) Model {
-	return NewWithGuard(issues, source, blockingTypes, nil)
+	return NewWithGuard(issues, source, blockingTypes, nil, false)
 }
 
 // NewWithGuard creates a new app model from loaded issues and attaches a
-// shared OSC guard when one is provided.
-func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[string]bool, guard *OSCGuard) Model {
+// shared OSC guard when one is provided. When noAnimations is true, confetti
+// and header shimmer animations are disabled.
+func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[string]bool, guard *OSCGuard, noAnimations bool) Model {
 	groups := data.GroupByParade(issues, blockingTypes)
 
 	watchPath := source.Path
@@ -222,6 +226,7 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 		metadataSchema: metaSchema,
 		startedAt:      time.Now(),
 		oscGuard:       guard,
+		noAnimations:   noAnimations,
 	}
 }
 
@@ -238,7 +243,9 @@ func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		m.startPoll(),
 		agentPoll,
-		headerShimmerCmd(),
+	}
+	if !m.noAnimations {
+		cmds = append(cmds, headerShimmerCmd())
 	}
 	if m.sourceMode == data.SourceCLI {
 		cmds = append(cmds, fetchCurrentIssue, fetchDoctorDiagnostics, fetchBeadsContext)
@@ -1197,8 +1204,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Force reload: reset lastFileMod for JSONL, or immediate fetch for CLI
 		m.lastFileMod = time.Time{}
 		cmds := []tea.Cmd{toastCmd, m.startPollImmediate()}
-		// Trigger confetti on close
-		if msg.action == "closed" && m.width > 0 && m.height > 0 {
+		// Trigger confetti on close (unless animations are disabled)
+		if !m.noAnimations && msg.action == "closed" && m.width > 0 && m.height > 0 {
 			m.confetti = NewConfetti(m.width, m.height)
 			cmds = append(cmds, m.confetti.Tick())
 		}

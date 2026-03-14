@@ -41,3 +41,8 @@ docs/internal/
 # Dolt database files (added by bd init)
 .dolt/
 *.db
+
+# Gas Town (added by gt)
+.claude/
+__pycache__/
+state.json
