@@ -146,6 +146,24 @@ func TestFooterViewWithBeadsContext(t *testing.T) {
 	}
 }
 
+func TestFooterViewWithBeadsContextVersion(t *testing.T) {
+	f := Footer{
+		Width:       120,
+		Bindings:    ParadeBindings,
+		SourceMode:  data.SourceCLI,
+		LastRefresh: time.Now(),
+		BeadsContext: &data.BeadsContext{
+			Database:  "mardi_gras",
+			Backend:   "dolt",
+			BdVersion: "0.60.0",
+		},
+	}
+	output := f.View()
+	if !strings.Contains(output, "v0.60.0") {
+		t.Fatalf("footer should contain bd version, got: %s", output)
+	}
+}
+
 func TestFooterViewWithBeadsContextNoBackend(t *testing.T) {
 	f := Footer{
 		Width:       120,
