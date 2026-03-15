@@ -22,8 +22,35 @@ jobs:
       - name: Build
         run: go build ./...
 
+      - name: Vet
+        run: go vet ./...
+
       - name: Test
-        run: go test -race ./...
+        run: go test -race -coverprofile=coverage.out ./...
+
+      - name: Print coverage
+        run: go tool cover -func=coverage.out | tail -1
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+
+      - name: Check coverage threshold
+        run: |
+          total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}' | tr -d '%')
+          threshold=55
+          if [ "$(echo "$total < $threshold" | bc)" -eq 1 ]; then
+            echo "Coverage ${total}% is below threshold ${threshold}%"
+            exit 1
+          fi
+          echo "Coverage ${total}% meets threshold ${threshold}%"
+
+      - name: Check go.sum drift
+        run: |
+          go mod tidy
+          git diff --exit-code go.sum
 
   lint:
     runs-on: ubuntu-latest

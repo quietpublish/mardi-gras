@@ -2,6 +2,7 @@ package gastown
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"testing"
 )
@@ -322,5 +323,91 @@ func TestTownStatusMQNoRefinery(t *testing.T) {
 	}
 	if status.MQStatus() != nil {
 		t.Error("expected nil from MQStatus when no MQ data")
+	}
+}
+
+func TestFetchStatusHappy(t *testing.T) {
+	raw := `{
+		"name": "test-hq",
+		"agents": [
+			{"name":"mayor","role":"coordinator","address":"mayor/","state":"idle","unread_mail":0}
+		],
+		"rigs": [{
+			"name":"mardi_gras",
+			"polecat_count":2,
+			"crew_count":1,
+			"has_witness":true,
+			"has_refinery":false,
+			"hooks": [
+				{"agent":"mardi_gras/obsidian","role":"polecat","has_work":true,"molecule":"mg-10","title":"Fix auth"}
+			],
+			"agents": [
+				{"name":"obsidian","address":"mardi_gras/obsidian","role":"polecat",
+				 "state":"working","running":true,"unread_mail":1},
+				{"name":"quartz","address":"mardi_gras/quartz","role":"polecat",
+				 "state":"","running":true,"unread_mail":0}
+			]
+		}],
+		"convoys": [{"id":"conv-001","title":"Auth","status":"active","done":1,"total":3}]
+	}`
+	defer mockRun([]byte(raw), nil)()
+	status, err := FetchStatus()
+	if err != nil {
+		t.Fatalf("FetchStatus() error = %v", err)
+	}
+	// Top-level mayor + 2 rig agents = 3
+	if len(status.Agents) != 3 {
+		t.Errorf("expected 3 agents, got %d", len(status.Agents))
+	}
+	// Verify hook enrichment: obsidian should get HookBead from hook data
+	var obsidian *AgentRuntime
+	for i := range status.Agents {
+		if status.Agents[i].Name == "obsidian" {
+			obsidian = &status.Agents[i]
+			break
+		}
+	}
+	if obsidian == nil {
+		t.Fatal("obsidian not found")
+	}
+	if obsidian.HookBead != "mg-10" {
+		t.Errorf("HookBead = %q, want mg-10", obsidian.HookBead)
+	}
+	if obsidian.WorkTitle != "Fix auth" {
+		t.Errorf("WorkTitle = %q, want Fix auth", obsidian.WorkTitle)
+	}
+	// Quartz has empty state — should default to "idle"
+	var quartz *AgentRuntime
+	for i := range status.Agents {
+		if status.Agents[i].Name == "quartz" {
+			quartz = &status.Agents[i]
+			break
+		}
+	}
+	if quartz == nil {
+		t.Fatal("quartz not found")
+	}
+	if quartz.State != "idle" {
+		t.Errorf("quartz.State = %q, want idle", quartz.State)
+	}
+	// Convoys
+	if len(status.Convoys) != 1 || status.Convoys[0].ID != "conv-001" {
+		t.Errorf("unexpected convoys: %+v", status.Convoys)
+	}
+}
+
+func TestFetchStatusExecError(t *testing.T) {
+	defer mockRun(nil, errors.New("gt not found"))()
+	_, err := FetchStatus()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestFetchStatusMalformedJSON(t *testing.T) {
+	defer mockRun([]byte(`{bad`), nil)()
+	_, err := FetchStatus()
+	if err == nil {
+		t.Fatal("expected parse error, got nil")
 	}
 }

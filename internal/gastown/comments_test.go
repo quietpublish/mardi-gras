@@ -2,6 +2,7 @@ package gastown
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 )
 
@@ -42,5 +43,38 @@ func TestCommentParsingEmpty(t *testing.T) {
 	}
 	if len(comments) != 0 {
 		t.Fatalf("expected 0 comments, got %d", len(comments))
+	}
+}
+
+func TestFetchCommentsHappy(t *testing.T) {
+	defer mockRun([]byte(gtCommentsJSON), nil)()
+	comments, err := FetchComments("mg-10")
+	if err != nil {
+		t.Fatalf("FetchComments() error = %v", err)
+	}
+	if len(comments) != 2 {
+		t.Fatalf("expected 2 comments, got %d", len(comments))
+	}
+	if comments[0].Author != "alice" {
+		t.Errorf("Author = %q, want alice", comments[0].Author)
+	}
+}
+
+func TestFetchCommentsExecError(t *testing.T) {
+	defer mockRun(nil, errors.New("bd not found"))()
+	_, err := FetchComments("mg-10")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestFetchCommentsArgs(t *testing.T) {
+	calls, restore := mockRunCapture([]byte(`[]`), nil)
+	defer restore()
+	_, _ = FetchComments("mg-42")
+	args := (*calls)[0]
+	// Should be: bd comments mg-42 --json
+	if len(args) != 4 || args[0] != "bd" || args[1] != "comments" || args[2] != "mg-42" || args[3] != "--json" {
+		t.Errorf("args = %v", args)
 	}
 }

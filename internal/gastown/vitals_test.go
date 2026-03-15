@@ -1,6 +1,9 @@
 package gastown
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestParseVitalsHappyPath(t *testing.T) {
 	raw := `Dolt Servers
@@ -211,5 +214,28 @@ Backups
 	}
 	if v.Backups.JSONLOK {
 		t.Error("expected JSONL backup NOT OK")
+	}
+}
+
+func TestFetchVitalsHappy(t *testing.T) {
+	vitalsOutput := "Dolt Servers:\n  ● :3307 beads PID 1234 42 MB 5 conn 2ms\nBackups:\n  Local: 10 min ago\n  JSONL: 5 min ago\n"
+	defer mockRun([]byte(vitalsOutput), nil)()
+	vitals, err := FetchVitals()
+	if err != nil {
+		t.Fatalf("FetchVitals() error = %v", err)
+	}
+	if len(vitals.Servers) != 1 {
+		t.Fatalf("expected 1 server, got %d", len(vitals.Servers))
+	}
+	if !vitals.Servers[0].Running {
+		t.Error("expected server to be running")
+	}
+}
+
+func TestFetchVitalsExecError(t *testing.T) {
+	defer mockRun(nil, errors.New("gt not found"))()
+	_, err := FetchVitals()
+	if err == nil {
+		t.Fatal("expected error, got nil")
 	}
 }

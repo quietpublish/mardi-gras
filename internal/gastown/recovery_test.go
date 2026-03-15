@@ -1,6 +1,9 @@
 package gastown
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestFindOrphansNil(t *testing.T) {
 	orphans := FindOrphans(nil, "mardi_gras")
@@ -141,5 +144,42 @@ func TestFindDeadRigsZeroPolecatsNoOrphans(t *testing.T) {
 	rigs := FindDeadRigs(status)
 	if len(rigs) != 0 {
 		t.Errorf("expected 0 dead rigs when no orphans, got %d", len(rigs))
+	}
+}
+
+func TestReleaseIssueArgs(t *testing.T) {
+	calls, restore := mockExecCapture(nil)
+	defer restore()
+	err := ReleaseIssue("mg-42", "rig crashed")
+	if err != nil {
+		t.Fatalf("ReleaseIssue() error = %v", err)
+	}
+	args := (*calls)[0]
+	// Should be: gt release mg-42 --reason rig crashed
+	if len(args) != 5 || args[0] != "gt" || args[1] != "release" || args[2] != "mg-42" || args[3] != "--reason" || args[4] != "rig crashed" {
+		t.Errorf("args = %v", args)
+	}
+}
+
+func TestReleaseIssueNoReason(t *testing.T) {
+	calls, restore := mockExecCapture(nil)
+	defer restore()
+	err := ReleaseIssue("mg-42", "")
+	if err != nil {
+		t.Fatalf("ReleaseIssue() error = %v", err)
+	}
+	args := (*calls)[0]
+	// Should be: gt release mg-42 (no --reason)
+	if len(args) != 3 || args[1] != "release" || args[2] != "mg-42" {
+		t.Errorf("args = %v, want [gt release mg-42]", args)
+	}
+}
+
+func TestReleaseIssueError(t *testing.T) {
+	_, restore := mockExecCapture(errors.New("not found"))
+	defer restore()
+	err := ReleaseIssue("mg-42", "")
+	if err == nil {
+		t.Fatal("expected error, got nil")
 	}
 }

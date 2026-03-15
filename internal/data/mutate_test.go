@@ -1,6 +1,9 @@
 package data
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestBranchName(t *testing.T) {
 	tests := []struct {
@@ -65,5 +68,80 @@ func TestSlugify(t *testing.T) {
 				t.Errorf("slugify(%q) = %q, want %q", tt.input, got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestSetStatusArgs(t *testing.T) {
+	calls, restore := mockExecCapture(nil)
+	defer restore()
+	err := SetStatus("mg-42", StatusInProgress)
+	if err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
+	args := (*calls)[0]
+	// Should be: bd update mg-42 --status=in_progress
+	if len(args) != 4 || args[0] != "bd" || args[1] != "update" || args[2] != "mg-42" || args[3] != "--status=in_progress" {
+		t.Errorf("args = %v", args)
+	}
+}
+
+func TestClaimIssueArgs(t *testing.T) {
+	calls, restore := mockExecCapture(nil)
+	defer restore()
+	err := ClaimIssue("mg-42")
+	if err != nil {
+		t.Fatalf("ClaimIssue() error = %v", err)
+	}
+	args := (*calls)[0]
+	// Should be: bd update mg-42 --claim
+	if len(args) != 4 || args[1] != "update" || args[2] != "mg-42" || args[3] != "--claim" {
+		t.Errorf("args = %v", args)
+	}
+}
+
+func TestCloseIssueArgs(t *testing.T) {
+	calls, restore := mockExecCapture(nil)
+	defer restore()
+	err := CloseIssue("mg-42")
+	if err != nil {
+		t.Fatalf("CloseIssue() error = %v", err)
+	}
+	args := (*calls)[0]
+	// Should be: bd close mg-42
+	if len(args) != 3 || args[0] != "bd" || args[1] != "close" || args[2] != "mg-42" {
+		t.Errorf("args = %v", args)
+	}
+}
+
+func TestSetPriorityArgs(t *testing.T) {
+	calls, restore := mockExecCapture(nil)
+	defer restore()
+	err := SetPriority("mg-42", PriorityHigh)
+	if err != nil {
+		t.Fatalf("SetPriority() error = %v", err)
+	}
+	args := (*calls)[0]
+	// Should be: bd update mg-42 --priority=1
+	if len(args) != 4 || args[3] != "--priority=1" {
+		t.Errorf("args = %v", args)
+	}
+}
+
+func TestCreateIssueHappy(t *testing.T) {
+	defer mockRun([]byte("mg-99\n"), nil)()
+	id, err := CreateIssue("New feature", TypeFeature, PriorityMedium)
+	if err != nil {
+		t.Fatalf("CreateIssue() error = %v", err)
+	}
+	if id != "mg-99" {
+		t.Errorf("ID = %q, want mg-99", id)
+	}
+}
+
+func TestCreateIssueExecError(t *testing.T) {
+	defer mockRun(nil, errors.New("database locked"))()
+	_, err := CreateIssue("New feature", TypeFeature, PriorityMedium)
+	if err == nil {
+		t.Fatal("expected error, got nil")
 	}
 }

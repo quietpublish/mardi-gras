@@ -2,6 +2,7 @@ package gastown
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 )
 
@@ -73,5 +74,27 @@ func TestCostsOutputEmpty(t *testing.T) {
 	}
 	if len(costs.ByRole) != 0 {
 		t.Errorf("expected 0 role costs, got %d", len(costs.ByRole))
+	}
+}
+
+func TestFetchCostsHappy(t *testing.T) {
+	defer mockRun([]byte(gtCostsJSON), nil)()
+	costs, err := FetchCosts()
+	if err != nil {
+		t.Fatalf("FetchCosts() error = %v", err)
+	}
+	if costs.Sessions != 8 {
+		t.Errorf("Sessions = %d, want 8", costs.Sessions)
+	}
+	if costs.Total.Cost != 12.50 {
+		t.Errorf("Total.Cost = %f, want 12.50", costs.Total.Cost)
+	}
+}
+
+func TestFetchCostsExecError(t *testing.T) {
+	defer mockRun(nil, errors.New("gt not found"))()
+	_, err := FetchCosts()
+	if err == nil {
+		t.Fatal("expected error, got nil")
 	}
 }
