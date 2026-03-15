@@ -47,6 +47,9 @@ func main() {
 			}
 		}
 	}
+	if *cmdTimeout > 300 {
+		*cmdTimeout = 300
+	}
 	if *cmdTimeout > 0 {
 		gastown.SetCmdTimeout(*cmdTimeout)
 		data.SetCmdTimeout(*cmdTimeout)
