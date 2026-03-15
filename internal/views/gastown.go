@@ -617,7 +617,8 @@ func (g *GasTown) renderAgentRoster(width int) string {
 	agents := g.status.Agents
 	var lines []string
 
-	lines = append(lines, ui.SectionDivider("AGENTS", width, g.section == SectionAgents))
+	agentTitle := "AGENTS" + ui.Superscript(len(agents))
+	lines = append(lines, ui.SectionDivider(agentTitle, width, g.section == SectionAgents))
 
 	if len(agents) == 0 {
 		lines = append(lines, ui.GasTownLabel.Render("  No agents registered"))
@@ -692,7 +693,10 @@ func (g *GasTown) renderAgentRoster(width int) string {
 			name = name[:nameW-1] + "…"
 		}
 		nameStr := nameStyle.Render(fmt.Sprintf("%-*s", nameW, name))
-		if a.AgentInfo != "" {
+		switch {
+		case a.AgentAlias != "" && a.AgentInfo != "":
+			nameStr += lipgloss.NewStyle().Foreground(ui.Dim).Render("["+a.AgentAlias+"]") + " "
+		case a.AgentInfo != "":
 			nameStr += lipgloss.NewStyle().Foreground(ui.Dim).Render("["+a.AgentInfo+"]") + " "
 		}
 
@@ -789,7 +793,8 @@ func renderRigs(rigs []gastown.RigStatus, width int) string {
 func (g *GasTown) renderConvoyDetails(width int) string {
 	var lines []string
 
-	lines = append(lines, ui.SectionDivider("CONVOYS", width, g.section == SectionConvoys))
+	convoyTitle := "CONVOYS" + ui.Superscript(len(g.convoyDetails))
+	lines = append(lines, ui.SectionDivider(convoyTitle, width, g.section == SectionConvoys))
 
 	for i, c := range g.convoyDetails {
 		isSelected := g.section == SectionConvoys && i == g.convoyCursor
@@ -919,9 +924,9 @@ func (g *GasTown) renderMail(width int) string {
 		}
 	}
 
-	titleStr := "MAIL"
+	titleStr := "MAIL" + ui.Superscript(len(g.mailMessages))
 	if unread > 0 {
-		titleStr = fmt.Sprintf("MAIL (%d unread)", unread)
+		titleStr = fmt.Sprintf("MAIL%s (%d unread)", ui.Superscript(len(g.mailMessages)), unread)
 	}
 	lines = append(lines, ui.SectionDivider(titleStr, width, g.section == SectionMail))
 
@@ -1187,6 +1192,20 @@ func (g *GasTown) renderVelocity(width int) string {
 			labelStyle.Render("Cost  "),
 			v.TodayCost, v.TodaySessions)
 		lines = append(lines, costLine)
+	}
+
+	// Dual sparkline: created (top) vs closed (bottom) by day
+	if len(v.CreatedByDay) > 0 || len(v.ClosedByDay) > 0 {
+		sparkW := min(width-12, 14)
+		topStyle := lipgloss.NewStyle().Foreground(ui.BrightGold)
+		botStyle := lipgloss.NewStyle().Foreground(ui.BrightGreen)
+		spark := ui.DualSparkline(v.CreatedByDay, v.ClosedByDay, sparkW, topStyle, botStyle)
+		sparkLine := fmt.Sprintf("  %s %s  %s/%s",
+			labelStyle.Render("7 day"),
+			spark,
+			topStyle.Render("created"),
+			botStyle.Render("closed"))
+		lines = append(lines, sparkLine)
 	}
 
 	return strings.Join(lines, "\n")

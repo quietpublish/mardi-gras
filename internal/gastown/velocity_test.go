@@ -76,6 +76,35 @@ func TestVelocityMetrics(t *testing.T) {
 	if v.TodaySessions != 6 {
 		t.Fatalf("TodaySessions = %d, want 6", v.TodaySessions)
 	}
+
+	// Daily histograms
+	if len(v.CreatedByDay) != 7 {
+		t.Fatalf("CreatedByDay len = %d, want 7", len(v.CreatedByDay))
+	}
+	if len(v.ClosedByDay) != 7 {
+		t.Fatalf("ClosedByDay len = %d, want 7", len(v.ClosedByDay))
+	}
+	// Today (index 6) should have issues created today
+	if v.CreatedByDay[6] == 0 {
+		t.Error("CreatedByDay[6] (today) should be non-zero")
+	}
+	// Yesterday (index 5) should have issues created yesterday
+	if v.CreatedByDay[5] == 0 {
+		t.Error("CreatedByDay[5] (yesterday) should be non-zero")
+	}
+}
+
+func TestVelocityDailyHistogramEmpty(t *testing.T) {
+	now := time.Date(2026, 3, 15, 12, 0, 0, 0, time.UTC)
+	v := ComputeVelocityAt(nil, nil, nil, now)
+	if len(v.CreatedByDay) != 7 {
+		t.Fatalf("CreatedByDay len = %d, want 7", len(v.CreatedByDay))
+	}
+	for i, val := range v.CreatedByDay {
+		if val != 0 {
+			t.Errorf("CreatedByDay[%d] = %f, want 0", i, val)
+		}
+	}
 }
 
 func TestVelocityNilInputs(t *testing.T) {

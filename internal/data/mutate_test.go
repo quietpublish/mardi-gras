@@ -145,3 +145,102 @@ func TestCreateIssueExecError(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 }
+
+// --- AddComment tests ---
+
+func TestAddCommentArgs(t *testing.T) {
+	calls, restore := mockRunCapture([]byte("ok\n"), nil)
+	defer restore()
+	err := AddComment("mg-42", "Fixed the auth bug")
+	if err != nil {
+		t.Fatalf("AddComment() error = %v", err)
+	}
+	args := (*calls)[0]
+	// Should be: bd comments add mg-42 "Fixed the auth bug"
+	if len(args) != 5 || args[0] != "bd" || args[1] != "comments" || args[2] != "add" || args[3] != "mg-42" || args[4] != "Fixed the auth bug" {
+		t.Errorf("args = %v", args)
+	}
+}
+
+func TestAddCommentExecError(t *testing.T) {
+	defer mockRun(nil, errors.New("bd not found"))()
+	err := AddComment("mg-42", "comment")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+// --- SetAssignee tests ---
+
+func TestSetAssigneeArgs(t *testing.T) {
+	calls, restore := mockExecCapture(nil)
+	defer restore()
+	err := SetAssignee("mg-42", "alice")
+	if err != nil {
+		t.Fatalf("SetAssignee() error = %v", err)
+	}
+	args := (*calls)[0]
+	// Should be: bd update mg-42 --assignee=alice
+	if len(args) != 4 || args[0] != "bd" || args[1] != "update" || args[2] != "mg-42" || args[3] != "--assignee=alice" {
+		t.Errorf("args = %v", args)
+	}
+}
+
+func TestSetAssigneeError(t *testing.T) {
+	_, restore := mockExecCapture(errors.New("not found"))
+	defer restore()
+	err := SetAssignee("mg-42", "alice")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+// --- AddLabel tests ---
+
+func TestAddLabelArgs(t *testing.T) {
+	calls, restore := mockExecCapture(nil)
+	defer restore()
+	err := AddLabel("mg-42", "backend")
+	if err != nil {
+		t.Fatalf("AddLabel() error = %v", err)
+	}
+	args := (*calls)[0]
+	// Should be: bd label add mg-42 backend
+	if len(args) != 5 || args[0] != "bd" || args[1] != "label" || args[2] != "add" || args[3] != "mg-42" || args[4] != "backend" {
+		t.Errorf("args = %v", args)
+	}
+}
+
+func TestAddLabelError(t *testing.T) {
+	_, restore := mockExecCapture(errors.New("not found"))
+	defer restore()
+	err := AddLabel("mg-42", "backend")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+// --- AddDependency tests ---
+
+func TestAddDependencyArgs(t *testing.T) {
+	calls, restore := mockExecCapture(nil)
+	defer restore()
+	err := AddDependency("mg-42", "mg-10")
+	if err != nil {
+		t.Fatalf("AddDependency() error = %v", err)
+	}
+	args := (*calls)[0]
+	// Should be: bd dep add mg-42 mg-10
+	if len(args) != 5 || args[0] != "bd" || args[1] != "dep" || args[2] != "add" || args[3] != "mg-42" || args[4] != "mg-10" {
+		t.Errorf("args = %v", args)
+	}
+}
+
+func TestAddDependencyError(t *testing.T) {
+	_, restore := mockExecCapture(errors.New("not found"))
+	defer restore()
+	err := AddDependency("mg-42", "mg-10")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}

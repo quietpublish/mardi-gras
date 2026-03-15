@@ -111,7 +111,31 @@ type issueSearchSource struct {
 
 func (s issueSearchSource) String(i int) string {
 	issue := s.issues[i]
-	return issue.ID + " " + issue.Title
+	var b strings.Builder
+	b.WriteString(issue.ID)
+	b.WriteByte(' ')
+	b.WriteString(issue.Title)
+	if issue.Description != "" {
+		b.WriteByte(' ')
+		b.WriteString(issue.Description)
+	}
+	if issue.Assignee != "" {
+		b.WriteByte(' ')
+		b.WriteString(issue.Assignee)
+	}
+	if issue.Owner != "" {
+		b.WriteByte(' ')
+		b.WriteString(issue.Owner)
+	}
+	if issue.Notes != "" {
+		b.WriteByte(' ')
+		b.WriteString(issue.Notes)
+	}
+	for _, label := range issue.Labels {
+		b.WriteByte(' ')
+		b.WriteString(label)
+	}
+	return b.String()
 }
 
 func (s issueSearchSource) Len() int {

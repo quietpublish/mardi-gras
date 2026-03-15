@@ -121,6 +121,104 @@ func TestFilterIssuesFuzzy(t *testing.T) {
 	}
 }
 
+func TestFilterIssuesSearchDescription(t *testing.T) {
+	issues := []Issue{
+		{ID: "vv-001", Title: "Fix login bug", Description: "Token expiry causes redirect loop"},
+		{ID: "vv-002", Title: "Add search feature", Description: "Full-text search across issues"},
+	}
+
+	result := FilterIssues(issues, "redirect loop")
+	if len(result) != 1 || result[0].ID != "vv-001" {
+		ids := make([]string, len(result))
+		for i, r := range result {
+			ids[i] = r.ID
+		}
+		t.Fatalf("expected [vv-001], got %v", ids)
+	}
+}
+
+func TestFilterIssuesSearchLabels(t *testing.T) {
+	issues := []Issue{
+		{ID: "vv-001", Title: "Fix login bug", Labels: []string{"backend", "security"}},
+		{ID: "vv-002", Title: "Add search feature", Labels: []string{"frontend"}},
+	}
+
+	result := FilterIssues(issues, "security")
+	if len(result) != 1 || result[0].ID != "vv-001" {
+		ids := make([]string, len(result))
+		for i, r := range result {
+			ids[i] = r.ID
+		}
+		t.Fatalf("expected [vv-001], got %v", ids)
+	}
+}
+
+func TestFilterIssuesSearchAssignee(t *testing.T) {
+	issues := []Issue{
+		{ID: "vv-001", Title: "Fix login bug", Assignee: "alice"},
+		{ID: "vv-002", Title: "Add search feature", Assignee: "bob"},
+	}
+
+	result := FilterIssues(issues, "alice")
+	if len(result) != 1 || result[0].ID != "vv-001" {
+		ids := make([]string, len(result))
+		for i, r := range result {
+			ids[i] = r.ID
+		}
+		t.Fatalf("expected [vv-001], got %v", ids)
+	}
+}
+
+func TestFilterIssuesSearchOwner(t *testing.T) {
+	issues := []Issue{
+		{ID: "vv-001", Title: "Fix login bug", Owner: "teamlead"},
+		{ID: "vv-002", Title: "Add search feature", Owner: "pm"},
+	}
+
+	result := FilterIssues(issues, "teamlead")
+	if len(result) != 1 || result[0].ID != "vv-001" {
+		ids := make([]string, len(result))
+		for i, r := range result {
+			ids[i] = r.ID
+		}
+		t.Fatalf("expected [vv-001], got %v", ids)
+	}
+}
+
+func TestFilterIssuesSearchNotes(t *testing.T) {
+	issues := []Issue{
+		{ID: "vv-001", Title: "Fix login bug", Notes: "Using token bucket algorithm"},
+		{ID: "vv-002", Title: "Add search feature"},
+	}
+
+	result := FilterIssues(issues, "token bucket")
+	if len(result) != 1 || result[0].ID != "vv-001" {
+		ids := make([]string, len(result))
+		for i, r := range result {
+			ids[i] = r.ID
+		}
+		t.Fatalf("expected [vv-001], got %v", ids)
+	}
+}
+
+func TestFilterIssuesSearchCombinedFields(t *testing.T) {
+	// Query matches description but not title — should still find it
+	issues := []Issue{
+		{ID: "vv-001", Title: "Implement rate limiting", Description: "Redis-backed token bucket", Assignee: "alice", Labels: []string{"backend"}},
+		{ID: "vv-002", Title: "Fix typo", Description: "README spelling"},
+	}
+
+	// "redis" only appears in description
+	result := FilterIssues(issues, "redis")
+	if len(result) != 1 || result[0].ID != "vv-001" {
+		ids := make([]string, len(result))
+		for i, r := range result {
+			ids[i] = r.ID
+		}
+		t.Fatalf("expected [vv-001], got %v", ids)
+	}
+}
+
 func TestIsStructuredToken(t *testing.T) {
 	tests := []struct {
 		token    string

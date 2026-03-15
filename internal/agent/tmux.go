@@ -104,6 +104,76 @@ func KillAgentWindow(issueID string) error {
 	return exec.Command("tmux", "kill-pane", "-t", paneID).Run()
 }
 
+// CapturePane captures the last maxLines of output from an agent's tmux pane.
+// Returns sanitized lines (ANSI stripped, trailing blanks trimmed).
+// Returns nil if the agent pane is not found or capture fails.
+func CapturePane(issueID string, maxLines int) []string {
+	agents, err := ListAgentWindows()
+	if err != nil {
+		return nil
+	}
+	paneID, ok := agents[issueID]
+	if !ok {
+		return nil
+	}
+	// capture-pane -p prints to stdout, -S -N starts N lines from the end
+	out, err := exec.Command("tmux", "capture-pane",
+		"-t", paneID, "-p", "-S", fmt.Sprintf("-%d", maxLines+20)).Output()
+	if err != nil {
+		return nil
+	}
+	return sanitizeCaptureOutput(string(out), maxLines)
+}
+
+// sanitizeCaptureOutput strips ANSI codes, trims trailing blanks,
+// and returns the last maxLines of non-empty content.
+func sanitizeCaptureOutput(raw string, maxLines int) []string {
+	// Strip ANSI escape sequences
+	clean := stripANSI(raw)
+
+	// Split into lines and trim trailing blanks
+	allLines := strings.Split(clean, "\n")
+	// Remove trailing empty lines
+	for len(allLines) > 0 && strings.TrimSpace(allLines[len(allLines)-1]) == "" {
+		allLines = allLines[:len(allLines)-1]
+	}
+
+	if len(allLines) == 0 {
+		return nil
+	}
+
+	// Take last maxLines
+	if len(allLines) > maxLines {
+		allLines = allLines[len(allLines)-maxLines:]
+	}
+
+	return allLines
+}
+
+// stripANSI removes ANSI escape sequences from a string.
+func stripANSI(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	i := 0
+	for i < len(s) {
+		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+			// Skip until we find a letter (the terminator)
+			j := i + 2
+			for j < len(s) && (s[j] < 'A' || s[j] > 'Z') && (s[j] < 'a' || s[j] > 'z') {
+				j++
+			}
+			if j < len(s) {
+				j++ // skip the terminator letter
+			}
+			i = j
+			continue
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String()
+}
+
 // SelectAgentWindow switches focus to the tmux pane for the given issue.
 func SelectAgentWindow(issueID string) error {
 	agents, err := ListAgentWindows()

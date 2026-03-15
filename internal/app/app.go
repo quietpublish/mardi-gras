@@ -89,6 +89,10 @@ type Model struct {
 	creating   bool
 	createForm components.CreateForm
 
+	// Issue edit form
+	editing  bool
+	editForm components.EditForm
+
 	// Command palette
 	showPalette bool
 	palette     components.Palette
@@ -103,6 +107,11 @@ type Model struct {
 	nudging     bool
 	nudgeInput  textinput.Model
 	nudgeTarget string
+
+	// Quick-action input state (comment, assign, label, link)
+	qaMode  string // "comment", "assign", "label", "link"
+	qaInput textinput.Model
+	qaID    string // issue ID for the action
 
 	// Convoy creation state
 	convoyCreating bool
@@ -125,6 +134,10 @@ type Model struct {
 	// Problems view
 	showProblems bool
 	problems     views.Problems
+
+	// Doctor diagnostics overlay
+	showDoctor bool
+	doctor     views.Doctor
 
 	// Recovery confirmation dialog
 	recovering     bool
@@ -156,6 +169,7 @@ type Model struct {
 	beadsContext *data.BeadsContext
 
 	// Doctor diagnostics from bd doctor --agent --json (fetched at startup)
+	doctorResult   *data.DoctorResult
 	doctorProblems []gastown.Problem
 
 	// Shared terminal control-sequence guard (used by both the Bubble Tea
@@ -322,6 +336,18 @@ func (m Model) allProblems() []gastown.Problem {
 	problems := gastown.DetectProblems(m.townStatus)
 	problems = append(problems, m.doctorProblems...)
 	return problems
+}
+
+// startQuickAction initializes the quick-action input bar for comment/assign/label/link.
+func (m *Model) startQuickAction(mode, issueID, prompt, placeholder string) tea.Cmd {
+	m.qaMode = mode
+	m.qaID = issueID
+	m.qaInput = textinput.New()
+	m.qaInput.Prompt = ui.InputPrompt.Render(prompt)
+	m.qaInput.Placeholder = placeholder
+	m.qaInput.SetWidth(50)
+	m.qaInput.Focus()
+	return textinput.Blink
 }
 
 // agentFinishedMsg is sent when a launched claude session exits.
@@ -526,6 +552,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Handle edit form result
+	if result, ok := msg.(components.EditFormResult); ok {
+		m.editing = false
+		if result.Cancelled {
+			return m, nil
+		}
+		id := result.IssueID
+		title := result.Title
+		priority := components.ParsePriority(result.Priority)
+		return m, func() tea.Msg {
+			if err := data.UpdateTitle(id, title); err != nil {
+				return mutateResultMsg{issueID: id, action: "edit title", err: err}
+			}
+			if err := data.SetPriority(id, priority); err != nil {
+				return mutateResultMsg{issueID: id, action: "edit priority", err: err}
+			}
+			return mutateResultMsg{issueID: id, action: "updated", err: nil}
+		}
+	}
+
 	// Handle palette result
 	if result, ok := msg.(components.PaletteResult); ok {
 		m.showPalette = false
@@ -568,6 +614,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		logRoute("palette forward")
 		var cmd tea.Cmd
 		m.palette, cmd = m.palette.Update(msg)
+		return m, cmd
+	}
+
+	// Forward all messages to edit form when active
+	if m.editing {
+		if km, ok := msg.(tea.KeyPressMsg); ok && km.String() == "ctrl+c" {
+			logRoute("editForm ctrl+c -> quit")
+			return m, tea.Quit
+		}
+		logRoute("editForm forward")
+		var cmd tea.Cmd
+		m.editForm, cmd = m.editForm.Update(msg)
 		return m, cmd
 	}
 
@@ -616,6 +674,49 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.nudgeInput, cmd = m.nudgeInput.Update(msg)
+		return m, cmd
+	}
+
+	// Forward all messages to quick-action input when active
+	if m.qaMode != "" {
+		if km, ok := msg.(tea.KeyPressMsg); ok {
+			switch km.String() {
+			case "ctrl+c":
+				return m, tea.Quit
+			case "esc":
+				m.qaMode = ""
+				return m, nil
+			case "enter":
+				mode := m.qaMode
+				id := m.qaID
+				value := m.qaInput.Value()
+				m.qaMode = ""
+				if value == "" {
+					return m, nil
+				}
+				return m, func() tea.Msg {
+					var err error
+					var action string
+					switch mode {
+					case "comment":
+						err = data.AddComment(id, value)
+						action = "comment added"
+					case "assign":
+						err = data.SetAssignee(id, value)
+						action = "assigned to " + value
+					case "label":
+						err = data.AddLabel(id, value)
+						action = "label: " + value
+					case "link":
+						err = data.AddDependency(id, value)
+						action = "dep: " + value
+					}
+					return mutateResultMsg{issueID: id, action: action, err: err}
+				}
+			}
+		}
+		var cmd tea.Cmd
+		m.qaInput, cmd = m.qaInput.Update(msg)
 		return m, cmd
 	}
 
@@ -1267,6 +1368,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.result == nil {
 			return m, nil
 		}
+		m.doctorResult = msg.result
 		// Convert data.DoctorDiagnostic to gastown.DoctorDiagnostic
 		var diags []gastown.DoctorDiagnostic
 		for _, d := range msg.result.Diagnostics {
@@ -1281,6 +1383,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.doctorProblems = gastown.DoctorProblems(diags)
 		if m.showProblems {
 			m.problems.SetProblems(m.allProblems())
+		}
+		if m.showDoctor {
+			m.doctor.SetResult(msg.result)
 		}
 		return m, nil
 
@@ -1360,6 +1465,21 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		dbg("  handleKey: String=%q Keystroke=%q (DIFFER)", str, ks)
 	}
 
+	// When Doctor panel is focused, route its keys before global handlers
+	if m.showDoctor && m.activPane == PaneDetail {
+		switch msg.String() {
+		case "j", "k", "up", "down", "g", "G":
+			logAction("doctor panel key: %s", msg.String())
+			var cmd tea.Cmd
+			m.doctor, cmd = m.doctor.Update(msg)
+			return m, cmd
+		case "R":
+			// Refresh diagnostics
+			logAction("doctor panel refresh")
+			return m, fetchDoctorDiagnostics
+		}
+	}
+
 	// When Problems panel is focused, route its keys before global handlers
 	if m.showProblems && m.activPane == PaneDetail {
 		switch msg.String() {
@@ -1437,6 +1557,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.showGasTown = !m.showGasTown
 		if m.showGasTown {
+			m.showDoctor = false
 			cmd := m.activateGasTown()
 			return m, cmd
 		}
@@ -1449,7 +1570,21 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.showProblems = !m.showProblems
 		if m.showProblems {
 			m.showGasTown = false
+			m.showDoctor = false
 			m.problems.SetProblems(m.allProblems())
+		}
+		return m, nil
+
+	case "D":
+		m.showDoctor = !m.showDoctor
+		if m.showDoctor {
+			m.showGasTown = false
+			m.showProblems = false
+			// Set existing result if available, then refresh
+			if m.doctorResult != nil {
+				m.doctor.SetResult(m.doctorResult)
+			}
+			return m, fetchDoctorDiagnostics
 		}
 		return m, nil
 
@@ -1606,6 +1741,47 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.creating = true
 		m.createForm = components.NewCreateForm(m.width, m.height)
 		return m, m.createForm.Init()
+
+	case "e": // Edit selected issue
+		issue := m.parade.SelectedIssue
+		if issue == nil {
+			return m, nil
+		}
+		m.editing = true
+		m.editForm = components.NewEditForm(m.width, m.height, issue)
+		return m, m.editForm.Init()
+
+	case "r": // Comment (remark)
+		issue := m.parade.SelectedIssue
+		if issue == nil {
+			return m, nil
+		}
+		cmd := m.startQuickAction("comment", issue.ID, "comment> ", "Add comment to "+issue.ID+"...")
+		return m, cmd
+
+	case "y": // Assign (yours)
+		issue := m.parade.SelectedIssue
+		if issue == nil {
+			return m, nil
+		}
+		cmd := m.startQuickAction("assign", issue.ID, "assign> ", "Assignee name...")
+		return m, cmd
+
+	case "t": // Tag/label
+		issue := m.parade.SelectedIssue
+		if issue == nil {
+			return m, nil
+		}
+		cmd := m.startQuickAction("label", issue.ID, "label> ", "Label name...")
+		return m, cmd
+
+	case "l": // Link/dependency
+		issue := m.parade.SelectedIssue
+		if issue == nil {
+			return m, nil
+		}
+		cmd := m.startQuickAction("link", issue.ID, "link> ", "Issue ID that "+issue.ID+" depends on...")
+		return m, cmd
 
 	case "C":
 		if !m.gtEnv.Available {
@@ -2295,9 +2471,22 @@ func (m *Model) diffIssues(newIssues []data.Issue) int {
 func (m *Model) syncSelection() {
 	if m.parade.SelectedIssue != nil {
 		m.detail.SetIssue(m.parade.SelectedIssue)
+		// Capture agent output if an agent pane is active for this issue
+		id := m.parade.SelectedIssue.ID
+		if m.inTmux {
+			if _, active := m.activeAgents[id]; active {
+				m.detail.AgentOutput = agent.CapturePane(id, 15)
+				m.detail.AgentOutputID = id
+			} else {
+				m.detail.AgentOutput = nil
+				m.detail.AgentOutputID = ""
+			}
+		}
 		return
 	}
 	m.detail.SetIssue(nil)
+	m.detail.AgentOutput = nil
+	m.detail.AgentOutputID = ""
 }
 
 // maybeFetchMolecule returns a Cmd to fetch molecule data if the selected issue
@@ -2380,6 +2569,7 @@ func (m *Model) layout() {
 	m.detail.SetSize(detailW, bodyH)
 	m.gasTown.SetSize(detailW, bodyH)
 	m.problems.SetSize(detailW, bodyH)
+	m.doctor.SetSize(detailW, bodyH)
 	m.detail.AllIssues = m.issues
 	detailIssueMap := data.BuildIssueMap(m.issues)
 	m.detail.IssueMap = detailIssueMap
@@ -2521,6 +2711,8 @@ func (m *Model) propagateAgentState() {
 
 	// Build orphaned issue ID set from dead rigs
 	m.parade.OrphanedIDs = buildOrphanedIDs(m.townStatus)
+	// Build zombie issue ID set (dead sessions, not full dead rigs)
+	m.parade.ZombieIDs = buildZombieIDs(m.townStatus, m.parade.OrphanedIDs)
 
 	if m.detail.Issue != nil {
 		m.detail.SetIssue(m.detail.Issue)
@@ -2537,6 +2729,29 @@ func buildOrphanedIDs(status *gastown.TownStatus) map[string]bool {
 	for _, rig := range deadRigs {
 		for _, o := range gastown.FindOrphans(status, rig) {
 			ids[o.IssueID] = true
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	return ids
+}
+
+// buildZombieIDs returns a set of issue IDs where the assigned agent's session is dead
+// but the hook is still active. These are individual zombie polecats, distinct from
+// full dead-rig orphans (which are handled separately by buildOrphanedIDs).
+func buildZombieIDs(status *gastown.TownStatus, orphanedIDs map[string]bool) map[string]bool {
+	if status == nil {
+		return nil
+	}
+	ids := make(map[string]bool)
+	for _, a := range status.Agents {
+		if a.HookBead != "" && !a.Running {
+			// Skip issues already covered by dead-rig detection
+			if orphanedIDs != nil && orphanedIDs[a.HookBead] {
+				continue
+			}
+			ids[a.HookBead] = true
 		}
 	}
 	if len(ids) == 0 {
@@ -2669,11 +2884,16 @@ func (m Model) View() tea.View {
 	if m.layoutPreset == LayoutWide {
 		body = m.parade.View()
 	} else {
-		rightPanel := m.detail.View()
-		if m.showProblems && m.gtEnv.Available {
+		var rightPanel string
+		switch {
+		case m.showDoctor:
+			rightPanel = m.doctor.View()
+		case m.showProblems && m.gtEnv.Available:
 			rightPanel = m.problems.View()
-		} else if m.showGasTown && m.gtEnv.Available {
+		case m.showGasTown && m.gtEnv.Available:
 			rightPanel = m.gasTown.View()
+		default:
+			rightPanel = m.detail.View()
 		}
 		body = lipgloss.JoinHorizontal(
 			lipgloss.Top,
@@ -2691,6 +2911,8 @@ func (m Model) View() tea.View {
 		bottomBar = components.BulkFooter(m.width, m.parade.SelectionCount(), m.gtEnv.Available)
 	case m.nudging:
 		bottomBar = inputBarStyle.Render(m.nudgeInput.View())
+	case m.qaMode != "":
+		bottomBar = inputBarStyle.Render(m.qaInput.View())
 	case m.mailComposing:
 		bottomBar = inputBarStyle.Render(m.mailComposeInput.View())
 	case m.mailReplying:
@@ -2735,6 +2957,15 @@ func (m Model) View() tea.View {
 		m.help.SetSize(m.width, m.height)
 		helpModal := m.help.View()
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, helpModal))
+	}
+
+	if m.editing {
+		formTitle := ui.HelpTitle.Render("[ EDIT ISSUE ]")
+		formBody := m.editForm.View()
+		formHint := ui.HelpHint.Render("esc to cancel  enter to save")
+		formContent := lipgloss.JoinVertical(lipgloss.Left, formTitle, "", formBody, "", formHint)
+		formBox := ui.HelpOverlayBg.Width(m.width - 8).Render(formContent)
+		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, formBox))
 	}
 
 	if m.creating {

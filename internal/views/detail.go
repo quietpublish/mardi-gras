@@ -33,6 +33,8 @@ type Detail struct {
 	CommentsIssueID  string // which issue the comments belong to
 	RichIssueID      string // which issue has had rich detail fetched
 	MetadataSchema   *data.MetadataSchema
+	AgentOutput      []string // live captured lines from agent's tmux pane
+	AgentOutputID    string   // which issue the agent output belongs to
 }
 
 // NewDetail creates a detail panel.
@@ -455,6 +457,12 @@ func (d *Detail) renderContent() string {
 		lines = append(lines, d.renderComments())
 	}
 
+	// Agent output section (live tail from tmux pane)
+	if len(d.AgentOutput) > 0 && d.AgentOutputID == issue.ID {
+		lines = append(lines, "")
+		lines = append(lines, d.renderAgentOutput())
+	}
+
 	return strings.Join(lines, "\n")
 }
 
@@ -687,6 +695,24 @@ func (d *Detail) renderComments() string {
 			}
 		}
 		lines = append(lines, "") // blank line between comments
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// renderAgentOutput renders live agent output captured from a tmux pane.
+func (d *Detail) renderAgentOutput() string {
+	var lines []string
+	lines = append(lines, ui.DetailSection.Render(fmt.Sprintf("AGENT OUTPUT (%d lines)", len(d.AgentOutput))))
+
+	outputStyle := lipgloss.NewStyle().Foreground(ui.Dim)
+	maxWidth := max(d.Width-8, 20)
+	for _, line := range d.AgentOutput {
+		display := line
+		if len(display) > maxWidth {
+			display = display[:maxWidth-1] + "…"
+		}
+		lines = append(lines, "  "+outputStyle.Render(display))
 	}
 
 	return strings.Join(lines, "\n")

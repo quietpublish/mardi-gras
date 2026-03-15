@@ -81,6 +81,7 @@ const (
 	// Problems
 	SymWarning = "⚠"
 	SymDeadRig = "💀"
+	SymZombie  = "☠"
 
 	// Molecule steps
 	SymStepDone    = "✓"

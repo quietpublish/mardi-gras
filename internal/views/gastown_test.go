@@ -1226,6 +1226,67 @@ func TestGasTownAgentNameDisplayed(t *testing.T) {
 	}
 }
 
+func TestGasTownAgentInfoDisplayedWhenNoAlias(t *testing.T) {
+	g := NewGasTown(120, 30)
+	status := &gastown.TownStatus{
+		Agents: []gastown.AgentRuntime{
+			{Name: "obsidian", Role: "polecat", State: "working", AgentInfo: "claude/sonnet"},
+			{Name: "quartz", Role: "polecat", State: "idle"},
+		},
+	}
+	g.SetStatus(status, gastown.Env{Available: true})
+	view := g.View()
+	// AgentInfo should be shown when no alias is present
+	if !strings.Contains(view, "claude/sonnet") {
+		t.Fatal("view should show agent_info when agent_alias is empty")
+	}
+}
+
+func TestGasTownAgentAliasPreferredOverInfo(t *testing.T) {
+	g := NewGasTown(120, 30)
+	status := &gastown.TownStatus{
+		Agents: []gastown.AgentRuntime{
+			{Name: "obsidian", Role: "polecat", State: "working", AgentInfo: "claude/sonnet", AgentAlias: "sonnet-46"},
+		},
+	}
+	g.SetStatus(status, gastown.Env{Available: true})
+	view := g.View()
+	// When both exist, alias is preferred
+	if !strings.Contains(view, "sonnet-46") {
+		t.Fatal("view should prefer agent_alias over agent_info")
+	}
+}
+
+func TestGasTownAgentAliasDisplayed(t *testing.T) {
+	g := NewGasTown(120, 30)
+	status := &gastown.TownStatus{
+		Agents: []gastown.AgentRuntime{
+			{Name: "obsidian", Role: "polecat", State: "working", AgentAlias: "sonnet-46", AgentInfo: "claude/sonnet"},
+		},
+	}
+	g.SetStatus(status, gastown.Env{Available: true})
+	view := g.View()
+	// AgentAlias should appear somewhere in the view
+	if !strings.Contains(view, "sonnet-46") {
+		t.Fatal("view should show agent_alias")
+	}
+}
+
+func TestGasTownAgentNoInfoGraceful(t *testing.T) {
+	g := NewGasTown(120, 30)
+	status := &gastown.TownStatus{
+		Agents: []gastown.AgentRuntime{
+			{Name: "quartz", Role: "polecat", State: "idle"},
+		},
+	}
+	g.SetStatus(status, gastown.Env{Available: true})
+	view := g.View()
+	// Should render without agent info brackets
+	if !strings.Contains(view, "quartz") {
+		t.Fatal("view should show agent name")
+	}
+}
+
 func TestGasTownMailComposeNoActionInConvoySection(t *testing.T) {
 	g := NewGasTown(100, 30)
 	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}

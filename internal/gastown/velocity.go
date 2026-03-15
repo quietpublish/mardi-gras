@@ -22,6 +22,10 @@ type VelocityMetrics struct {
 	// Cost context (from CostsOutput, if available)
 	TodayCost     float64
 	TodaySessions int
+
+	// Daily histograms for sparkline (last 7 days, index 0 = oldest)
+	CreatedByDay []float64
+	ClosedByDay  []float64
 }
 
 // ComputeVelocity derives velocity metrics from existing data sources.
@@ -59,6 +63,24 @@ func ComputeVelocityAt(issues []data.Issue, status *TownStatus, costs *CostsOutp
 			}
 		}
 	}
+
+	// Build 7-day histograms for sparkline
+	created7 := make([]float64, 7)
+	closed7 := make([]float64, 7)
+	for _, iss := range issues {
+		dayIdx := int(todayStart.Sub(startOfDay(iss.CreatedAt)).Hours() / 24)
+		if dayIdx >= 0 && dayIdx < 7 {
+			created7[6-dayIdx]++ // index 0 = oldest, 6 = today
+		}
+		if iss.Status == data.StatusClosed && iss.ClosedAt != nil {
+			closedDayIdx := int(todayStart.Sub(startOfDay(*iss.ClosedAt)).Hours() / 24)
+			if closedDayIdx >= 0 && closedDayIdx < 7 {
+				closed7[6-closedDayIdx]++
+			}
+		}
+	}
+	v.CreatedByDay = created7
+	v.ClosedByDay = closed7
 
 	if status != nil {
 		v.TotalAgents = len(status.Agents)

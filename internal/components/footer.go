@@ -94,6 +94,9 @@ func (f Footer) View() string {
 			if f.BeadsContext.Backend != "" {
 				contextInfo += "/" + f.BeadsContext.Backend
 			}
+			if f.BeadsContext.BdVersion != "" {
+				contextInfo += " v" + f.BeadsContext.BdVersion
+			}
 			contextInfo = " · " + contextInfo
 		}
 		sourceInfo = ui.FooterSource.Render(fmt.Sprintf("%s %s · %s%s", name, mode, age, contextInfo))

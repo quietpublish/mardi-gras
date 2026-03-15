@@ -42,6 +42,32 @@ func CreateIssue(title string, issueType IssueType, priority Priority) (string, 
 	return strings.TrimSpace(string(out)), nil
 }
 
+// UpdateTitle runs `bd update <id> --title=<title>` to change an issue's title.
+func UpdateTitle(issueID, title string) error {
+	return execWithTimeout(timeoutShort, "bd", "update", issueID, "--title="+title)
+}
+
+// AddComment runs `bd comments add <id> <body>` to add a comment to an issue.
+func AddComment(issueID, body string) error {
+	_, err := runWithTimeout(timeoutShort, "bd", "comments", "add", issueID, body)
+	return wrapExitError("bd comments add", err)
+}
+
+// SetAssignee runs `bd update <id> --assignee=<name>` to assign an issue.
+func SetAssignee(issueID, assignee string) error {
+	return execWithTimeout(timeoutShort, "bd", "update", issueID, "--assignee="+assignee)
+}
+
+// AddLabel runs `bd label add <id> <label>` to add a label to an issue.
+func AddLabel(issueID, label string) error {
+	return execWithTimeout(timeoutShort, "bd", "label", "add", issueID, label)
+}
+
+// AddDependency runs `bd dep add <id> <depends-on-id>` to add a blocking dependency.
+func AddDependency(issueID, dependsOnID string) error {
+	return execWithTimeout(timeoutShort, "bd", "dep", "add", issueID, dependsOnID)
+}
+
 // BranchName generates a git branch name from an issue.
 func BranchName(issue Issue) string {
 	prefix := "feat"
