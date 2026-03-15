@@ -2,7 +2,7 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
-## Unreleased
+## v0.11.0 (2026-03-15)
 
 ### Added
 - **`--no-animations` flag** — disable confetti and header shimmer for SSH/low-bandwidth sessions. Also available as `MG_NO_ANIMATIONS=1` env var. (PR #2 by @jason-curtis)
@@ -10,6 +10,10 @@ All notable changes to Mardi Gras are documented here. For full release details 
 - **Multi-rig indicator** — header shows rig count when Gas Town reports multiple rigs. (PR #2 by @jason-curtis)
 - **Convoy from epic** — pressing `C` on an epic auto-populates the convoy with child issues via `gt convoy create --from-epic`.
 - **Workspace identity in footer** — footer shows database name and backend type from `bd context --json` (e.g., `bd list (cli) · 5s ago · mardi_gras/dolt`).
+
+### Fixed
+- bd version warning updated to reference v0.60.0+.
+- Command timeout capped at 300s to prevent degenerate durations.
 
 ## v0.10.0 (2026-03-12)
 
