@@ -345,3 +345,58 @@ func TestExecutePaletteActions(t *testing.T) {
 		})
 	}
 }
+
+// ---------------------------------------------------------------------------
+// TestConvoyCreateFromEpic
+// ---------------------------------------------------------------------------
+
+func TestConvoyCreateFromEpic(t *testing.T) {
+	epic := testIssue("mg-100", data.StatusOpen)
+	epic.IssueType = data.TypeEpic
+	issues := []data.Issue{epic, testIssue("open-1", data.StatusOpen)}
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
+	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	got := model.(Model)
+	got.gtEnv.Available = true
+
+	// Simulate pressing C on the epic
+	got.parade.SelectedIssue = &issues[0]
+	result, _ := got.handleKey(tea.KeyPressMsg{Code: 'C', Text: "C"})
+	got = result.(Model)
+
+	if !got.convoyCreating {
+		t.Fatal("expected convoyCreating to be true")
+	}
+	if got.convoyEpicID != "mg-100" {
+		t.Fatalf("expected convoyEpicID = %q, got %q", "mg-100", got.convoyEpicID)
+	}
+	if len(got.convoyIssueIDs) != 0 {
+		t.Fatalf("expected empty convoyIssueIDs for epic, got %v", got.convoyIssueIDs)
+	}
+	if !strings.Contains(got.convoyInput.Placeholder, "epic") {
+		t.Fatalf("expected placeholder to mention epic, got %q", got.convoyInput.Placeholder)
+	}
+}
+
+func TestConvoyCreateFromNonEpic(t *testing.T) {
+	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
+	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	got := model.(Model)
+	got.gtEnv.Available = true
+
+	// Simulate pressing C on a regular issue
+	got.parade.SelectedIssue = &issues[0]
+	result, _ := got.handleKey(tea.KeyPressMsg{Code: 'C', Text: "C"})
+	got = result.(Model)
+
+	if !got.convoyCreating {
+		t.Fatal("expected convoyCreating to be true")
+	}
+	if got.convoyEpicID != "" {
+		t.Fatalf("expected empty convoyEpicID for non-epic, got %q", got.convoyEpicID)
+	}
+	if len(got.convoyIssueIDs) != 1 || got.convoyIssueIDs[0] != "open-1" {
+		t.Fatalf("expected convoyIssueIDs = [open-1], got %v", got.convoyIssueIDs)
+	}
+}
