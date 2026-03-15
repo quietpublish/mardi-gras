@@ -108,6 +108,7 @@ type Model struct {
 	convoyCreating bool
 	convoyInput    textinput.Model
 	convoyIssueIDs []string
+	convoyEpicID   string // non-empty when creating from an epic
 
 	// Mail reply state
 	mailReplying   bool
@@ -704,14 +705,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc":
 				m.convoyCreating = false
 				m.convoyIssueIDs = nil
+				m.convoyEpicID = ""
 				return m, nil
 			case "enter":
 				m.convoyCreating = false
 				name := m.convoyInput.Value()
 				ids := m.convoyIssueIDs
+				epicID := m.convoyEpicID
 				m.convoyIssueIDs = nil
+				m.convoyEpicID = ""
 				if name == "" {
 					return m, nil
+				}
+				if epicID != "" {
+					return m, func() tea.Msg {
+						_, err := gastown.ConvoyCreateFromEpic(name, epicID)
+						return convoyCreateResultMsg{name: name, err: err}
+					}
 				}
 				return m, func() tea.Msg {
 					_, err := gastown.ConvoyCreate(name, ids)
@@ -1602,6 +1612,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		var ids []string
+		var epicID string
 		if selected := m.parade.SelectedIssues(); len(selected) > 0 {
 			ids = make([]string, len(selected))
 			for i, iss := range selected {
@@ -1609,16 +1620,25 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			m.parade.ClearSelection()
 		} else if m.parade.SelectedIssue != nil {
-			ids = []string{m.parade.SelectedIssue.ID}
+			if m.parade.SelectedIssue.IssueType == data.TypeEpic {
+				epicID = m.parade.SelectedIssue.ID
+			} else {
+				ids = []string{m.parade.SelectedIssue.ID}
+			}
 		}
-		if len(ids) == 0 {
+		if len(ids) == 0 && epicID == "" {
 			return m, nil
 		}
 		m.convoyCreating = true
 		m.convoyIssueIDs = ids
+		m.convoyEpicID = epicID
 		m.convoyInput = textinput.New()
 		m.convoyInput.Prompt = ui.InputPrompt.Render("convoy> ")
-		m.convoyInput.Placeholder = fmt.Sprintf("Name for convoy (%d issues)...", len(ids))
+		if epicID != "" {
+			m.convoyInput.Placeholder = fmt.Sprintf("Name for convoy (from epic %s)...", epicID)
+		} else {
+			m.convoyInput.Placeholder = fmt.Sprintf("Name for convoy (%d issues)...", len(ids))
+		}
 		m.convoyInput.SetWidth(50)
 		m.convoyInput.Focus()
 		return m, textinput.Blink

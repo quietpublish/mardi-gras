@@ -70,6 +70,15 @@ func ConvoyCreate(name string, issueIDs []string) (string, error) {
 	return string(out), nil
 }
 
+// ConvoyCreateFromEpic creates a new convoy populated from an epic's child issues.
+func ConvoyCreateFromEpic(name, epicID string) (string, error) {
+	out, err := runCombinedWithTimeout(timeoutShort, "gt", "convoy", "create", name, "--from-epic", epicID)
+	if err != nil {
+		return "", fmt.Errorf("gt convoy create --from-epic: %w (%s)", err, string(out))
+	}
+	return string(out), nil
+}
+
 // ConvoyAdd adds issues to an existing convoy.
 func ConvoyAdd(convoyID string, issueIDs []string) error {
 	args := []string{"convoy", "add", convoyID}

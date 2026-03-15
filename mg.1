@@ -49,6 +49,18 @@ tmux status line, then exit.
 .TP
 .B \-\-version
 Print the version and exit.
+.TP
+.B \-\-no\-animations
+Disable confetti and header shimmer animations.
+Useful over SSH or low\-bandwidth connections.
+Can also be set via
+.BR MG_NO_ANIMATIONS=1 .
+.TP
+.BI \-\-cmd\-timeout " seconds"
+Scale all external command timeouts (default 30, max 300).
+Higher values help on slow connections.
+Can also be set via
+.BR MG_CMD_TIMEOUT .
 .SH KEYBINDINGS
 .SS Navigation
 .TP
@@ -183,6 +195,18 @@ Comma\-separated dependency types that count as blockers. Overridden by
 .BR \-\-block\-types .
 Default:
 .BR blocks .
+.TP
+.B MG_NO_ANIMATIONS
+When set to
+.BR 1 ,
+disables confetti and header shimmer animations.
+Equivalent to
+.BR \-\-no\-animations .
+.TP
+.B MG_CMD_TIMEOUT
+Integer seconds to scale all external command timeouts (max 300).
+Equivalent to
+.BR \-\-cmd\-timeout .
 .TP
 .B TMUX
 When set (and

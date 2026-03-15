@@ -3,8 +3,8 @@
 [![CI](https://github.com/quietpublish/mardi-gras/actions/workflows/ci.yml/badge.svg)](https://github.com/quietpublish/mardi-gras/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/tag/quietpublish/mardi-gras?label=release)](https://github.com/quietpublish/mardi-gras/releases/latest)
 [![Go](https://img.shields.io/github/go-mod/go-version/quietpublish/mardi-gras)](https://go.dev/)
-[![Beads](https://img.shields.io/badge/Beads-%E2%89%A5%20v0.58-blueviolet)](https://github.com/steveyegge/beads)
-[![Gas Town](https://img.shields.io/badge/Gas%20Town-%E2%89%A5%20v0.11-blue)](https://github.com/steveyegge/gastown)
+[![Beads](https://img.shields.io/badge/Beads-%E2%89%A5%20v0.60-blueviolet)](https://github.com/steveyegge/beads)
+[![Gas Town](https://img.shields.io/badge/Gas%20Town-%E2%89%A5%20v0.12-blue)](https://github.com/steveyegge/gastown)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Your Beads issues deserve a parade — not a spreadsheet.**
@@ -83,6 +83,14 @@ mg --block-types blocks,conditional-blocks,discovered-from
 # or via environment variable
 MG_BLOCK_TYPES=blocks,conditional-blocks,parent-child mg
 
+# Disable animations (useful over SSH)
+mg --no-animations
+# or via environment variable
+MG_NO_ANIMATIONS=1 mg
+
+# Scale command timeouts for slow connections (default 30s, max 300s)
+mg --cmd-timeout 60
+
 # Check version
 mg --version
 
@@ -92,7 +100,7 @@ MG_DEBUG=1 mg
 
 Mardi Gras auto-detects your data source — no daemon, no config file. It supports two modes:
 
-- **CLI mode** (preferred): uses `bd list --json` when `bd` is on PATH (Beads v0.56+; v0.59.1+ recommended for structured error handling)
+- **CLI mode** (preferred): uses `bd list --json` when `bd` is on PATH (Beads v0.60+)
 - **JSONL mode** (legacy): reads `.beads/issues.jsonl` directly (walks up directories to find it)
 
 Both modes poll for changes automatically, so if an agent updates an issue while you're watching, the parade reshuffles in real time. The `--path` flag forces JSONL mode for a specific file. The default blocking types are `blocks` and `conditional-blocks`.
@@ -105,7 +113,7 @@ Mardi Gras polls for changes on a short interval. No OS-specific file watchers. 
 - **JSONL mode**: polls file modtime every 1.2 seconds (legacy)
 - External edits (agents, scripts, `bd` commands) are picked up automatically
 - Current view state is preserved on refresh (selection, closed section toggle, active filter query)
-- The footer shows your data source and how fresh it is
+- The footer shows your data source, refresh age, and workspace identity (database/backend from `bd context`)
 
 ## Keybindings
 
@@ -322,7 +330,7 @@ Press `ctrl+g` to replace the detail pane with the Gas Town dashboard. It has th
 
 **Agent Roster** — all agents across rigs with role badges, state (working/idle/backoff), current work assignment, and unread mail count. From here you can nudge (`n`), handoff (`h`), or decommission (`K`) agents.
 
-**Convoys** — delivery batches shown as progress bars with status badges, progress percentage, ready/active counts, and assignees (Gas Town v0.11+). Expand a convoy with `enter` to see its issues, then land (`l`) or close (`x`) it. Create new convoys from multi-selected issues with `C`.
+**Convoys** — delivery batches shown as progress bars with status badges, progress percentage, ready/active counts, and assignees. Expand a convoy with `enter` to see its issues, then land (`l`) or close (`x`) it. Create new convoys from multi-selected issues with `C`, or press `C` on an epic to auto-populate a convoy from its child issues.
 
 **Mail** — inbox showing messages between agents. Expand a message with `enter`, reply with `r`, compose a new message with `w`, or archive with `d`.
 
