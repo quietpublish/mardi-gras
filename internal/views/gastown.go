@@ -692,7 +692,10 @@ func (g *GasTown) renderAgentRoster(width int) string {
 			name = name[:nameW-1] + "…"
 		}
 		nameStr := nameStyle.Render(fmt.Sprintf("%-*s", nameW, name))
-		if a.AgentInfo != "" {
+		switch {
+		case a.AgentAlias != "" && a.AgentInfo != "":
+			nameStr += lipgloss.NewStyle().Foreground(ui.Dim).Render("["+a.AgentAlias+"]") + " "
+		case a.AgentInfo != "":
 			nameStr += lipgloss.NewStyle().Foreground(ui.Dim).Render("["+a.AgentInfo+"]") + " "
 		}
 
