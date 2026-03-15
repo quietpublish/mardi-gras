@@ -128,6 +128,7 @@ Press `?` from anywhere to open the full help overlay.
 | `?`          | Toggle help overlay        |
 | `: / Ctrl+K` | Open command palette      |
 | `p`          | Toggle problems view (gt)  |
+| `D`          | Toggle doctor diagnostics overlay |
 
 ### Parade
 
@@ -151,6 +152,11 @@ Press `?` from anywhere to open the full help overlay.
 | `b`           | Copy branch name to clipboard            |
 | `B`           | Create + checkout git branch             |
 | `N`           | Create new issue                         |
+| `e`           | Edit selected issue (title, priority)    |
+| `r`           | Add comment to selected issue            |
+| `y`           | Assign selected issue                    |
+| `t`           | Add label to selected issue              |
+| `l`           | Add dependency link                      |
 
 ### Multi-select
 
@@ -213,7 +219,7 @@ Press `/` and the bottom bar becomes a query input.
 
 Supported query forms:
 
-- Free text: `deploy auth` (matches issue ID and title)
+- Free text: `deploy auth` (matches ID, title, description, assignee, owner, notes, and labels)
 - Type token: `type:bug`, `type:feature`, `type:task`, `type:chore`, `type:epic`
 - Priority shorthand: `p0` to `p4`
 - Priority token: `priority:0` to `priority:4`, or `priority:critical|high|medium|low|backlog`
@@ -240,7 +246,7 @@ Every Beads issue maps to a spot on the parade route:
 
 Closed issues are collapsed by default (because in any real project, 90%+ of your issues are closed). Press `c` to expand them.
 
-Stalled issues show a "next blocker" hint so you can see at a glance what's holding things up. The detail panel breaks dependencies into four categories: waiting on (active blockers), missing (dangling references), resolved (closed blockers), and related (non-blocking dependency types).
+Stalled issues show a "next blocker" hint so you can see at a glance what's holding things up. Issues with dead agent sessions show a ☠ zombie indicator. Issues on dead rigs show a 💀 orphan indicator. The detail panel breaks dependencies into four categories: waiting on (active blockers), missing (dangling references), resolved (closed blockers), and related (non-blocking dependency types).
 
 ## Detail Panel
 
@@ -250,6 +256,7 @@ Press `enter` on any issue to focus the detail pane. It shows everything about t
 - **Rich fields** — notes, design, and acceptance criteria fetched on demand via `bd show --long`
 - **Dependencies** — nine types (blocks, conditional-blocks, blocked-by, related, duplicates, supersedes, parent-child, discovered-from, depends-on) grouped by status: waiting, missing, resolved, and non-blocking
 - **Comments & Timeline** — full conversation history with timestamps
+- **Agent Output** — live tail of the active agent's tmux pane (last 15 lines, ANSI stripped)
 - **Molecule DAG** — multi-step workflows rendered as a visual flow graph with parallel branching (`┌─ ├─ └─`) and connector lines between tiers
 - **HOP Quality** — reputation stars, crystal/ephemeral badges, and validator verdicts for agent-produced work
 
@@ -351,7 +358,7 @@ The Gas Town panel includes several data views below the interactive sections:
 - **Cost Dashboard** — session counts, token usage, and cost breakdown per agent and time window
 - **Vitals** — Dolt server health (port, PID, disk, connections, latency) and backup freshness from `gt vitals`
 - **Activity Feed** — real-time event ticker showing slings, nudges, handoffs, session starts/deaths, and spawns
-- **Velocity** — issue flow rates (created/closed today and this week), agent utilization percentage, and cost summary
+- **Velocity** — issue flow rates (created/closed today and this week), agent utilization percentage, cost summary, and a 7-day dual sparkline showing created vs closed trends
 - **Scorecards** — HOP-powered agent quality ratings aggregated across recent work
 - **Predictions** — convoy completion ETAs based on historical throughput
 
@@ -368,7 +375,7 @@ Press `p` to toggle the problems view overlay. It combines two sources of diagno
 
 Dead-rig detection groups all orphaned agents under a single problem instead of emitting individual zombie alerts, reducing alarm fatigue when an entire rig is down.
 
-**Doctor diagnostics** — from `bd doctor --agent` at startup:
+**Doctor diagnostics** — from `bd doctor --agent` at startup (also available on-demand via `D`):
 - Core system health (Dolt server, config, hooks)
 - Git integration issues
 - Suggested fix commands for each finding
