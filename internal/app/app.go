@@ -2698,6 +2698,8 @@ func (m *Model) propagateAgentState() {
 
 	// Build orphaned issue ID set from dead rigs
 	m.parade.OrphanedIDs = buildOrphanedIDs(m.townStatus)
+	// Build zombie issue ID set (dead sessions, not full dead rigs)
+	m.parade.ZombieIDs = buildZombieIDs(m.townStatus, m.parade.OrphanedIDs)
 
 	if m.detail.Issue != nil {
 		m.detail.SetIssue(m.detail.Issue)
@@ -2714,6 +2716,29 @@ func buildOrphanedIDs(status *gastown.TownStatus) map[string]bool {
 	for _, rig := range deadRigs {
 		for _, o := range gastown.FindOrphans(status, rig) {
 			ids[o.IssueID] = true
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	return ids
+}
+
+// buildZombieIDs returns a set of issue IDs where the assigned agent's session is dead
+// but the hook is still active. These are individual zombie polecats, distinct from
+// full dead-rig orphans (which are handled separately by buildOrphanedIDs).
+func buildZombieIDs(status *gastown.TownStatus, orphanedIDs map[string]bool) map[string]bool {
+	if status == nil {
+		return nil
+	}
+	ids := make(map[string]bool)
+	for _, a := range status.Agents {
+		if a.HookBead != "" && !a.Running {
+			// Skip issues already covered by dead-rig detection
+			if orphanedIDs != nil && orphanedIDs[a.HookBead] {
+				continue
+			}
+			ids[a.HookBead] = true
 		}
 	}
 	if len(ids) == 0 {

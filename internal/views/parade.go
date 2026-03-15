@@ -59,6 +59,7 @@ type Parade struct {
 	TownStatus      *gastown.TownStatus
 	ChangedIDs      map[string]bool  // recently changed issues (change indicator dot)
 	OrphanedIDs     map[string]bool  // orphaned issues from dead rigs
+	ZombieIDs       map[string]bool  // issues with dead agent sessions (zombie polecats)
 	Selected        map[string]bool  // multi-selected issue IDs
 	MatchHighlights map[string][]int // issueID -> matched char indices in title (fuzzy search)
 }
@@ -422,6 +423,14 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 		orphanWidth = 2
 	}
 
+	// Zombie indicator (dead agent session, not a full dead rig)
+	zombiePrefix := ""
+	zombieWidth := 0
+	if p.ZombieIDs != nil && p.ZombieIDs[issue.ID] && orphanWidth == 0 {
+		zombiePrefix = lipgloss.NewStyle().Foreground(ui.StatusStalled).Render(ui.SymZombie) + " "
+		zombieWidth = 2
+	}
+
 	// Agent badge prefix
 	agentPrefix := ""
 	agentWidth := 0
@@ -498,7 +507,7 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 	innerWidth := p.Width - 4 // │ + space + content + space + │
 
 	// First, constrain the hint length if the terminal is very narrow
-	maxHint := innerWidth - 16 - agentWidth - indentWidth - dueWidth - deferWidth - orphanWidth
+	maxHint := innerWidth - 16 - agentWidth - indentWidth - dueWidth - deferWidth - orphanWidth - zombieWidth
 	if maxHint < 0 {
 		maxHint = 0
 	}
@@ -515,7 +524,7 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 	}
 
 	hintLen := lipgloss.Width(hint)
-	maxTitle := innerWidth - 16 - hintLen - agentWidth - changeWidth - selectWidth - indentWidth - dueWidth - deferWidth - qualityWidth - orphanWidth
+	maxTitle := innerWidth - 16 - hintLen - agentWidth - changeWidth - selectWidth - indentWidth - dueWidth - deferWidth - qualityWidth - orphanWidth - zombieWidth
 	if maxTitle < 0 {
 		maxTitle = 0
 	}
@@ -538,12 +547,13 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 	agePct := min(ageDays*100/30, 100) // 30 days = fully stale
 	idStyle := ui.GradientHeat.At(agePct)
 
-	line := fmt.Sprintf("%s%s %s%s%s%s%s %s %s",
+	line := fmt.Sprintf("%s%s %s%s%s%s%s%s %s %s",
 		indent,
 		symStyle.Render(sym),
 		selectPrefix,
 		changePrefix,
 		orphanPrefix,
+		zombiePrefix,
 		agentPrefix,
 		idStyle.Render(issue.ID),
 		renderedTitle,

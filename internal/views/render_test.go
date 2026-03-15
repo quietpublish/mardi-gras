@@ -318,6 +318,53 @@ func TestRenderIssueNoOrphanBadge(t *testing.T) {
 	}
 }
 
+func TestRenderIssueZombieBadge(t *testing.T) {
+	issues := []data.Issue{
+		testIssue("zomb-1", data.StatusInProgress),
+	}
+	p := NewParade(issues, 80, 20, data.DefaultBlockingTypes)
+	p.ZombieIDs = map[string]bool{"zomb-1": true}
+
+	var item ParadeItem
+	for _, it := range p.Items {
+		if it.Issue != nil {
+			item = it
+			break
+		}
+	}
+	if item.Issue == nil {
+		t.Fatal("no selectable item found")
+	}
+
+	out := p.renderIssue(item, false, 0)
+	if !strings.Contains(out, ui.SymZombie) {
+		t.Fatalf("renderIssue with ZombieIDs should contain zombie symbol, got: %s", out)
+	}
+}
+
+func TestRenderIssueNoZombieBadge(t *testing.T) {
+	issues := []data.Issue{
+		testIssue("alive-1", data.StatusInProgress),
+	}
+	p := NewParade(issues, 80, 20, data.DefaultBlockingTypes)
+
+	var item ParadeItem
+	for _, it := range p.Items {
+		if it.Issue != nil {
+			item = it
+			break
+		}
+	}
+	if item.Issue == nil {
+		t.Fatal("no selectable item found")
+	}
+
+	out := p.renderIssue(item, false, 0)
+	if strings.Contains(out, ui.SymZombie) {
+		t.Fatalf("renderIssue without ZombieIDs should not contain zombie symbol")
+	}
+}
+
 func TestDetailViewNilIssue(t *testing.T) {
 	d := Detail{Width: 60, Height: 20}
 	d.Viewport = viewport.New(viewport.WithWidth(58), viewport.WithHeight(20))
