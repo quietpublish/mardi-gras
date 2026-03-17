@@ -2,6 +2,11 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.12.1 (2026-03-16)
+
+### Added
+- **Propelled agent state** — Gas Town v0.12.1 adds a `propelled` state for agents under ACP propulsion. Renders with dark turquoise color and ⚡ symbol in the agent roster.
+
 ## v0.12.0 (2026-03-15)
 
 ### Added
