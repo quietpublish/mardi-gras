@@ -2,7 +2,7 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
-## v0.13.0 (unreleased)
+## v0.13.0 (2026-03-17)
 
 ### Added
 - **CODE_OF_CONDUCT.md** — Contributor Covenant v2.1.
