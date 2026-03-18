@@ -94,8 +94,8 @@ func TestNudgeWithMessage(t *testing.T) {
 		t.Fatalf("Nudge() error = %v", err)
 	}
 	args := (*calls)[0]
-	// Should be: gt nudge polecat-nux wake up
-	if len(args) != 4 || args[1] != "nudge" || args[2] != "polecat-nux" || args[3] != "wake up" {
+	// Should be: gt nudge polecat-nux -- wake up
+	if len(args) != 5 || args[1] != "nudge" || args[2] != "polecat-nux" || args[3] != "--" || args[4] != "wake up" {
 		t.Errorf("args = %v", args)
 	}
 }

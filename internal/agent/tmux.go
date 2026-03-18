@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // InTmux returns true if the current process is running inside a tmux session.
@@ -151,27 +153,10 @@ func sanitizeCaptureOutput(raw string, maxLines int) []string {
 }
 
 // stripANSI removes ANSI escape sequences from a string.
+// Uses charmbracelet/x/ansi which handles all sequence types (CSI, OSC, DCS, etc.),
+// not just CSI sequences.
 func stripANSI(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	i := 0
-	for i < len(s) {
-		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
-			// Skip until we find a letter (the terminator)
-			j := i + 2
-			for j < len(s) && (s[j] < 'A' || s[j] > 'Z') && (s[j] < 'a' || s[j] > 'z') {
-				j++
-			}
-			if j < len(s) {
-				j++ // skip the terminator letter
-			}
-			i = j
-			continue
-		}
-		b.WriteByte(s[i])
-		i++
-	}
-	return b.String()
+	return ansi.Strip(s)
 }
 
 // SelectAgentWindow switches focus to the tmux pane for the given issue.

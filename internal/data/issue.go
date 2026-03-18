@@ -1,3 +1,5 @@
+// Package data defines Beads issue types and provides data loading (JSONL and
+// CLI), filtering, sorting, mutations, focus mode, and dependency evaluation.
 package data
 
 import (

@@ -1,3 +1,6 @@
+// Package app provides the root BubbleTea model for Mardi Gras. It handles
+// message routing, keyboard input, and view composition, orchestrating all
+// views and components into a unified TUI.
 package app
 
 import (

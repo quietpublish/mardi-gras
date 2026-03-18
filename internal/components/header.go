@@ -1,3 +1,6 @@
+// Package components provides reusable UI elements including the header,
+// footer, help overlay, command palette, toast notifications, issue
+// create/edit forms, and recovery dialog.
 package components
 
 import (

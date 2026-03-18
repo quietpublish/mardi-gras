@@ -1,3 +1,6 @@
+// Package ui defines the Mardi Gras design system: color palette, role and
+// state colors, lipgloss styles, unicode symbols, gradients, and sparkline
+// renderers. It contains no business logic.
 package ui
 
 import (

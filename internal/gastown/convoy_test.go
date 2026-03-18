@@ -121,8 +121,8 @@ func TestConvoyAddArgs(t *testing.T) {
 		t.Fatalf("expected 1 call, got %d", len(*calls))
 	}
 	args := (*calls)[0]
-	// Should be: gt convoy add conv-001 mg-20 mg-21
-	if len(args) != 6 || args[4] != "mg-20" || args[5] != "mg-21" {
+	// Should be: gt convoy add -- conv-001 mg-20 mg-21
+	if len(args) != 7 || args[3] != "--" || args[4] != "conv-001" || args[5] != "mg-20" || args[6] != "mg-21" {
 		t.Errorf("args = %v", args)
 	}
 }
@@ -135,8 +135,8 @@ func TestConvoyCloseArgs(t *testing.T) {
 		t.Fatalf("ConvoyClose() error = %v", err)
 	}
 	args := (*calls)[0]
-	// Should be: gt convoy close conv-001
-	if len(args) != 4 || args[2] != "close" || args[3] != "conv-001" {
+	// Should be: gt convoy close -- conv-001
+	if len(args) != 5 || args[2] != "close" || args[3] != "--" || args[4] != "conv-001" {
 		t.Errorf("args = %v", args)
 	}
 }
@@ -149,8 +149,8 @@ func TestConvoyLandArgs(t *testing.T) {
 		t.Fatalf("ConvoyLand() error = %v", err)
 	}
 	args := (*calls)[0]
-	// Should be: gt convoy land conv-001
-	if len(args) != 4 || args[2] != "land" || args[3] != "conv-001" {
+	// Should be: gt convoy land -- conv-001
+	if len(args) != 5 || args[2] != "land" || args[3] != "--" || args[4] != "conv-001" {
 		t.Errorf("args = %v", args)
 	}
 }

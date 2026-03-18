@@ -40,7 +40,7 @@ func MailInbox(unreadOnly bool) ([]MailMessage, error) {
 
 // MailRead fetches a single message by ID via `gt mail read <id> --json`.
 func MailRead(messageID string) (*MailMessage, error) {
-	out, err := runWithTimeout(timeoutShort, "gt", "mail", "read", messageID, "--json")
+	out, err := runWithTimeout(timeoutShort, "gt", "mail", "read", "--json", "--", messageID)
 	if err != nil {
 		return nil, fmt.Errorf("gt mail read: %w", err)
 	}
@@ -53,7 +53,7 @@ func MailRead(messageID string) (*MailMessage, error) {
 
 // MailReply replies to a message via `gt mail reply <id> -m <body>`.
 func MailReply(messageID, body string) error {
-	out, err := runCombinedWithTimeout(timeoutShort, "gt", "mail", "reply", messageID, "-m", body)
+	out, err := runCombinedWithTimeout(timeoutShort, "gt", "mail", "reply", "-m", body, "--", messageID)
 	if err != nil {
 		return fmt.Errorf("gt mail reply: %w (%s)", err, string(out))
 	}
@@ -62,7 +62,7 @@ func MailReply(messageID, body string) error {
 
 // MailSend sends a new message via `gt mail send <address> -s <subject> -m <body>`.
 func MailSend(address, subject, body string) error {
-	out, err := runCombinedWithTimeout(timeoutShort, "gt", "mail", "send", address, "-s", subject, "-m", body)
+	out, err := runCombinedWithTimeout(timeoutShort, "gt", "mail", "send", "-s", subject, "-m", body, "--", address)
 	if err != nil {
 		return fmt.Errorf("gt mail send: %w (%s)", err, string(out))
 	}
@@ -71,7 +71,7 @@ func MailSend(address, subject, body string) error {
 
 // MailArchive archives a message via `gt mail archive <id>`.
 func MailArchive(messageID string) error {
-	out, err := runCombinedWithTimeout(timeoutShort, "gt", "mail", "archive", messageID)
+	out, err := runCombinedWithTimeout(timeoutShort, "gt", "mail", "archive", "--", messageID)
 	if err != nil {
 		return fmt.Errorf("gt mail archive: %w (%s)", err, string(out))
 	}
@@ -80,7 +80,7 @@ func MailArchive(messageID string) error {
 
 // MailMarkRead marks a message as read via `gt mail mark-read <id>`.
 func MailMarkRead(messageID string) error {
-	out, err := runCombinedWithTimeout(timeoutShort, "gt", "mail", "mark-read", messageID)
+	out, err := runCombinedWithTimeout(timeoutShort, "gt", "mail", "mark-read", "--", messageID)
 	if err != nil {
 		return fmt.Errorf("gt mail mark-read: %w (%s)", err, string(out))
 	}

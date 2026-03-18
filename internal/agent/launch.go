@@ -1,3 +1,5 @@
+// Package agent handles AI agent runtime detection and launch. It supports
+// Claude Code and Cursor, with tmux window dispatch for multi-agent sessions.
 package agent
 
 import (

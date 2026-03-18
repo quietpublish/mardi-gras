@@ -47,7 +47,7 @@ func ConvoyList() ([]ConvoyDetail, error) {
 
 // ConvoyStatus fetches detailed status for a single convoy.
 func ConvoyStatus(convoyID string) (*ConvoyDetail, error) {
-	out, err := runWithTimeout(timeoutMedium, "gt", "convoy", "status", convoyID, "--json")
+	out, err := runWithTimeout(timeoutMedium, "gt", "convoy", "status", "--json", "--", convoyID)
 	if err != nil {
 		return nil, fmt.Errorf("gt convoy status: %w", err)
 	}
@@ -61,7 +61,7 @@ func ConvoyStatus(convoyID string) (*ConvoyDetail, error) {
 // ConvoyCreate creates a new convoy tracking the given issues.
 // Returns the new convoy ID.
 func ConvoyCreate(name string, issueIDs []string) (string, error) {
-	args := []string{"convoy", "create", name}
+	args := []string{"convoy", "create", "--", name}
 	args = append(args, issueIDs...)
 	out, err := runCombinedWithTimeout(timeoutShort, "gt", args...)
 	if err != nil {
@@ -81,7 +81,7 @@ func ConvoyCreateFromEpic(name, epicID string) (string, error) {
 
 // ConvoyAdd adds issues to an existing convoy.
 func ConvoyAdd(convoyID string, issueIDs []string) error {
-	args := []string{"convoy", "add", convoyID}
+	args := []string{"convoy", "add", "--", convoyID}
 	args = append(args, issueIDs...)
 	out, err := runCombinedWithTimeout(timeoutShort, "gt", args...)
 	if err != nil {
@@ -92,7 +92,7 @@ func ConvoyAdd(convoyID string, issueIDs []string) error {
 
 // ConvoyClose closes a convoy.
 func ConvoyClose(convoyID string) error {
-	out, err := runCombinedWithTimeout(timeoutShort, "gt", "convoy", "close", convoyID)
+	out, err := runCombinedWithTimeout(timeoutShort, "gt", "convoy", "close", "--", convoyID)
 	if err != nil {
 		return fmt.Errorf("gt convoy close: %w (%s)", err, string(out))
 	}
@@ -101,7 +101,7 @@ func ConvoyClose(convoyID string) error {
 
 // ConvoyLand lands an owned convoy (cleanup worktrees + close).
 func ConvoyLand(convoyID string) error {
-	out, err := runCombinedWithTimeout(timeoutShort, "gt", "convoy", "land", convoyID)
+	out, err := runCombinedWithTimeout(timeoutShort, "gt", "convoy", "land", "--", convoyID)
 	if err != nil {
 		return fmt.Errorf("gt convoy land: %w (%s)", err, string(out))
 	}

@@ -1,13 +1,23 @@
 version: "2"
 linters:
   enable:
+    - errcheck
     - gocritic
+    - gosec
     - misspell
+    - staticcheck
+    - unused
   settings:
     gocritic:
       enabled-tags:
         - diagnostic
         - style
+    gosec:
+      excludes:
+        - G115 # safe small-integer conversions (rune/byte)
+        - G306 # 0o644 permissions acceptable for non-secret files
+        - G404 # math/rand fine for non-crypto use (confetti animation)
+        - G703 # path traversal false positive on trusted CLI input
   exclusions:
     generated: lax
     presets:

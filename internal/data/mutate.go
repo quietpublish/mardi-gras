@@ -47,9 +47,9 @@ func UpdateTitle(issueID, title string) error {
 	return execWithTimeout(timeoutShort, "bd", "update", issueID, "--title="+title)
 }
 
-// AddComment runs `bd comments add <id> <body>` to add a comment to an issue.
+// AddComment runs `bd comments add <id> -- <body>` to add a comment to an issue.
 func AddComment(issueID, body string) error {
-	_, err := runWithTimeout(timeoutShort, "bd", "comments", "add", issueID, body)
+	_, err := runWithTimeout(timeoutShort, "bd", "comments", "add", issueID, "--", body)
 	return wrapExitError("bd comments add", err)
 }
 
@@ -58,14 +58,14 @@ func SetAssignee(issueID, assignee string) error {
 	return execWithTimeout(timeoutShort, "bd", "update", issueID, "--assignee="+assignee)
 }
 
-// AddLabel runs `bd label add <id> <label>` to add a label to an issue.
+// AddLabel runs `bd label add <id> -- <label>` to add a label to an issue.
 func AddLabel(issueID, label string) error {
-	return execWithTimeout(timeoutShort, "bd", "label", "add", issueID, label)
+	return execWithTimeout(timeoutShort, "bd", "label", "add", issueID, "--", label)
 }
 
-// AddDependency runs `bd dep add <id> <depends-on-id>` to add a blocking dependency.
+// AddDependency runs `bd dep add <id> -- <depends-on-id>` to add a blocking dependency.
 func AddDependency(issueID, dependsOnID string) error {
-	return execWithTimeout(timeoutShort, "bd", "dep", "add", issueID, dependsOnID)
+	return execWithTimeout(timeoutShort, "bd", "dep", "add", issueID, "--", dependsOnID)
 }
 
 // BranchName generates a git branch name from an issue.

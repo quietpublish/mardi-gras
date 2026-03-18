@@ -1,3 +1,5 @@
+// Package views provides the main TUI panels: the parade list, issue detail
+// panel, Gas Town dashboard, and problems overlay.
 package views
 
 import (

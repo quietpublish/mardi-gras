@@ -1,3 +1,7 @@
+// Package gastown integrates with the Gas Town multi-agent orchestrator.
+// It provides environment detection, status parsing, agent dispatch
+// (sling/nudge), convoy management, mail, molecule DAG layout, analytics,
+// vitals monitoring, and problem detection.
 package gastown
 
 import (

@@ -125,6 +125,7 @@ func issuePrefixFromDatabase(name string) string {
 
 // ResolveBeadsDir follows a redirect file if present.
 // .beads/redirect contains a relative path to the actual beads directory.
+// Rejects targets containing ".." path components to prevent directory traversal.
 func ResolveBeadsDir(beadsDir string) string {
 	redirectPath := filepath.Join(beadsDir, "redirect")
 	content, err := os.ReadFile(redirectPath)
@@ -137,7 +138,17 @@ func ResolveBeadsDir(beadsDir string) string {
 		return beadsDir
 	}
 
-	resolved := filepath.Join(beadsDir, target)
+	resolved := filepath.Clean(filepath.Join(beadsDir, target))
+
+	// Reject directory traversal: the resolved path must stay within
+	// the project root (the parent of beadsDir). This allows redirects
+	// like "../actual-beads" (sibling of .beads) but blocks escaping
+	// above the project root.
+	projectRoot := filepath.Dir(beadsDir)
+	if !strings.HasPrefix(resolved, projectRoot+string(filepath.Separator)) && resolved != projectRoot {
+		return beadsDir
+	}
+
 	if info, err := os.Stat(resolved); err == nil && info.IsDir() {
 		return resolved
 	}

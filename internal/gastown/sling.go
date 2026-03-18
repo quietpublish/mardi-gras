@@ -64,7 +64,7 @@ func SlingMultipleWithFormula(issueIDs []string, formula string) error {
 func Nudge(target, message string) error {
 	args := []string{"nudge", target}
 	if message != "" {
-		args = append(args, message)
+		args = append(args, "--", message)
 	}
 	return execWithTimeout(timeoutShort, "gt", args...)
 }

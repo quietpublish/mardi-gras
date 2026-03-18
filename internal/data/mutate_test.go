@@ -156,8 +156,8 @@ func TestAddCommentArgs(t *testing.T) {
 		t.Fatalf("AddComment() error = %v", err)
 	}
 	args := (*calls)[0]
-	// Should be: bd comments add mg-42 "Fixed the auth bug"
-	if len(args) != 5 || args[0] != "bd" || args[1] != "comments" || args[2] != "add" || args[3] != "mg-42" || args[4] != "Fixed the auth bug" {
+	// Should be: bd comments add mg-42 -- "Fixed the auth bug"
+	if len(args) != 6 || args[0] != "bd" || args[1] != "comments" || args[2] != "add" || args[3] != "mg-42" || args[4] != "--" || args[5] != "Fixed the auth bug" {
 		t.Errorf("args = %v", args)
 	}
 }
@@ -205,8 +205,8 @@ func TestAddLabelArgs(t *testing.T) {
 		t.Fatalf("AddLabel() error = %v", err)
 	}
 	args := (*calls)[0]
-	// Should be: bd label add mg-42 backend
-	if len(args) != 5 || args[0] != "bd" || args[1] != "label" || args[2] != "add" || args[3] != "mg-42" || args[4] != "backend" {
+	// Should be: bd label add mg-42 -- backend
+	if len(args) != 6 || args[0] != "bd" || args[1] != "label" || args[2] != "add" || args[3] != "mg-42" || args[4] != "--" || args[5] != "backend" {
 		t.Errorf("args = %v", args)
 	}
 }
@@ -230,8 +230,8 @@ func TestAddDependencyArgs(t *testing.T) {
 		t.Fatalf("AddDependency() error = %v", err)
 	}
 	args := (*calls)[0]
-	// Should be: bd dep add mg-42 mg-10
-	if len(args) != 5 || args[0] != "bd" || args[1] != "dep" || args[2] != "add" || args[3] != "mg-42" || args[4] != "mg-10" {
+	// Should be: bd dep add mg-42 -- mg-10
+	if len(args) != 6 || args[0] != "bd" || args[1] != "dep" || args[2] != "add" || args[3] != "mg-42" || args[4] != "--" || args[5] != "mg-10" {
 		t.Errorf("args = %v", args)
 	}
 }

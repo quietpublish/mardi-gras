@@ -1,3 +1,6 @@
+// Package main is the entry point for the Mardi Gras (mg) TUI. It parses
+// command-line flags, resolves Beads data sources, and launches the
+// BubbleTea program.
 package main
 
 import (
@@ -181,10 +184,11 @@ func bdOnPath() bool {
 //	neither → empty Source (caller should exit with error)
 func resolveSource(cwd, pathFlag string) data.Source {
 	if pathFlag != "" {
+		cleanPath := filepath.Clean(pathFlag)
 		return data.Source{
 			Mode:       data.SourceJSONL,
-			Path:       pathFlag,
-			ProjectDir: filepath.Dir(filepath.Dir(pathFlag)),
+			Path:       cleanPath,
+			ProjectDir: filepath.Dir(filepath.Dir(cleanPath)),
 			Explicit:   true,
 		}
 	}

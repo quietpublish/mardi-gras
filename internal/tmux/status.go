@@ -1,3 +1,5 @@
+// Package tmux provides a status bar widget that renders parade issue counts
+// in tmux-compatible color format.
 package tmux
 
 import (
