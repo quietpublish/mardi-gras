@@ -2,6 +2,34 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.13.0 (unreleased)
+
+### Added
+- **CODE_OF_CONDUCT.md** — Contributor Covenant v2.1.
+- **SECURITY.md** — vulnerability reporting policy with scope, response timeline, and credit.
+- **Dependabot** — automated weekly updates for Go modules and GitHub Actions.
+- **GitHub issue templates** — structured bug report and feature request forms.
+- **Pull request template** — checklist for tests, lint, changelog, and screenshots.
+- **`.editorconfig`** — cross-editor formatting standards for Go, YAML, Markdown, and Makefile.
+- **`.gitattributes`** — line ending normalization and binary file markers.
+- **macOS CI job** — test suite now runs on both Linux and macOS.
+- **Codecov integration** — coverage uploads on push to main with badge in README.
+- **Man page via Homebrew** — `man mg` now works after `brew install`.
+
+### Security
+- **CLI argument hardening** — added `--` separator before user-supplied positional args in mail, convoy, sling, and mutate commands to prevent flag injection.
+- **ANSI stripping upgrade** — replaced hand-rolled CSI-only regex with `charmbracelet/x/ansi.Strip()` for full escape sequence coverage (OSC, DCS, APC).
+- **Path traversal guard** — `.beads/redirect` resolution now rejects paths containing `..` components.
+- **`--path` flag sanitization** — applies `filepath.Clean` before use.
+- **govulncheck in CI** — dependency vulnerability scanning on every push and PR.
+- **Debug log permissions** — restricted from 0644 to 0600.
+- **Error message sanitization** — raw stderr in toast notifications truncated to first line (max 200 chars) to avoid leaking internal paths.
+- **`.gitignore` hardening** — added `.env`, `.pem`, `.key`, `credentials.json` patterns.
+
+### Changed
+- **Man page updated** — reflects current features (v0.12.1): CLI mode as preferred data source, all flags and env vars documented, `gt(1)` in SEE ALSO.
+- **Linters expanded** — golangci-lint now runs `errcheck`, `staticcheck`, `gosec`, and `unused` in addition to `gocritic` and `misspell`.
+
 ## v0.12.1 (2026-03-16)
 
 ### Added
