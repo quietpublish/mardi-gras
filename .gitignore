@@ -24,6 +24,13 @@ go.work.sum
 # Debug
 mg-debug.log
 
+# Secrets / credentials
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+
 # GoReleaser
 /dist/
 

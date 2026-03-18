@@ -18,7 +18,7 @@ func initDebugLog() {
 		if os.Getenv("MG_DEBUG") == "" {
 			return
 		}
-		f, err := os.OpenFile("mg-debug.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+		f, err := os.OpenFile("mg-debug.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 		if err != nil {
 			return
 		}

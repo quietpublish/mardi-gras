@@ -3,8 +3,22 @@ package gastown
 import (
 	"context"
 	"os/exec"
+	"strings"
 	"time"
 )
+
+// sanitizeOutput truncates command output for error messages to avoid leaking
+// internal paths or stack traces. Returns the first line, capped at 200 chars.
+func sanitizeOutput(out []byte) string {
+	s := strings.TrimSpace(string(out))
+	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
+		s = s[:idx]
+	}
+	if len(s) > 200 {
+		s = s[:200] + "..."
+	}
+	return s
+}
 
 // Default timeout tiers for external command execution.
 const (
@@ -23,7 +37,7 @@ var (
 
 // SetCmdTimeout overrides all timeout tiers by scaling them proportionally.
 // A value of 60 (seconds) doubles all timeouts (since the default long is 30s).
-// Values <= 0 are ignored.
+// Values <= 0 are ignored. Must be called before any commands are executed.
 func SetCmdTimeout(seconds int) {
 	if seconds <= 0 {
 		return

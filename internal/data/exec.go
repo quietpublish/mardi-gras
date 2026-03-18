@@ -23,6 +23,7 @@ var (
 
 // SetCmdTimeout overrides data-layer timeout tiers by scaling proportionally.
 // The seconds value is relative to a 30s baseline (matching gastown.SetCmdTimeout).
+// Must be called before any commands are executed (i.e., during initialization).
 func SetCmdTimeout(seconds int) {
 	if seconds <= 0 {
 		return

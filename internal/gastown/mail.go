@@ -55,7 +55,7 @@ func MailRead(messageID string) (*MailMessage, error) {
 func MailReply(messageID, body string) error {
 	out, err := runCombinedWithTimeout(timeoutShort, "gt", "mail", "reply", "-m", body, "--", messageID)
 	if err != nil {
-		return fmt.Errorf("gt mail reply: %w (%s)", err, string(out))
+		return fmt.Errorf("gt mail reply: %w (%s)", err, sanitizeOutput(out))
 	}
 	return nil
 }
@@ -64,7 +64,7 @@ func MailReply(messageID, body string) error {
 func MailSend(address, subject, body string) error {
 	out, err := runCombinedWithTimeout(timeoutShort, "gt", "mail", "send", "-s", subject, "-m", body, "--", address)
 	if err != nil {
-		return fmt.Errorf("gt mail send: %w (%s)", err, string(out))
+		return fmt.Errorf("gt mail send: %w (%s)", err, sanitizeOutput(out))
 	}
 	return nil
 }
@@ -73,7 +73,7 @@ func MailSend(address, subject, body string) error {
 func MailArchive(messageID string) error {
 	out, err := runCombinedWithTimeout(timeoutShort, "gt", "mail", "archive", "--", messageID)
 	if err != nil {
-		return fmt.Errorf("gt mail archive: %w (%s)", err, string(out))
+		return fmt.Errorf("gt mail archive: %w (%s)", err, sanitizeOutput(out))
 	}
 	return nil
 }
@@ -82,7 +82,7 @@ func MailArchive(messageID string) error {
 func MailMarkRead(messageID string) error {
 	out, err := runCombinedWithTimeout(timeoutShort, "gt", "mail", "mark-read", "--", messageID)
 	if err != nil {
-		return fmt.Errorf("gt mail mark-read: %w (%s)", err, string(out))
+		return fmt.Errorf("gt mail mark-read: %w (%s)", err, sanitizeOutput(out))
 	}
 	return nil
 }

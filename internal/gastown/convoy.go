@@ -65,7 +65,7 @@ func ConvoyCreate(name string, issueIDs []string) (string, error) {
 	args = append(args, issueIDs...)
 	out, err := runCombinedWithTimeout(timeoutShort, "gt", args...)
 	if err != nil {
-		return "", fmt.Errorf("gt convoy create: %w (%s)", err, string(out))
+		return "", fmt.Errorf("gt convoy create: %w (%s)", err, sanitizeOutput(out))
 	}
 	return string(out), nil
 }
@@ -74,7 +74,7 @@ func ConvoyCreate(name string, issueIDs []string) (string, error) {
 func ConvoyCreateFromEpic(name, epicID string) (string, error) {
 	out, err := runCombinedWithTimeout(timeoutShort, "gt", "convoy", "create", name, "--from-epic", epicID)
 	if err != nil {
-		return "", fmt.Errorf("gt convoy create --from-epic: %w (%s)", err, string(out))
+		return "", fmt.Errorf("gt convoy create --from-epic: %w (%s)", err, sanitizeOutput(out))
 	}
 	return string(out), nil
 }
@@ -85,7 +85,7 @@ func ConvoyAdd(convoyID string, issueIDs []string) error {
 	args = append(args, issueIDs...)
 	out, err := runCombinedWithTimeout(timeoutShort, "gt", args...)
 	if err != nil {
-		return fmt.Errorf("gt convoy add: %w (%s)", err, string(out))
+		return fmt.Errorf("gt convoy add: %w (%s)", err, sanitizeOutput(out))
 	}
 	return nil
 }
@@ -94,7 +94,7 @@ func ConvoyAdd(convoyID string, issueIDs []string) error {
 func ConvoyClose(convoyID string) error {
 	out, err := runCombinedWithTimeout(timeoutShort, "gt", "convoy", "close", "--", convoyID)
 	if err != nil {
-		return fmt.Errorf("gt convoy close: %w (%s)", err, string(out))
+		return fmt.Errorf("gt convoy close: %w (%s)", err, sanitizeOutput(out))
 	}
 	return nil
 }
@@ -103,7 +103,7 @@ func ConvoyClose(convoyID string) error {
 func ConvoyLand(convoyID string) error {
 	out, err := runCombinedWithTimeout(timeoutShort, "gt", "convoy", "land", "--", convoyID)
 	if err != nil {
-		return fmt.Errorf("gt convoy land: %w (%s)", err, string(out))
+		return fmt.Errorf("gt convoy land: %w (%s)", err, sanitizeOutput(out))
 	}
 	return nil
 }
