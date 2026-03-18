@@ -2,6 +2,13 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.13.1 (2026-03-18)
+
+### Fixed
+- **Navigation sluggishness** — reduced OSC guard suppression window from 500ms to 80ms. Terminal capability reply bursts (OSC 11, DECRPM) complete within ~60ms; the old 500ms window was eating real `j`/`k` keypresses. Also reduced deferred key delay from 60ms to 30ms for snappier input. ([#9](https://github.com/quietpublish/mardi-gras/issues/9))
+- Added debug logging for OSC guard pass-through decisions and deferred key lifecycle (`MG_DEBUG=1`).
+- Sanitized environment variables in debug log output to prevent accidental secret exposure.
+
 ## v0.13.0 (2026-03-17)
 
 ### Added
