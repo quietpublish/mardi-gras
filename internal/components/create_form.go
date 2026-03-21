@@ -13,10 +13,11 @@ import (
 
 // CreateFormResult is sent when the create form completes.
 type CreateFormResult struct {
-	Title     string
-	Type      string
-	Priority  string
-	Cancelled bool
+	Title      string
+	Type       string
+	Priority   string
+	CrewMember string // non-empty when assigning to a Gas Town crew member
+	Cancelled  bool
 }
 
 // selectOption is a single option in a select field.
@@ -44,26 +45,49 @@ var priorityOptions = []selectOption{
 // CreateForm is a mini-form for creating a new issue.
 type CreateForm struct {
 	titleInput  textinput.Model
+	crewInput   textinput.Model
 	typeIdx     int // selected index in typeOptions
 	prioIdx     int // selected index in priorityOptions
-	activeField int // 0=title, 1=type, 2=priority
+	activeField int // 0=title, 1=type, 2=priority, 3=crew (when gtAvailable)
+	fieldCount  int // 3 without GT, 4 with GT
 	width       int
 	height      int
 }
 
-// NewCreateForm creates a new issue creation form.
+// NewCreateForm creates a new issue creation form (without Gas Town crew field).
 func NewCreateForm(width, height int) CreateForm {
+	return newCreateForm(width, height, false)
+}
+
+// NewCreateFormWithGT creates a new issue creation form with a crew member field.
+func NewCreateFormWithGT(width, height int) CreateForm {
+	return newCreateForm(width, height, true)
+}
+
+func newCreateForm(width, height int, gtAvailable bool) CreateForm {
 	ti := textinput.New()
 	ti.Prompt = ""
 	ti.Placeholder = "Issue title..."
 	ti.SetWidth(width - 16)
 	ti.Focus()
 
+	ci := textinput.New()
+	ci.Prompt = ""
+	ci.Placeholder = "Crew member name (optional)..."
+	ci.SetWidth(width - 16)
+
+	fieldCount := 3
+	if gtAvailable {
+		fieldCount = 4
+	}
+
 	return CreateForm{
 		titleInput:  ti,
+		crewInput:   ci,
 		typeIdx:     0, // default: task
 		prioIdx:     2, // default: P2 Medium
 		activeField: 0,
+		fieldCount:  fieldCount,
 		width:       width,
 		height:      height,
 	}
@@ -84,6 +108,8 @@ func (cf CreateForm) Update(msg tea.Msg) (CreateForm, tea.Cmd) {
 		return cf, cmd
 	}
 
+	lastField := cf.fieldCount - 1
+
 	switch km.String() {
 	case "esc":
 		return cf, func() tea.Msg {
@@ -91,25 +117,17 @@ func (cf CreateForm) Update(msg tea.Msg) (CreateForm, tea.Cmd) {
 		}
 
 	case "tab":
-		cf.activeField = (cf.activeField + 1) % 3
-		if cf.activeField == 0 {
-			cf.titleInput.Focus()
-		} else {
-			cf.titleInput.Blur()
-		}
+		cf.activeField = (cf.activeField + 1) % cf.fieldCount
+		cf.focusActiveInput()
 		return cf, nil
 
 	case "shift+tab":
-		cf.activeField = (cf.activeField + 2) % 3 // +2 == -1 mod 3
-		if cf.activeField == 0 {
-			cf.titleInput.Focus()
-		} else {
-			cf.titleInput.Blur()
-		}
+		cf.activeField = (cf.activeField + cf.fieldCount - 1) % cf.fieldCount
+		cf.focusActiveInput()
 		return cf, nil
 
 	case "enter":
-		if cf.activeField == 2 {
+		if cf.activeField == lastField {
 			// Submit on last field
 			title := cf.titleInput.Value()
 			if title == "" {
@@ -117,17 +135,16 @@ func (cf CreateForm) Update(msg tea.Msg) (CreateForm, tea.Cmd) {
 			}
 			return cf, func() tea.Msg {
 				return CreateFormResult{
-					Title:    title,
-					Type:     typeOptions[cf.typeIdx].Value,
-					Priority: priorityOptions[cf.prioIdx].Value,
+					Title:      title,
+					Type:       typeOptions[cf.typeIdx].Value,
+					Priority:   priorityOptions[cf.prioIdx].Value,
+					CrewMember: cf.crewInput.Value(),
 				}
 			}
 		}
 		// On other fields, advance
 		cf.activeField++
-		if cf.activeField != 0 {
-			cf.titleInput.Blur()
-		}
+		cf.focusActiveInput()
 		return cf, nil
 
 	case "j", "down":
@@ -159,14 +176,31 @@ func (cf CreateForm) Update(msg tea.Msg) (CreateForm, tea.Cmd) {
 		}
 	}
 
-	// Forward to text input when on title field
+	// Forward to text input when on a text field
 	if cf.activeField == 0 {
 		var cmd tea.Cmd
 		cf.titleInput, cmd = cf.titleInput.Update(msg)
 		return cf, cmd
 	}
+	if cf.activeField == 3 {
+		var cmd tea.Cmd
+		cf.crewInput, cmd = cf.crewInput.Update(msg)
+		return cf, cmd
+	}
 
 	return cf, nil
+}
+
+// focusActiveInput ensures the correct text input has focus.
+func (cf *CreateForm) focusActiveInput() {
+	cf.titleInput.Blur()
+	cf.crewInput.Blur()
+	switch cf.activeField {
+	case 0:
+		cf.titleInput.Focus()
+	case 3:
+		cf.crewInput.Focus()
+	}
 }
 
 // View renders the form.
@@ -222,6 +256,18 @@ func (cf CreateForm) View() string {
 			style = selectedStyle
 		}
 		lines = append(lines, fmt.Sprintf("  %s%s", cursor, style.Render(opt.Label)))
+	}
+
+	// Crew member field (only when Gas Town is available)
+	if cf.fieldCount > 3 {
+		lines = append(lines, "")
+		if cf.activeField == 3 {
+			label = titleStyle.Render("> Crew")
+		} else {
+			label = dimStyle.Render("  Crew")
+		}
+		lines = append(lines, label)
+		lines = append(lines, "  "+cf.crewInput.View())
 	}
 
 	return strings.Join(lines, "\n")

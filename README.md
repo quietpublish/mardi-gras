@@ -118,154 +118,25 @@ Mardi Gras polls for changes on a short interval. No OS-specific file watchers. 
 
 ## Keybindings
 
-Press `?` from anywhere to open the full help overlay.
+Press `?` from anywhere to open the full help overlay. See the [full keybinding reference](docs/keybindings.md) for all shortcuts across the parade, detail pane, Gas Town panel, and problems view.
 
-### Global
+## Features
 
-| Key          | Action                     |
-| ------------ | -------------------------- |
-| `q`          | Quit application           |
-| `tab`        | Switch active pane         |
-| `?`          | Toggle help overlay        |
-| `: / Ctrl+K` | Open command palette      |
-| `p`          | Toggle problems view (gt)  |
-| `D`          | Toggle doctor diagnostics overlay |
+Issues are grouped into parade sections: **Rolling** (in progress), **Lined Up** (open), **Stalled** (blocked), and **Past the Stand** (done). Press `enter` for a full detail panel with dependencies, molecule DAGs, comments, and HOP quality ratings. Use `/` to filter by text, type, or priority. Press `:` to open the command palette.
 
-### Parade
+See the [parade and filtering guide](docs/filtering.md) for the full breakdown of sections, the detail panel, filtering syntax, and the command palette.
 
-| Key          | Action                                    |
-| ------------ | ----------------------------------------- |
-| `j` / `k`    | Navigate up/down                         |
-| `g` / `G`    | Jump to top / bottom                     |
-| `enter`      | Focus detail pane                         |
-| `c`          | Toggle closed issues                      |
-| `/`          | Enter filter mode                         |
-| `f`          | Toggle focus mode (my work + top priority)|
-| `a`          | Launch agent (tmux: new window)           |
-| `A`          | Kill active agent on issue                |
+## Agent Integration
 
-### Quick Actions
+Press `a` to launch an AI agent on any issue. Supports [Claude Code](https://claude.com/claude-code) and [Cursor](https://cursor.com), with tmux-native multi-agent dispatch when running inside tmux.
 
-| Key           | Action                                   |
-| ------------- | ---------------------------------------- |
-| `1` / `2` / `3` | Set status: in_progress / open / closed |
-| `!` / `@` / `#` / `$` | Set priority: P1 / P2 / P3 / P4 |
-| `b`           | Copy branch name to clipboard            |
-| `B`           | Create + checkout git branch             |
-| `N`           | Create new issue                         |
-| `e`           | Edit selected issue (title, priority)    |
-| `r`           | Add comment to selected issue            |
-| `y`           | Assign selected issue                    |
-| `t`           | Add label to selected issue              |
-| `l`           | Add dependency link                      |
+See the [agent integration guide](docs/agents.md) for runtime detection, tmux dispatch, and requirements.
 
-### Multi-select
+## Gas Town Integration
 
-| Key           | Action                              |
-| ------------- | ----------------------------------- |
-| `space` / `x` | Toggle select on cursor issue      |
-| `Shift+J/K`   | Select and move down/up            |
-| `X`           | Clear all selections                |
-| `1/2/3`       | Bulk set status on selected         |
-| `a`           | Sling all selected issues           |
-| `s`           | Pick formula and sling all selected |
+When [Gas Town](https://github.com/steveyegge/gastown) (`gt`) is on your PATH, Mardi Gras lights up with a full agent control surface: agent roster, convoys, mail, cost dashboards, and problem detection. Press `ctrl+g` to open the dashboard. Create issues and assign them to crew members in one step via the create form (`N`).
 
-### Detail Pane
-
-| Key          | Action                     |
-| ------------ | -------------------------- |
-| `j` / `k`    | Scroll up/down            |
-| `esc`        | Back to parade pane        |
-| `/`          | Enter filter mode          |
-| `a`          | Launch agent               |
-| `A`          | Kill active agent          |
-| `m`          | Mark active molecule step done |
-
-### Gas Town Panel (`ctrl+g`)
-
-| Key          | Action                          |
-| ------------ | ------------------------------- |
-| `j` / `k`    | Navigate agents/convoys/mail   |
-| `g` / `G`    | Jump to first/last             |
-| `tab`        | Switch section (agents/convoys/mail) |
-| `n`          | Nudge selected agent            |
-| `h`          | Handoff work from agent         |
-| `K`          | Decommission polecat            |
-| `enter`      | Expand/collapse convoy or message |
-| `l`          | Land convoy                     |
-| `x`          | Close convoy                    |
-| `r`          | Reply to selected message       |
-| `w`          | Compose new message to agent    |
-| `d`          | Archive selected message        |
-| `C`          | Create convoy from selection    |
-
-### Problems View (`p`)
-
-| Key          | Action                          |
-| ------------ | ------------------------------- |
-| `j` / `k`    | Navigate problems              |
-| `g` / `G`    | Jump to first/last             |
-| `n`          | Nudge agent on selected problem |
-| `h`          | Handoff from agent              |
-| `K`          | Decommission polecat            |
-| `R`          | Recover dead rig (release + re-sling orphans) |
-
-## Filtering
-
-Press `/` and the bottom bar becomes a query input.
-
-- `enter`: keep the query applied and return to list navigation.
-- `esc`: clear the query and exit filter mode.
-- Multiple terms use `AND` semantics (all terms must match).
-
-Supported query forms:
-
-- Free text: `deploy auth` (matches ID, title, description, assignee, owner, notes, and labels)
-- Type token: `type:bug`, `type:feature`, `type:task`, `type:chore`, `type:epic`
-- Priority shorthand: `p0` to `p4`
-- Priority token: `priority:0` to `priority:4`, or `priority:critical|high|medium|low|backlog`
-
-Examples:
-
-```text
-type:feature p1 deploy
-priority:high auth
-type:feature p0 auth deploy     ← matches P0 features containing "auth" AND "deploy"
-vv-006
-```
-
-## The Parade
-
-Every Beads issue maps to a spot on the parade route:
-
-| On the Route         | What It Means                         |
-| -------------------- | ------------------------------------- |
-| **Rolling** ●        | In progress — the float is moving     |
-| **Lined Up** ♪       | Open and unblocked — waiting its turn |
-| **Stalled** ⊘        | Blocked by a dependency               |
-| **Past the Stand** ✓ | Done — beads have been thrown         |
-
-Closed issues are collapsed by default (because in any real project, 90%+ of your issues are closed). Press `c` to expand them.
-
-Stalled issues show a "next blocker" hint so you can see at a glance what's holding things up. Issues with dead agent sessions show a ☠ zombie indicator. Issues on dead rigs show a 💀 orphan indicator. The detail panel breaks dependencies into four categories: waiting on (active blockers), missing (dangling references), resolved (closed blockers), and related (non-blocking dependency types).
-
-## Detail Panel
-
-Press `enter` on any issue to focus the detail pane. It shows everything about the selected issue:
-
-- **Metadata** — type, priority, assignee, due dates with overdue/due-soon badges
-- **Rich fields** — notes, design, and acceptance criteria fetched on demand via `bd show --long`
-- **Dependencies** — nine types (blocks, conditional-blocks, blocked-by, related, duplicates, supersedes, parent-child, discovered-from, depends-on) grouped by status: waiting, missing, resolved, and non-blocking
-- **Comments & Timeline** — full conversation history with timestamps
-- **Agent Output** — live tail of the active agent's tmux pane (last 15 lines, ANSI stripped)
-- **Molecule DAG** — multi-step workflows rendered as a visual flow graph with parallel branching (`┌─ ├─ └─`) and connector lines between tiers
-- **HOP Quality** — reputation stars, crystal/ephemeral badges, and validator verdicts for agent-produced work
-
-Press `m` in the detail pane to mark the active molecule step as done.
-
-## Command Palette
-
-Press `:` or `Ctrl+K` to open a fuzzy-match command palette. Type to filter available actions, then press `enter` to execute. The palette provides access to the same actions available through keybindings, plus palette-only actions like **Cascade close** (close an issue and all its children, requires Gas Town v0.11+).
+See the [Gas Town integration guide](docs/gastown.md) for the full feature set including sling, nudge, assign, convoys, and operational intelligence.
 
 ## tmux Integration
 
@@ -294,96 +165,6 @@ bind m display-popup -E -w 80% -h 75% -d "#{pane_current_path}" "mg"
 - `-E` closes the popup when `mg` exits
 - `-w 80% -h 75%` sizes the popup relative to the terminal
 - `-d "#{pane_current_path}"` preserves the working directory so `mg` auto-detects the right `.beads/issues.jsonl`
-
-## Agent Integration
-
-Press `a` on any selected issue to launch an AI agent session pre-loaded with the full issue context: title, description, notes, acceptance criteria, and dependency status.
-
-Mardi Gras supports multiple agent runtimes:
-
-- **[Claude Code](https://claude.com/claude-code)** (preferred) — detected via `claude` on PATH
-- **[Cursor](https://cursor.com)** (fallback) — detected via `cursor-agent` on PATH, launched with `-f -p` flags
-
-### Tmux-native dispatch (multi-agent)
-
-When running inside tmux, agents launch in **new tmux windows** instead of suspending the TUI. This means:
-
-- The parade stays visible while agents work
-- Multiple agents can run simultaneously on different issues
-- Active agents show a `⚡` badge next to their issue in the parade
-- The header displays the total active agent count
-- Press `a` on an issue with an active agent to **switch** to its tmux window
-- Press `A` to **kill** the active agent on the selected issue
-- Agent status is polled automatically alongside the file watcher
-
-### Fallback (non-tmux)
-
-Outside tmux, the TUI suspends while the agent runs (using BubbleTea's `tea.ExecProcess`), giving the agent the full terminal. When you exit the session, Mardi Gras resumes and reloads data to pick up any changes.
-
-### Requirements
-
-- Requires `claude` or `cursor-agent` on your `PATH`
-- The command palette dynamically shows the detected runtime name (e.g., "Start Claude Code agent" or "Start Cursor agent")
-- If no agent runtime is found, the `a` key silently does nothing
-- Tmux dispatch requires both the `TMUX` env var and `tmux` binary on PATH
-- The prompt includes `bd update` and `bd close` hints so the agent knows how to manage the issue lifecycle
-
-## Gas Town Integration
-
-[Gas Town](https://github.com/steveyegge/gastown) is a multi-agent orchestrator for Claude Code. When `gt` is on your PATH, Mardi Gras lights up with a full agent control surface.
-
-### Control Surface (`ctrl+g`)
-
-Press `ctrl+g` to replace the detail pane with the Gas Town dashboard. It has three navigable sections (switch with `tab`):
-
-**Agent Roster** — all agents across rigs with role badges, state (working/idle/backoff), current work assignment, and unread mail count. From here you can nudge (`n`), handoff (`h`), or decommission (`K`) agents.
-
-**Convoys** — delivery batches shown as progress bars with status badges, progress percentage, ready/active counts, and assignees. Expand a convoy with `enter` to see its issues, then land (`l`) or close (`x`) it. Create new convoys from multi-selected issues with `C`, or press `C` on an epic to auto-populate a convoy from its child issues.
-
-**Mail** — inbox showing messages between agents. Expand a message with `enter`, reply with `r`, compose a new message with `w`, or archive with `d`.
-
-### Sling & Nudge
-
-When running inside a Gas Town workspace, the `a` key dispatches issues to polecats via `gt sling` instead of launching raw Claude sessions. Additional commands:
-
-- `s` — choose a formula (workflow template) before slinging
-- `n` — send a nudge message to the agent working on the selected issue
-- `A` — unsling an issue from its polecat
-
-Multi-select (`space` to mark, then `a` or `s`) slings multiple issues in one batch.
-
-### Operational Intelligence
-
-The Gas Town panel includes several data views below the interactive sections:
-
-- **Cost Dashboard** — session counts, token usage, and cost breakdown per agent and time window
-- **Vitals** — Dolt server health (port, PID, disk, connections, latency) and backup freshness from `gt vitals`
-- **Activity Feed** — real-time event ticker showing slings, nudges, handoffs, session starts/deaths, and spawns
-- **Velocity** — issue flow rates (created/closed today and this week), agent utilization percentage, cost summary, and a 7-day dual sparkline showing created vs closed trends
-- **Scorecards** — HOP-powered agent quality ratings aggregated across recent work
-- **Predictions** — convoy completion ETAs based on historical throughput
-
-### Problems View (`p`)
-
-Press `p` to toggle the problems view overlay. It combines two sources of diagnostics:
-
-**Agent problems** — detected from Gas Town status:
-- **Dead rigs** — rigs with 0 polecats and orphaned work, shown with orphan list. Press `R` to recover (release + re-sling orphaned issues)
-- **Stuck agents** — agents explicitly requesting help
-- **Stalled agents** — agents with assigned work but sitting idle
-- **Backoff loops** — agents stuck in retry cycles
-- **Zombie sessions** — agents not running but with hooked work (suppressed on dead rigs)
-
-Dead-rig detection groups all orphaned agents under a single problem instead of emitting individual zombie alerts, reducing alarm fatigue when an entire rig is down.
-
-**Doctor diagnostics** — from `bd doctor --agent` at startup (also available on-demand via `D`):
-- Core system health (Dolt server, config, hooks)
-- Git integration issues
-- Suggested fix commands for each finding
-
-### Environment
-
-Gas Town features activate automatically when `gt` is on your PATH. Inside a Gas Town-managed session (polecat, crew, etc.), additional context from `GT_ROLE`, `GT_RIG`, and `GT_SCOPE` env vars appears in the header and Gas Town panel.
 
 ## Built with
 

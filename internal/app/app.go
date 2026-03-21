@@ -549,6 +549,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		title := result.Title
 		issueType := data.IssueType(result.Type)
 		priority := components.ParsePriority(result.Priority)
+		if result.CrewMember != "" {
+			crew := result.CrewMember
+			return m, func() tea.Msg {
+				_, err := gastown.Assign(crew, title, result.Type, result.Priority, "", true)
+				action := fmt.Sprintf("assigned to %s", crew)
+				return mutateResultMsg{issueID: title, action: action, err: err}
+			}
+		}
 		return m, func() tea.Msg {
 			_, err := data.CreateIssue(title, issueType, priority)
 			return mutateResultMsg{issueID: title, action: "created", err: err}
@@ -1742,7 +1750,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "N":
 		m.creating = true
-		m.createForm = components.NewCreateForm(m.width, m.height)
+		m.createForm = m.newCreateForm()
 		return m, m.createForm.Init()
 
 	case "e": // Edit selected issue
@@ -2185,7 +2193,7 @@ func (m Model) executePaletteAction(action components.PaletteAction) (tea.Model,
 		return m.createAndSwitchBranch()
 	case components.ActionNewIssue:
 		m.creating = true
-		m.createForm = components.NewCreateForm(m.width, m.height)
+		m.createForm = m.newCreateForm()
 		return m, m.createForm.Init()
 	case components.ActionToggleFocus:
 		m.focusMode = !m.focusMode
@@ -2795,6 +2803,15 @@ func gasTownTickCmd() tea.Cmd {
 	return tea.Tick(gasTownTickInterval, func(time.Time) tea.Msg {
 		return gasTownTickMsg{}
 	})
+}
+
+// newCreateForm creates a create form with or without the crew member field
+// depending on whether Gas Town is available.
+func (m Model) newCreateForm() components.CreateForm {
+	if m.gtEnv.Available {
+		return components.NewCreateFormWithGT(m.width, m.height)
+	}
+	return components.NewCreateForm(m.width, m.height)
 }
 
 // pollGTStatus fetches Gas Town status via gt status --json.

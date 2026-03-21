@@ -402,6 +402,116 @@ func TestCreateFormSubmitReflectsSelections(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Crew member field appears when gtAvailable is true
+// ---------------------------------------------------------------------------
+
+func TestCreateFormWithCrewField(t *testing.T) {
+	cf := NewCreateFormWithGT(80, 24)
+	// Should have 4 fields: title(0), type(1), priority(2), crew(3)
+	// Tab through all fields
+	cf, _ = cf.Update(tea.KeyPressMsg{Code: tea.KeyTab}) // -> type
+	if cf.activeField != 1 {
+		t.Fatalf("expected activeField 1, got %d", cf.activeField)
+	}
+	cf, _ = cf.Update(tea.KeyPressMsg{Code: tea.KeyTab}) // -> priority
+	if cf.activeField != 2 {
+		t.Fatalf("expected activeField 2, got %d", cf.activeField)
+	}
+	cf, _ = cf.Update(tea.KeyPressMsg{Code: tea.KeyTab}) // -> crew
+	if cf.activeField != 3 {
+		t.Fatalf("expected activeField 3, got %d", cf.activeField)
+	}
+	cf, _ = cf.Update(tea.KeyPressMsg{Code: tea.KeyTab}) // -> wrap to title
+	if cf.activeField != 0 {
+		t.Fatalf("expected activeField 0 after wrap, got %d", cf.activeField)
+	}
+}
+
+func TestCreateFormCrewFieldSubmit(t *testing.T) {
+	cf := NewCreateFormWithGT(80, 24)
+
+	// Type a title
+	for _, r := range "Fix auth" {
+		cf, _ = cf.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+
+	// Tab to crew field (field 3)
+	cf, _ = cf.Update(tea.KeyPressMsg{Code: tea.KeyTab}) // type
+	cf, _ = cf.Update(tea.KeyPressMsg{Code: tea.KeyTab}) // priority
+	cf, _ = cf.Update(tea.KeyPressMsg{Code: tea.KeyTab}) // crew
+	if cf.activeField != 3 {
+		t.Fatalf("expected activeField 3, got %d", cf.activeField)
+	}
+
+	// Type crew member name
+	for _, r := range "monet" {
+		cf, _ = cf.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+
+	// Enter on last field should submit
+	_, cmd := cf.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd on submit")
+	}
+	msg := cmd()
+	result, ok := msg.(CreateFormResult)
+	if !ok {
+		t.Fatalf("expected CreateFormResult, got %T", msg)
+	}
+	if result.Title != "Fix auth" {
+		t.Fatalf("expected title 'Fix auth', got %q", result.Title)
+	}
+	if result.CrewMember != "monet" {
+		t.Fatalf("expected crew 'monet', got %q", result.CrewMember)
+	}
+}
+
+func TestCreateFormCrewFieldOptional(t *testing.T) {
+	cf := NewCreateFormWithGT(80, 24)
+
+	// Type a title
+	for _, r := range "Quick task" {
+		cf, _ = cf.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+
+	// Tab to crew field, leave empty, submit
+	cf, _ = cf.Update(tea.KeyPressMsg{Code: tea.KeyTab}) // type
+	cf, _ = cf.Update(tea.KeyPressMsg{Code: tea.KeyTab}) // priority
+	cf, _ = cf.Update(tea.KeyPressMsg{Code: tea.KeyTab}) // crew
+	_, cmd := cf.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd on submit with empty crew")
+	}
+	msg := cmd()
+	result := msg.(CreateFormResult)
+	if result.CrewMember != "" {
+		t.Fatalf("expected empty crew, got %q", result.CrewMember)
+	}
+	if result.Title != "Quick task" {
+		t.Fatalf("expected title 'Quick task', got %q", result.Title)
+	}
+}
+
+func TestCreateFormWithoutGTHasNoCrewField(t *testing.T) {
+	cf := NewCreateForm(80, 24) // no GT
+	// Should have 3 fields: title(0), type(1), priority(2)
+	cf, _ = cf.Update(tea.KeyPressMsg{Code: tea.KeyTab}) // -> type
+	cf, _ = cf.Update(tea.KeyPressMsg{Code: tea.KeyTab}) // -> priority
+	cf, _ = cf.Update(tea.KeyPressMsg{Code: tea.KeyTab}) // -> wrap to title
+	if cf.activeField != 0 {
+		t.Fatalf("expected activeField 0 after wrap (3 fields), got %d", cf.activeField)
+	}
+}
+
+func TestCreateFormViewContainsCrewLabel(t *testing.T) {
+	cf := NewCreateFormWithGT(80, 24)
+	view := cf.View()
+	if !strings.Contains(view, "Crew") {
+		t.Fatal("expected view to contain 'Crew' label when GT available")
+	}
+}
+
+// ---------------------------------------------------------------------------
 // j/k on title field (activeField 0) do not change type/priority indices
 // ---------------------------------------------------------------------------
 
