@@ -921,6 +921,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.rebuildParade()
 		m.recomputeVelocity()
+		if cmd := m.maybeFetchMolecule(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		if cmd := m.maybeFetchComments(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 		if cmd := m.maybeFetchIssueDetail(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
