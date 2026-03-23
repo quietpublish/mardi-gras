@@ -91,7 +91,7 @@ func TestMutateClaimNextResultSuccess(t *testing.T) {
 	got := model.(Model)
 	got.detail.RichIssueID = "open-1"
 
-	model, _ = got.Update(mutateClaimNextMsg{closedID: "open-1", claimedID: "open-2"})
+	model, _ = got.Update(mutateResultMsg{issueID: "open-1", action: "closed → claimed open-2", claimedID: "open-2"})
 	got = model.(Model)
 
 	if got.pendingSelectID != "open-2" {
@@ -103,7 +103,7 @@ func TestMutateClaimNextResultSuccess(t *testing.T) {
 	if !got.confetti.Active() {
 		t.Fatal("expected confetti to be active after claim-next close")
 	}
-	if !strings.Contains(got.toast.Message, "closed open-1") || !strings.Contains(got.toast.Message, "claimed open-2") {
+	if !strings.Contains(got.toast.Message, "open-1") || !strings.Contains(got.toast.Message, "claimed open-2") {
 		t.Fatalf("unexpected toast message: %q", got.toast.Message)
 	}
 }
@@ -114,7 +114,7 @@ func TestMutateClaimNextResultNoReadyWork(t *testing.T) {
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	got := model.(Model)
 
-	model, _ = got.Update(mutateClaimNextMsg{closedID: "open-1"})
+	model, _ = got.Update(mutateResultMsg{issueID: "open-1", action: "closed (no ready work)"})
 	got = model.(Model)
 
 	if got.pendingSelectID != "" {

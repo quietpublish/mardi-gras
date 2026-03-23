@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/textinput"
@@ -198,7 +199,10 @@ func New(issues []data.Issue, source data.Source, blockingTypes map[string]bool,
 // shared OSC guard when one is provided. When noAnimations is true, confetti
 // and header shimmer animations are disabled.
 func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[string]bool, guard *OSCGuard, noAnimations bool, excludeTypes ...map[string]bool) Model {
-	excluded := normalizeExcludeTypes(excludeTypes)
+	var excluded map[string]bool
+	if len(excludeTypes) > 0 {
+		excluded = excludeTypes[0]
+	}
 	groups := data.GroupByParade(data.ExcludeByType(issues, excluded), blockingTypes)
 
 	watchPath := source.Path
@@ -250,13 +254,6 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 		oscGuard:       guard,
 		noAnimations:   noAnimations,
 	}
-}
-
-func normalizeExcludeTypes(excludeTypes []map[string]bool) map[string]bool {
-	if len(excludeTypes) == 0 || len(excludeTypes[0]) == 0 {
-		return nil
-	}
-	return excludeTypes[0]
 }
 
 // Init implements tea.Model.
@@ -511,15 +508,10 @@ type vitalsMsg struct {
 
 // mutateResultMsg is sent when a bd CLI mutation completes.
 type mutateResultMsg struct {
-	issueID string
-	action  string
-	err     error
-}
-
-type mutateClaimNextMsg struct {
-	closedID  string
-	claimedID string
+	issueID   string
+	action    string
 	err       error
+	claimedID string // non-empty when --claim-next claimed a follow-up issue
 }
 
 // changeIndicatorExpiredMsg clears change indicators after timeout.
@@ -915,21 +907,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.issues = msg.Issues
-		m.groups = data.GroupByParade(data.ExcludeByType(msg.Issues, m.excludeTypes), m.blockingTypes)
+		m.groups = data.GroupByParade(msg.Issues, m.blockingTypes)
 		if !msg.LastMod.IsZero() {
 			m.lastFileMod = msg.LastMod
 		}
 		m.rebuildParade()
 		m.recomputeVelocity()
-		if cmd := m.maybeFetchMolecule(); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-		if cmd := m.maybeFetchComments(); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-		if cmd := m.maybeFetchIssueDetail(); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
+		cmds = append(cmds, m.detailFetchBatch()...)
 		return m, tea.Batch(cmds...)
 
 	case data.FileUnchangedMsg:
@@ -1355,37 +1339,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.action == "noted" {
 			m.detail.RichIssueID = ""
 		}
-		// Force reload: reset lastFileMod for JSONL, or immediate fetch for CLI
-		m.lastFileMod = time.Time{}
-		cmds := []tea.Cmd{toastCmd, m.startPollImmediate()}
-		// Trigger confetti on close (unless animations are disabled)
-		if !m.noAnimations && msg.action == "closed" && m.width > 0 && m.height > 0 {
-			m.confetti = NewConfetti(m.width, m.height)
-			cmds = append(cmds, m.confetti.Tick())
-		}
-		return m, tea.Batch(cmds...)
-
-	case mutateClaimNextMsg:
-		if msg.err != nil {
-			toast, cmd := components.ShowToast(
-				fmt.Sprintf("Failed: closed %s — %s", msg.closedID, msg.err),
-				components.ToastError, toastDuration,
-			)
-			m.toast = toast
-			return m, cmd
-		}
-
-		label := fmt.Sprintf("closed %s (no ready work)", msg.closedID)
 		if msg.claimedID != "" {
-			label = fmt.Sprintf("closed %s → claimed %s", msg.closedID, msg.claimedID)
 			m.pendingSelectID = msg.claimedID
 			m.detail.RichIssueID = ""
 		}
-		toast, toastCmd := components.ShowToast(label, components.ToastSuccess, toastDuration)
-		m.toast = toast
-
+		// Force reload: reset lastFileMod for JSONL, or immediate fetch for CLI
+		m.lastFileMod = time.Time{}
 		cmds := []tea.Cmd{toastCmd, m.startPollImmediate()}
-		if !m.noAnimations && m.width > 0 && m.height > 0 {
+		// Trigger confetti on close
+		isClose := strings.HasPrefix(msg.action, "closed")
+		if !m.noAnimations && isClose && m.width > 0 && m.height > 0 {
 			m.confetti = NewConfetti(m.width, m.height)
 			cmds = append(cmds, m.confetti.Tick())
 		}
@@ -1941,17 +1904,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "enter":
 			m.activPane = PaneDetail
 			m.detail.Focused = true
-			var cmds []tea.Cmd
-			if cmd := m.maybeFetchMolecule(); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			if cmd := m.maybeFetchComments(); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			if cmd := m.maybeFetchIssueDetail(); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			if len(cmds) > 0 {
+			if cmds := m.detailFetchBatch(); len(cmds) > 0 {
 				return m, tea.Batch(cmds...)
 			}
 		}
@@ -2070,7 +2023,13 @@ func (m Model) closeSelectedIssue() (tea.Model, tea.Cmd) {
 	issueID := issue.ID
 	return m, func() tea.Msg {
 		claimedID, err := data.CloseAndClaimNext(issueID)
-		return mutateClaimNextMsg{closedID: issueID, claimedID: claimedID, err: err}
+		action := "closed"
+		if claimedID != "" {
+			action = fmt.Sprintf("closed → claimed %s", claimedID)
+		} else if err == nil {
+			action = "closed (no ready work)"
+		}
+		return mutateResultMsg{issueID: issueID, action: action, claimedID: claimedID, err: err}
 	}
 }
 
@@ -2612,6 +2571,22 @@ func (m *Model) maybeFetchIssueDetail() tea.Cmd {
 		return nil
 	}
 	return fetchIssueDetail(issue.ID)
+}
+
+// detailFetchBatch returns Cmds to refetch molecule, comments, and rich detail
+// for the currently selected issue when their caches are stale.
+func (m *Model) detailFetchBatch() []tea.Cmd {
+	var cmds []tea.Cmd
+	if cmd := m.maybeFetchMolecule(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if cmd := m.maybeFetchComments(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if cmd := m.maybeFetchIssueDetail(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	return cmds
 }
 
 // layout recalculates dimensions for all sub-components.

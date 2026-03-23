@@ -84,6 +84,9 @@ mg --block-types blocks,conditional-blocks,discovered-from
 # or via environment variable
 MG_BLOCK_TYPES=blocks,conditional-blocks,parent-child mg
 
+# Hide specific issue types from the parade
+mg --exclude-type=epic,chore
+
 # Disable animations (useful over SSH)
 mg --no-animations
 # or via environment variable

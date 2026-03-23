@@ -6,7 +6,8 @@ import (
 	"github.com/sahilm/fuzzy"
 )
 
-// ExcludeByType returns issues whose types are not excluded.
+// ExcludeByType filters out issues whose type is in excludeTypes.
+// Keys in excludeTypes must be lowercase (parseTypeSet ensures this at input).
 func ExcludeByType(issues []Issue, excludeTypes map[string]bool) []Issue {
 	if len(excludeTypes) == 0 {
 		return issues
@@ -14,7 +15,7 @@ func ExcludeByType(issues []Issue, excludeTypes map[string]bool) []Issue {
 
 	filtered := make([]Issue, 0, len(issues))
 	for _, issue := range issues {
-		if !excludeTypes[strings.ToLower(string(issue.IssueType))] {
+		if !excludeTypes[string(issue.IssueType)] {
 			filtered = append(filtered, issue)
 		}
 	}
