@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/matt-wright86/mardi-gras/internal/data"
+	"github.com/matt-wright86/mardi-gras/internal/gastown"
 )
 
 func testIssue(id string, status data.Status) data.Issue {
@@ -56,6 +57,116 @@ func TestFileChangedMsgPreservesSelectionAndClosedState(t *testing.T) {
 	}
 	if got.parade.SelectedIssue == nil || got.parade.SelectedIssue.ID != "open-2" {
 		t.Fatalf("expected selected issue open-2 after refresh, got %+v", got.parade.SelectedIssue)
+	}
+}
+
+func TestFileChangedMsgAppliesPendingSelectionOverride(t *testing.T) {
+	issues := []data.Issue{
+		testIssue("open-1", data.StatusOpen),
+		testIssue("open-2", data.StatusOpen),
+	}
+
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
+	m.startedAt = time.Now().Add(-time.Second)
+	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	got := model.(Model)
+
+	if got.parade.SelectedIssue == nil || got.parade.SelectedIssue.ID != "open-1" {
+		t.Fatalf("expected initial selection open-1, got %+v", got.parade.SelectedIssue)
+	}
+
+	got.pendingSelectID = "open-3"
+	refreshed := []data.Issue{
+		testIssue("open-2", data.StatusOpen),
+		testIssue("open-3", data.StatusOpen),
+	}
+	model, _ = got.Update(data.FileChangedMsg{Issues: refreshed})
+	got = model.(Model)
+
+	if got.parade.SelectedIssue == nil || got.parade.SelectedIssue.ID != "open-3" {
+		t.Fatalf("expected pending selection open-3 after refresh, got %+v", got.parade.SelectedIssue)
+	}
+	if got.pendingSelectID != "" {
+		t.Fatalf("expected pendingSelectID to be cleared, got %q", got.pendingSelectID)
+	}
+}
+
+func TestInitialLayoutExcludesHiddenTypesButKeepsDetailIssueMap(t *testing.T) {
+	issues := []data.Issue{
+		testIssue("open-1", data.StatusOpen),
+		testIssue("epic-1", data.StatusOpen),
+	}
+	issues[1].IssueType = data.TypeEpic
+
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes, map[string]bool{"epic": true})
+	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	got := model.(Model)
+
+	for _, item := range got.parade.Items {
+		if item.Issue != nil && item.Issue.ID == "epic-1" {
+			t.Fatal("expected excluded epic to be hidden from parade")
+		}
+	}
+	if _, ok := got.detail.IssueMap["epic-1"]; !ok {
+		t.Fatal("expected excluded epic to remain in detail issue map")
+	}
+}
+
+func TestFileChangedMsgQueuesDetailRefetchesForPendingSelection(t *testing.T) {
+	issues := []data.Issue{
+		testIssue("open-1", data.StatusOpen),
+		testIssue("open-2", data.StatusOpen),
+	}
+
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
+	m.startedAt = time.Now().Add(-time.Second)
+	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	got := model.(Model)
+
+	got.pendingSelectID = "open-2"
+	got.gtEnv.Available = true
+	got.gtPollInFlight = true // suppress gt status polling in this test
+	got.activeAgents["open-2"] = "Toast"
+	got.detail.CommentsIssueID = "open-1"
+	got.detail.Comments = []gastown.Comment{{Author: "alpha", Body: "cached"}}
+	got.detail.MoleculeIssueID = "open-1"
+	got.detail.MoleculeDAG = &gastown.DAGInfo{}
+	got.detail.MoleculeProgress = &gastown.MoleculeProgress{}
+	got.detail.RichIssueID = "open-1"
+
+	model, cmd := got.Update(data.FileChangedMsg{Issues: issues})
+	got = model.(Model)
+
+	if got.parade.SelectedIssue == nil || got.parade.SelectedIssue.ID != "open-2" {
+		t.Fatalf("expected selection open-2 after refresh, got %+v", got.parade.SelectedIssue)
+	}
+	if got.detail.CommentsIssueID != "" {
+		t.Fatalf("expected CommentsIssueID to be cleared on selection change, got %q", got.detail.CommentsIssueID)
+	}
+	if got.detail.MoleculeIssueID != "" {
+		t.Fatalf("expected MoleculeIssueID to be cleared on selection change, got %q", got.detail.MoleculeIssueID)
+	}
+	if got.detail.RichIssueID != "" {
+		t.Fatalf("expected RichIssueID to be cleared on selection change, got %q", got.detail.RichIssueID)
+	}
+	if cmd == nil {
+		t.Fatal("expected reload command batch")
+	}
+
+	msg := cmd()
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("expected tea.BatchMsg, got %T", msg)
+	}
+
+	nonNil := 0
+	for _, subcmd := range batch {
+		if subcmd != nil {
+			nonNil++
+		}
+	}
+	if nonNil != 3 {
+		t.Fatalf("expected 3 detail refetch commands, got %d", nonNil)
 	}
 }
 

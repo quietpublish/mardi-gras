@@ -31,6 +31,7 @@ var version = "dev"
 func main() {
 	path := flag.String("path", "", "Path to .beads/issues.jsonl file")
 	blockTypesFlag := flag.String("block-types", "", "Comma-separated dependency types that count as blockers (default: blocks)")
+	excludeTypesFlag := flag.String("exclude-type", "", "Comma-separated issue types to hide from the parade and status output")
 	statusMode := flag.Bool("status", false, "Output tmux status line and exit")
 	showVersion := flag.Bool("version", false, "Print version and exit")
 	noAnimations := flag.Bool("no-animations", false, "Disable confetti and header shimmer animations")
@@ -65,6 +66,7 @@ func main() {
 
 	// Parse blocking types from flag, env var, or default
 	blockingTypes := parseBlockingTypes(*blockTypesFlag)
+	excludeTypes := parseTypeSet(*excludeTypesFlag)
 
 	// Resolve data source: JSONL file or bd CLI fallback
 	cwd, err := os.Getwd()
@@ -103,14 +105,14 @@ func main() {
 	}
 
 	if *statusMode {
-		groups := data.GroupByParade(issues, blockingTypes)
+		groups := data.GroupByParade(data.ExcludeByType(issues, excludeTypes), blockingTypes)
 		fmt.Print(tmux.StatusLine(groups))
 		return
 	}
 
 	// Run TUI
 	guard := app.NewOSCGuard()
-	model := app.NewWithGuard(issues, source, blockingTypes, guard, *noAnimations)
+	model := app.NewWithGuard(issues, source, blockingTypes, guard, *noAnimations, excludeTypes)
 	p := tea.NewProgram(model, tea.WithFilter(guard.Filter()))
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -124,18 +126,23 @@ func parseBlockingTypes(flagVal string) map[string]bool {
 	if raw == "" {
 		raw = os.Getenv("MG_BLOCK_TYPES")
 	}
-	if raw == "" {
+	types := parseTypeSet(raw)
+	if len(types) == 0 {
 		return data.DefaultBlockingTypes
 	}
+	return types
+}
+
+func parseTypeSet(flagVal string) map[string]bool {
+	if flagVal == "" {
+		return nil
+	}
 	types := make(map[string]bool)
-	for _, t := range strings.Split(raw, ",") {
-		t = strings.TrimSpace(t)
+	for _, t := range strings.Split(flagVal, ",") {
+		t = strings.TrimSpace(strings.ToLower(t))
 		if t != "" {
 			types[t] = true
 		}
-	}
-	if len(types) == 0 {
-		return data.DefaultBlockingTypes
 	}
 	return types
 }

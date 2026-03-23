@@ -25,6 +25,7 @@ const (
 	ActionCopyBranch
 	ActionCreateBranch
 	ActionNewIssue
+	ActionAddNote
 	ActionToggleFocus
 	ActionToggleClosed
 	ActionFilter
@@ -36,6 +37,7 @@ const (
 	ActionQuit
 	ActionFormulaSelect
 	ActionToggleGasTown
+	ActionAssign
 	ActionCreateConvoy
 	ActionCascadeClose
 	ActionCycleLayout

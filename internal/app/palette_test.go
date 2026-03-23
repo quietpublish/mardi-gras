@@ -132,6 +132,7 @@ func TestBuildPaletteCommandsBase(t *testing.T) {
 		components.ActionCloseIssue:      false,
 		components.ActionSetPriorityHigh: false,
 		components.ActionCopyBranch:      false,
+		components.ActionAddNote:         false,
 		components.ActionToggleFocus:     false,
 		components.ActionFilter:          false,
 		components.ActionHelp:            false,

@@ -113,6 +113,54 @@ func TestCloseIssueArgs(t *testing.T) {
 	}
 }
 
+func TestCloseAndClaimNextArgsAndParse(t *testing.T) {
+	calls, restore := mockRunCapture([]byte(`{"claimed":{"id":"mg-99"},"closed":[{"id":"mg-42"}]}`), nil)
+	defer restore()
+
+	claimedID, err := CloseAndClaimNext("mg-42")
+	if err != nil {
+		t.Fatalf("CloseAndClaimNext() error = %v", err)
+	}
+	if claimedID != "mg-99" {
+		t.Fatalf("claimedID = %q, want %q", claimedID, "mg-99")
+	}
+
+	args := (*calls)[0]
+	if len(args) != 5 || args[0] != "bd" || args[1] != "close" || args[2] != "--claim-next" || args[3] != "--json" || args[4] != "mg-42" {
+		t.Errorf("args = %v", args)
+	}
+}
+
+func TestCloseAndClaimNextNoClaimedIssue(t *testing.T) {
+	defer mockRun([]byte(`{"claimed":null,"closed":[{"id":"mg-42"}]}`), nil)()
+
+	claimedID, err := CloseAndClaimNext("mg-42")
+	if err != nil {
+		t.Fatalf("CloseAndClaimNext() error = %v", err)
+	}
+	if claimedID != "" {
+		t.Fatalf("claimedID = %q, want empty string", claimedID)
+	}
+}
+
+func TestCloseAndClaimNextParseError(t *testing.T) {
+	defer mockRun([]byte(`{bad json`), nil)()
+
+	_, err := CloseAndClaimNext("mg-42")
+	if err == nil {
+		t.Fatal("expected parse error, got nil")
+	}
+}
+
+func TestCloseAndClaimNextExecError(t *testing.T) {
+	defer mockRun(nil, errors.New("bd not found"))()
+
+	_, err := CloseAndClaimNext("mg-42")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
 func TestSetPriorityArgs(t *testing.T) {
 	calls, restore := mockExecCapture(nil)
 	defer restore()
@@ -165,6 +213,30 @@ func TestAddCommentArgs(t *testing.T) {
 func TestAddCommentExecError(t *testing.T) {
 	defer mockRun(nil, errors.New("bd not found"))()
 	err := AddComment("mg-42", "comment")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestAddNoteArgs(t *testing.T) {
+	calls, restore := mockRunCapture([]byte("ok\n"), nil)
+	defer restore()
+
+	err := AddNote("mg-42", "Remember to backfill fixtures")
+	if err != nil {
+		t.Fatalf("AddNote() error = %v", err)
+	}
+
+	args := (*calls)[0]
+	if len(args) != 5 || args[0] != "bd" || args[1] != "note" || args[2] != "mg-42" || args[3] != "--" || args[4] != "Remember to backfill fixtures" {
+		t.Errorf("args = %v", args)
+	}
+}
+
+func TestAddNoteExecError(t *testing.T) {
+	defer mockRun(nil, errors.New("bd not found"))()
+
+	err := AddNote("mg-42", "note")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

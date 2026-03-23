@@ -84,6 +84,9 @@ mg --block-types blocks,conditional-blocks,discovered-from
 # or via environment variable
 MG_BLOCK_TYPES=blocks,conditional-blocks,parent-child mg
 
+# Hide specific issue types from the parade
+mg --exclude-type=epic,chore
+
 # Disable animations (useful over SSH)
 mg --no-animations
 # or via environment variable
@@ -122,7 +125,7 @@ Press `?` from anywhere to open the full help overlay. See the [full keybinding 
 
 ## Features
 
-Issues are grouped into parade sections: **Rolling** (in progress), **Lined Up** (open), **Stalled** (blocked), and **Past the Stand** (done). Press `enter` for a full detail panel with dependencies, molecule DAGs, comments, and HOP quality ratings. Use `/` to filter by text, type, or priority. Press `:` to open the command palette.
+Issues are grouped into parade sections: **Rolling** (in progress), **Lined Up** (open), **Stalled** (blocked), and **Past the Stand** (done). Press `enter` for a full detail panel with dependencies, molecule DAGs, and comments. Use `/` to filter by text, type, or priority. Press `:` to open the command palette.
 
 See the [parade and filtering guide](docs/filtering.md) for the full breakdown of sections, the detail panel, filtering syntax, and the command palette.
 

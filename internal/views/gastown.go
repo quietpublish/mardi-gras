@@ -1377,7 +1377,7 @@ func formatEventTime(ts string) string {
 	}
 }
 
-// renderScorecards renders the HOP agent quality scorecards section.
+// renderScorecards renders the agent scorecards section.
 func (g *GasTown) renderScorecards(width int) string {
 	var lines []string
 
@@ -1389,26 +1389,10 @@ func (g *GasTown) renderScorecards(width int) string {
 	nameStyle := lipgloss.NewStyle().Foreground(ui.Light)
 
 	for _, sc := range g.scorecards {
-		stars := ""
-		if sc.TotalScored > 0 {
-			stars = ui.RenderStarsCompact(sc.AvgQuality) + " "
-		}
-
-		crystLabel := ""
-		if sc.Crystallizing > 0 || sc.Ephemeral > 0 {
-			crystLabel = fmt.Sprintf("  %s%d%s%d",
-				lipgloss.NewStyle().Foreground(ui.CrystalColor).Render(ui.SymCrystal),
-				sc.Crystallizing,
-				lipgloss.NewStyle().Foreground(ui.EphemeralColor).Render(ui.SymEphemeral),
-				sc.Ephemeral)
-		}
-
-		line := fmt.Sprintf("  %s%-12s %s%s closed %s",
-			stars,
+		line := fmt.Sprintf("  %-12s %s%s",
 			nameStyle.Render(sc.Name),
 			labelStyle.Render(fmt.Sprintf("%d", sc.IssuesClosed)),
-			labelStyle.Render(" closed"),
-			crystLabel)
+			labelStyle.Render(" closed"))
 		lines = append(lines, line)
 	}
 

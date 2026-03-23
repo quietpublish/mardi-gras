@@ -195,27 +195,6 @@ var (
 			Foreground(BrightGold).
 			Bold(true)
 
-	// HOP quality badges
-	QualityBadge = lipgloss.NewStyle().
-			Bold(true)
-
-	ValidatorAccepted = lipgloss.NewStyle().
-				Foreground(BrightGreen)
-
-	ValidatorRejected = lipgloss.NewStyle().
-				Foreground(StatusStalled).
-				Bold(true)
-
-	ValidatorRevision = lipgloss.NewStyle().
-				Foreground(BrightGold)
-
-	CrystalBadge = lipgloss.NewStyle().
-			Foreground(CrystalColor).
-			Bold(true)
-
-	EphemeralBadge = lipgloss.NewStyle().
-			Foreground(EphemeralColor)
-
 	// Metadata fields
 	MetaFieldName = lipgloss.NewStyle().
 			Foreground(Light)

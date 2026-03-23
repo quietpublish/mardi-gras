@@ -139,39 +139,6 @@ const bdListMinimal = `[{
 	"updated_at": "2026-03-01T00:00:00Z"
 }]`
 
-// bdListWithHOP represents an issue with HOP (Hierarchy of Proof) fields.
-const bdListWithHOP = `[{
-	"id": "proj-060",
-	"title": "Validated feature",
-	"status": "closed",
-	"priority": 2,
-	"issue_type": "feature",
-	"created_at": "2026-03-01T09:00:00-06:00",
-	"created_by": "polecat-nux",
-	"updated_at": "2026-03-05T14:00:00-06:00",
-	"closed_at": "2026-03-05T14:00:00-06:00",
-	"creator": {
-		"name": "polecat-nux",
-		"platform": "gastown",
-		"org": "myteam",
-		"uri": "hop://gastown/myteam/polecat-nux"
-	},
-	"validations": [
-		{
-			"validator": {
-				"name": "alice",
-				"platform": "human"
-			},
-			"outcome": "accepted",
-			"quality_score": 0.85,
-			"comment": "Good implementation, minor style nits.",
-			"timestamp": "2026-03-05T13:00:00-06:00"
-		}
-	],
-	"quality_score": 0.85,
-	"crystallizes": true
-}]`
-
 // bdShowDetailIssue represents enriched output from `bd show <id> --long --json`.
 const bdShowDetailIssue = `[{
 	"id": "proj-042",
@@ -394,66 +361,6 @@ func TestContractMinimalIssue(t *testing.T) {
 	}
 	if iss.AcceptanceCriteria != "" {
 		t.Error("AcceptanceCriteria should be empty")
-	}
-	if iss.Creator != nil {
-		t.Error("Creator should be nil")
-	}
-	if len(iss.Validations) != 0 {
-		t.Error("Validations should be empty")
-	}
-	if iss.QualityScore != nil {
-		t.Error("QualityScore should be nil")
-	}
-	if iss.Crystallizes != nil {
-		t.Error("Crystallizes should be nil")
-	}
-}
-
-func TestContractHOPFields(t *testing.T) {
-	var issues []Issue
-	if err := json.Unmarshal([]byte(bdListWithHOP), &issues); err != nil {
-		t.Fatalf("failed to parse HOP issue: %v", err)
-	}
-
-	iss := issues[0]
-
-	// Creator (EntityRef)
-	if iss.Creator == nil {
-		t.Fatal("Creator should not be nil")
-	}
-	assertEqual(t, "Creator.Name", iss.Creator.Name, "polecat-nux")
-	assertEqual(t, "Creator.Platform", iss.Creator.Platform, "gastown")
-	assertEqual(t, "Creator.Org", iss.Creator.Org, "myteam")
-	assertEqual(t, "Creator.URI", iss.Creator.URI, "hop://gastown/myteam/polecat-nux")
-
-	// Validations
-	if len(iss.Validations) != 1 {
-		t.Fatalf("expected 1 validation, got %d", len(iss.Validations))
-	}
-	v := iss.Validations[0]
-	assertEqual(t, "Validator.Name", v.Validator.Name, "alice")
-	assertEqual(t, "Validator.Platform", v.Validator.Platform, "human")
-	assertEqual(t, "Outcome", string(v.Outcome), "accepted")
-	if v.QualityScore < 0.84 || v.QualityScore > 0.86 {
-		t.Errorf("QualityScore = %f, expected ~0.85", v.QualityScore)
-	}
-	assertEqual(t, "Comment", v.Comment, "Good implementation, minor style nits.")
-	if v.Timestamp.IsZero() {
-		t.Error("Validation.Timestamp should not be zero")
-	}
-
-	// Issue-level quality fields
-	if iss.QualityScore == nil {
-		t.Fatal("QualityScore should not be nil")
-	}
-	if *iss.QualityScore < 0.84 || *iss.QualityScore > 0.86 {
-		t.Errorf("Issue.QualityScore = %f, expected ~0.85", *iss.QualityScore)
-	}
-	if iss.Crystallizes == nil {
-		t.Fatal("Crystallizes should not be nil")
-	}
-	if !*iss.Crystallizes {
-		t.Error("Crystallizes should be true")
 	}
 }
 
@@ -788,18 +695,6 @@ func TestContractNullOptionalFields(t *testing.T) {
 	}
 	if iss.Metadata != nil {
 		t.Error("null metadata should be nil")
-	}
-	if iss.Creator != nil {
-		t.Error("null creator should be nil")
-	}
-	if iss.Validations != nil {
-		t.Error("null validations should be nil")
-	}
-	if iss.QualityScore != nil {
-		t.Error("null quality_score should be nil")
-	}
-	if iss.Crystallizes != nil {
-		t.Error("null crystallizes should be nil")
 	}
 }
 

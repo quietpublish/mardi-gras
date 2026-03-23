@@ -1128,8 +1128,8 @@ func TestGasTownSetScorecards(t *testing.T) {
 	g.SetStatus(status, gastown.Env{Available: true})
 
 	cards := []gastown.AgentScorecard{
-		{Name: "Toast", IssuesClosed: 5, AvgQuality: 0.85, TotalScored: 4, Crystallizing: 3, Ephemeral: 1},
-		{Name: "Muffin", IssuesClosed: 3, AvgQuality: 0.70, TotalScored: 3, Crystallizing: 2},
+		{Name: "Toast", IssuesClosed: 5},
+		{Name: "Muffin", IssuesClosed: 3},
 	}
 	g.SetScorecards(cards)
 

@@ -79,15 +79,6 @@ var (
 	StateGate      = BrightGold                // Waiting on external trigger
 	StateFixNeeded = lipgloss.Color("#E056A0") // Pink — review feedback, needs rework
 	StatePropelled = lipgloss.Color("#00CED1") // Dark turquoise — ACP propulsion, output suppressed
-
-	// HOP quality colors
-	QualityExcellent = BrightGold                // 0.9+
-	QualityGood      = BrightGreen               // 0.7+
-	QualityFair      = Silver                    // 0.5+
-	QualityPoor      = lipgloss.Color("#E74C3C") // 0.3+
-	QualityLow       = Dim                       // below 0.3
-	CrystalColor     = BrightPurple              // crystallizing work
-	EphemeralColor   = Dim                       // ephemeral work
 )
 
 // PriorityColor returns the theme color for a priority level.
@@ -152,22 +143,6 @@ func AgentStateColor(state string) color.Color {
 		return Dim
 	default:
 		return StateIdle
-	}
-}
-
-// QualityColor returns the theme color for a quality score (0.0-1.0).
-func QualityColor(score float32) color.Color {
-	switch {
-	case score >= 0.9:
-		return QualityExcellent
-	case score >= 0.7:
-		return QualityGood
-	case score >= 0.5:
-		return QualityFair
-	case score >= 0.3:
-		return QualityPoor
-	default:
-		return QualityLow
 	}
 }
 

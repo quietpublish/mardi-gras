@@ -25,7 +25,6 @@ Press `enter` on any issue to focus the detail pane. It shows everything about t
 - **Comments & Timeline** — full conversation history with timestamps
 - **Agent Output** — live tail of the active agent's tmux pane (last 15 lines, ANSI stripped)
 - **Molecule DAG** — multi-step workflows rendered as a visual flow graph with parallel branching (`┌─ ├─ └─`) and connector lines between tiers
-- **HOP Quality** — reputation stars, crystal/ephemeral badges, and validator verdicts for agent-produced work
 
 Press `m` in the detail pane to mark the active molecule step as done.
 
@@ -53,6 +52,20 @@ type:feature p0 auth deploy     ← matches P0 features containing "auth" AND "d
 vv-006
 ```
 
+## Excluding Issue Types
+
+Use `--exclude-type` to hide specific issue types from the parade and status output. Excluded issues are still available in the detail panel's dependency graph — they just don't appear in the parade list or header counts.
+
+```bash
+mg --exclude-type=epic          # hide epics
+mg --exclude-type=epic,chore    # hide epics and chores
+```
+
 ## Command Palette
 
-Press `:` or `Ctrl+K` to open a fuzzy-match command palette. Type to filter available actions, then press `enter` to execute. The palette provides access to the same actions available through keybindings, plus palette-only actions like **Cascade close** (close an issue and all its children, requires Gas Town v0.11+).
+Press `:` or `Ctrl+K` to open a fuzzy-match command palette. Type to filter available actions, then press `enter` to execute. The palette includes:
+
+- **Add note** — append a note to the selected issue via `bd note`
+- **Create & assign to crew** — open the issue create form with the Gas Town crew field (requires Gas Town)
+- **Cascade close** — close an issue and all its children (requires Gas Town v0.11+)
+- All keybinding actions (close, set priority, sling, nudge, etc.)

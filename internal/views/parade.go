@@ -485,14 +485,6 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 		deferWidth = 2
 	}
 
-	// Quality badge (HOP)
-	qualityBadge := ""
-	qualityWidth := 0
-	if issue.QualityScore != nil {
-		qualityBadge = " " + ui.RenderStarsCompact(*issue.QualityScore)
-		qualityWidth = 3 // " ★N"
-	}
-
 	// Build the "next blocker" hint for stalled issues
 	var rawHint string
 	hintStyle := lipgloss.NewStyle().Foreground(ui.Muted)
@@ -526,7 +518,7 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 	}
 
 	hintLen := lipgloss.Width(hint)
-	maxTitle := innerWidth - 16 - hintLen - agentWidth - changeWidth - selectWidth - indentWidth - dueWidth - deferWidth - qualityWidth - orphanWidth - zombieWidth
+	maxTitle := innerWidth - 16 - hintLen - agentWidth - changeWidth - selectWidth - indentWidth - dueWidth - deferWidth - orphanWidth - zombieWidth
 	if maxTitle < 0 {
 		maxTitle = 0
 	}
@@ -561,7 +553,7 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 		renderedTitle,
 		prioStyle.Render(prio),
 	)
-	line += qualityBadge + dueBadge + deferBadge + hint
+	line += dueBadge + deferBadge + hint
 
 	leftBorder := borderStyle.Render(ui.BoxVertical)
 	rightBorder := borderStyle.Render(ui.BoxVertical)

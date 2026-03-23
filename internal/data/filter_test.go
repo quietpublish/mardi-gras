@@ -4,6 +4,22 @@ import (
 	"testing"
 )
 
+func TestExcludeByType(t *testing.T) {
+	issues := []Issue{
+		{ID: "vv-001", Title: "Fix login bug", IssueType: TypeBug},
+		{ID: "vv-002", Title: "Parent epic", IssueType: TypeEpic},
+		{ID: "vv-003", Title: "Chore cleanup", IssueType: TypeChore},
+	}
+
+	result := ExcludeByType(issues, map[string]bool{"epic": true, "chore": true})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 issue after exclude, got %d", len(result))
+	}
+	if result[0].ID != "vv-001" {
+		t.Fatalf("expected vv-001 to remain, got %q", result[0].ID)
+	}
+}
+
 func TestFilterIssues(t *testing.T) {
 	issues := []Issue{
 		{ID: "vv-001", Title: "Fix login bug", IssueType: TypeBug, Priority: PriorityCritical},

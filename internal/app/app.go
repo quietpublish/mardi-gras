@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/textinput"
@@ -59,6 +60,7 @@ type Model struct {
 	pathExplicit  bool
 	lastFileMod   time.Time
 	blockingTypes map[string]bool
+	excludeTypes  map[string]bool
 	filterInput   textinput.Model
 	filtering     bool
 	showHelp      bool
@@ -111,8 +113,8 @@ type Model struct {
 	nudgeInput  textinput.Model
 	nudgeTarget string
 
-	// Quick-action input state (comment, assign, label, link)
-	qaMode  string // "comment", "assign", "label", "link"
+	// Quick-action input state (comment, note, assign, label, link)
+	qaMode  string // "comment", "note", "assign", "label", "link"
 	qaInput textinput.Model
 	qaID    string // issue ID for the action
 
@@ -151,6 +153,7 @@ type Model struct {
 
 	// Startup: issue ID from bd show --current, consumed after first parade build
 	pendingCurrentID string
+	pendingSelectID  string
 	currentIssueID   string // active issue shown in header
 
 	// Single-flight gate for gt status polls
@@ -188,15 +191,19 @@ type Model struct {
 }
 
 // New creates a new app model from loaded issues.
-func New(issues []data.Issue, source data.Source, blockingTypes map[string]bool) Model {
-	return NewWithGuard(issues, source, blockingTypes, nil, false)
+func New(issues []data.Issue, source data.Source, blockingTypes map[string]bool, excludeTypes ...map[string]bool) Model {
+	return NewWithGuard(issues, source, blockingTypes, nil, false, excludeTypes...)
 }
 
 // NewWithGuard creates a new app model from loaded issues and attaches a
 // shared OSC guard when one is provided. When noAnimations is true, confetti
 // and header shimmer animations are disabled.
-func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[string]bool, guard *OSCGuard, noAnimations bool) Model {
-	groups := data.GroupByParade(issues, blockingTypes)
+func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[string]bool, guard *OSCGuard, noAnimations bool, excludeTypes ...map[string]bool) Model {
+	var excluded map[string]bool
+	if len(excludeTypes) > 0 {
+		excluded = excludeTypes[0]
+	}
+	groups := data.GroupByParade(data.ExcludeByType(issues, excluded), blockingTypes)
 
 	watchPath := source.Path
 	pathExplicit := source.Explicit
@@ -230,6 +237,7 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 		pathExplicit:   pathExplicit,
 		lastFileMod:    lastFileMod,
 		blockingTypes:  blockingTypes,
+		excludeTypes:   excluded,
 		filterInput:    ti,
 		agentAvail:     agent.Available(),
 		agentRuntime:   agent.DetectRuntime(),
@@ -500,9 +508,10 @@ type vitalsMsg struct {
 
 // mutateResultMsg is sent when a bd CLI mutation completes.
 type mutateResultMsg struct {
-	issueID string
-	action  string
-	err     error
+	issueID   string
+	action    string
+	err       error
+	claimedID string // non-empty when --claim-next claimed a follow-up issue
 }
 
 // changeIndicatorExpiredMsg clears change indicators after timeout.
@@ -712,6 +721,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					case "comment":
 						err = data.AddComment(id, value)
 						action = "comment added"
+					case "note":
+						err = data.AddNote(id, value)
+						action = "noted"
 					case "assign":
 						err = data.SetAssignee(id, value)
 						action = "assigned to " + value
@@ -901,6 +913,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.rebuildParade()
 		m.recomputeVelocity()
+		cmds = append(cmds, m.detailFetchBatch()...)
 		return m, tea.Batch(cmds...)
 
 	case data.FileUnchangedMsg:
@@ -1323,11 +1336,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			components.ToastSuccess, toastDuration,
 		)
 		m.toast = toast
+		if msg.action == "noted" {
+			m.detail.RichIssueID = ""
+		}
+		if msg.claimedID != "" {
+			m.pendingSelectID = msg.claimedID
+			m.detail.RichIssueID = ""
+		}
 		// Force reload: reset lastFileMod for JSONL, or immediate fetch for CLI
 		m.lastFileMod = time.Time{}
 		cmds := []tea.Cmd{toastCmd, m.startPollImmediate()}
-		// Trigger confetti on close (unless animations are disabled)
-		if !m.noAnimations && msg.action == "closed" && m.width > 0 && m.height > 0 {
+		// Trigger confetti on close
+		isClose := strings.HasPrefix(msg.action, "closed")
+		if !m.noAnimations && isClose && m.width > 0 && m.height > 0 {
 			m.confetti = NewConfetti(m.width, m.height)
 			cmds = append(cmds, m.confetti.Tick())
 		}
@@ -1883,17 +1904,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "enter":
 			m.activPane = PaneDetail
 			m.detail.Focused = true
-			var cmds []tea.Cmd
-			if cmd := m.maybeFetchMolecule(); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			if cmd := m.maybeFetchComments(); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			if cmd := m.maybeFetchIssueDetail(); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			if len(cmds) > 0 {
+			if cmds := m.detailFetchBatch(); len(cmds) > 0 {
 				return m, tea.Batch(cmds...)
 			}
 		}
@@ -2011,8 +2022,14 @@ func (m Model) closeSelectedIssue() (tea.Model, tea.Cmd) {
 	}
 	issueID := issue.ID
 	return m, func() tea.Msg {
-		err := data.CloseIssue(issueID)
-		return mutateResultMsg{issueID: issueID, action: "closed", err: err}
+		claimedID, err := data.CloseAndClaimNext(issueID)
+		action := "closed"
+		if claimedID != "" {
+			action = fmt.Sprintf("closed → claimed %s", claimedID)
+		} else if err == nil {
+			action = "closed (no ready work)"
+		}
+		return mutateResultMsg{issueID: issueID, action: action, claimedID: claimedID, err: err}
 	}
 }
 
@@ -2137,6 +2154,7 @@ func (m Model) buildPaletteCommands() []components.PaletteCommand {
 		{Name: "Copy branch name", Desc: "Copy git branch to clipboard", Key: "b", Action: components.ActionCopyBranch},
 		{Name: "Create git branch", Desc: "Checkout new branch for issue", Key: "B", Action: components.ActionCreateBranch},
 		{Name: "New issue", Desc: "Create a new beads issue", Key: "N", Action: components.ActionNewIssue},
+		{Name: "Add note", Desc: "Add a note to the selected issue", Key: "", Action: components.ActionAddNote},
 		{Name: "Toggle focus mode", Desc: "Show only my work + top priority", Key: "f", Action: components.ActionToggleFocus},
 		{Name: "Toggle closed issues", Desc: "Show/hide past the stand", Key: "c", Action: components.ActionToggleClosed},
 		{Name: "Filter", Desc: "Fuzzy filter the parade list", Key: "/", Action: components.ActionFilter},
@@ -2157,6 +2175,7 @@ func (m Model) buildPaletteCommands() []components.PaletteCommand {
 			components.PaletteCommand{Name: "Toggle Gas Town", Desc: "Show/hide Gas Town panel", Key: "^g", Action: components.ActionToggleGasTown},
 			components.PaletteCommand{Name: "Sling with formula", Desc: "Pick formula and sling to polecat", Key: "s", Action: components.ActionSlingFormula},
 			components.PaletteCommand{Name: "Nudge agent", Desc: "Nudge agent with message", Key: "n", Action: components.ActionNudgeAgent},
+			components.PaletteCommand{Name: "Create & assign to crew", Desc: "Create issue and hook to crew member", Key: "", Action: components.ActionAssign},
 			components.PaletteCommand{Name: "Create convoy", Desc: "Create convoy from selected issues", Key: "C", Action: components.ActionCreateConvoy},
 			components.PaletteCommand{Name: "Cascade close", Desc: "Close issue and all children", Key: "", Action: components.ActionCascadeClose},
 		)
@@ -2195,6 +2214,13 @@ func (m Model) executePaletteAction(action components.PaletteAction) (tea.Model,
 		m.creating = true
 		m.createForm = m.newCreateForm()
 		return m, m.createForm.Init()
+	case components.ActionAddNote:
+		issue := m.parade.SelectedIssue
+		if issue == nil {
+			return m, nil
+		}
+		cmd := m.startQuickAction("note", issue.ID, "note> ", "Add note to "+issue.ID+"...")
+		return m, cmd
 	case components.ActionToggleFocus:
 		m.focusMode = !m.focusMode
 		m.rebuildParade()
@@ -2221,6 +2247,10 @@ func (m Model) executePaletteAction(action components.PaletteAction) (tea.Model,
 		return m.handleKey(tea.KeyPressMsg{Code: 's', Text: "s"})
 	case components.ActionNudgeAgent:
 		return m.handleKey(tea.KeyPressMsg{Code: 'n', Text: "n"})
+	case components.ActionAssign:
+		m.creating = true
+		m.createForm = components.NewCreateFormWithGT(m.width, m.height)
+		return m, m.createForm.Init()
 	case components.ActionToggleGasTown:
 		if !m.gtEnv.Available {
 			return m, nil
@@ -2543,6 +2573,22 @@ func (m *Model) maybeFetchIssueDetail() tea.Cmd {
 	return fetchIssueDetail(issue.ID)
 }
 
+// detailFetchBatch returns Cmds to refetch molecule, comments, and rich detail
+// for the currently selected issue when their caches are stale.
+func (m *Model) detailFetchBatch() []tea.Cmd {
+	var cmds []tea.Cmd
+	if cmd := m.maybeFetchMolecule(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if cmd := m.maybeFetchComments(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if cmd := m.maybeFetchIssueDetail(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	return cmds
+}
+
 // layout recalculates dimensions for all sub-components.
 func (m *Model) layout() {
 	headerH := 2
@@ -2588,7 +2634,8 @@ func (m *Model) layout() {
 	m.detail.MetadataSchema = m.metadataSchema
 
 	if len(m.parade.Items) == 0 {
-		m.parade = views.NewParadeWithData(m.issues, m.groups, detailIssueMap, paradeW, bodyH, m.blockingTypes)
+		visibleIssues := data.ExcludeByType(m.issues, m.excludeTypes)
+		m.parade = views.NewParadeWithData(visibleIssues, m.groups, detailIssueMap, paradeW, bodyH, m.blockingTypes)
 		m.syncSelection()
 		if m.pendingCurrentID != "" {
 			m.restoreParadeSelection(m.pendingCurrentID)
@@ -2622,13 +2669,14 @@ func (m *Model) rebuildParade() {
 	}
 
 	filteredIssues, highlights := data.FilterIssuesWithHighlights(m.issues, m.filterInput.Value())
+	filteredIssues = data.ExcludeByType(filteredIssues, m.excludeTypes)
 	if m.focusMode {
 		filteredIssues = data.FocusFilter(filteredIssues, m.blockingTypes)
 	}
 	groups := m.groups
 	detailIssueMap := data.BuildIssueMap(m.issues)
 	paradeIssueMap := detailIssueMap
-	if m.filterInput.Value() != "" || m.focusMode {
+	if m.filterInput.Value() != "" || m.focusMode || len(m.excludeTypes) > 0 {
 		groups = data.GroupByParade(filteredIssues, m.blockingTypes)
 		paradeIssueMap = data.BuildIssueMap(filteredIssues)
 	}
@@ -2650,6 +2698,10 @@ func (m *Model) rebuildParade() {
 		m.parade.ToggleClosed()
 	}
 	m.restoreParadeSelection(oldSelectedID)
+	if m.pendingSelectID != "" {
+		m.restoreParadeSelection(m.pendingSelectID)
+		m.pendingSelectID = ""
+	}
 
 	// Propagate change indicators to parade
 	m.parade.ChangedIDs = m.changedIDs

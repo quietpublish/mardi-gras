@@ -2,6 +2,20 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.15.0 (2026-03-22)
+
+### Added
+- **`--exclude-type` flag** — hide issue types from the parade and status output (e.g., `mg --exclude-type=epic,chore`). Excluded issues remain in dependency graphs and the detail panel.
+- **Claim-next on close** — closing a single issue now runs `bd close --claim-next`, automatically claiming the next ready issue. The parade selects the claimed issue and fetches its detail. Falls back gracefully when no ready work exists.
+- **Add note** — new palette action (`:` → "Add note") to append notes via `bd note`. Notes appear in the detail panel after reload.
+- **Create & assign to crew** — new palette shortcut (`:` → "Create & assign to crew") for the Gas Town crew assignment flow.
+
+### Removed
+- **HOP dead code** — removed ~650 lines of dead HOP (Hierarchy of Proof) code after beads v0.62.0 dropped these fields from the schema. Types, views, tests, scorecard logic, UI constants, and docs all cleaned up. `SymCrystal` renamed to `SymDiamond` for molecule critical-path reuse.
+
+### Fixed
+- **Detail cache refresh** — molecule, comments, and rich detail now auto-refresh when the selected issue changes after a reload (e.g., via claim-next). Previously required manually pressing `enter`.
+
 ## v0.14.0 (2026-03-20)
 
 ### Added

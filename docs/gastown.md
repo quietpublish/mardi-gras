@@ -48,7 +48,7 @@ The Gas Town panel includes several data views below the interactive sections:
 - **Vitals** — Dolt server health (port, PID, disk, connections, latency) and backup freshness from `gt vitals`
 - **Activity Feed** — real-time event ticker showing slings, nudges, handoffs, session starts/deaths, and spawns
 - **Velocity** — issue flow rates (created/closed today and this week), agent utilization percentage, cost summary, and a 7-day dual sparkline showing created vs closed trends
-- **Scorecards** — HOP-powered agent quality ratings aggregated across recent work
+- **Scorecards** — agent quality ratings aggregated across recent work
 - **Predictions** — convoy completion ETAs based on historical throughput
 
 ## Problems View (`p`)

@@ -6,11 +6,11 @@
 - `internal/app`: BubbleTea root model, key routing, pane orchestration, confetti animation.
 - `internal/views`: Parade (left pane), Detail (right pane), Gas Town panel, Problems overlay.
 - `internal/components`: Header, Footer, Help overlay, Command palette, Toast notifications, Create form, Float utility.
-- `internal/data`: JSONL loading, grouping, dependency/status logic, filtering, focus mode, mutations (`bd` CLI), cross-rig deps, HOP types.
+- `internal/data`: JSONL loading, grouping, dependency/status logic, filtering, focus mode, mutations (`bd` CLI), cross-rig deps.
 - `internal/gastown`: Gas Town integration — environment detection, `gt status` parsing, sling/nudge/handoff/decommission, convoy CRUD, mail inbox/reply/compose, molecule DAG, costs, vitals (server health + backups), activity feed, velocity, scorecards, predictions, formula recommendations, problem detection (stalled/stuck/backoff/zombie/dead_rig), rig recovery.
 - `internal/agent`: Claude Code prompt builder, tmux window launch/discover/kill.
 - `internal/tmux`: tmux status line widget (`mg --status` mode).
-- `internal/ui`: Theme palette (with Gas Town role/state colors), Lipgloss styles, Unicode symbols (including DAG connectors), HOP badge rendering.
+- `internal/ui`: Theme palette (with Gas Town role/state colors), Lipgloss styles, Unicode symbols (including DAG connectors).
 - `testdata/sample.jsonl`: fixture for tests and local demo runs.
 - `testdata/fake-gt.sh`: fake `gt` binary for local Gas Town testing (`make dev-gt`).
 - `docs/`: Architecture docs, internal design docs, screenshots.

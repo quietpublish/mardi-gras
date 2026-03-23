@@ -252,52 +252,6 @@ func (d *Detail) renderContent() string {
 		}
 	}
 
-	// Quality (HOP)
-	if issue.QualityScore != nil {
-		lines = append(lines, "")
-		lines = append(lines, ui.DetailSection.Render("QUALITY"))
-		stars := ui.RenderStars(*issue.QualityScore)
-		scoreStr := fmt.Sprintf("%.2f (%s)", *issue.QualityScore, data.QualityLabel(*issue.QualityScore))
-		lines = append(lines, d.row("Score:", stars+" "+scoreStr))
-
-		if issue.Creator != nil {
-			creatorLabel := issue.Creator.Name
-			if issue.Creator.Platform != "" {
-				creatorLabel += " (" + issue.Creator.Platform + ")"
-			}
-			lines = append(lines, d.row("Creator:", ui.DetailValue.Render(creatorLabel)))
-		}
-
-		if len(issue.Validations) > 0 {
-			lines = append(lines, d.row("Validators:", ""))
-			for _, v := range issue.Validations {
-				var style lipgloss.Style
-				sym := ui.SymResolved
-				switch v.Outcome {
-				case data.OutcomeAccepted:
-					style = ui.ValidatorAccepted
-				case data.OutcomeRejected:
-					style = ui.ValidatorRejected
-					sym = "✗"
-				case data.OutcomeRevision:
-					style = ui.ValidatorRevision
-					sym = "↻"
-				}
-				label := fmt.Sprintf("  %s %s %s (%.1f)",
-					sym, v.Validator.Name, v.Outcome, v.QualityScore)
-				lines = append(lines, style.Render(label))
-			}
-		}
-
-		if issue.Crystallizes != nil {
-			if *issue.Crystallizes {
-				lines = append(lines, d.row("Nature:", ui.CrystalBadge.Render(ui.SymCrystal+" crystallizes")))
-			} else {
-				lines = append(lines, d.row("Nature:", ui.EphemeralBadge.Render(ui.SymEphemeral+" ephemeral")))
-			}
-		}
-	}
-
 	// Formula recommendation (for open/in-progress issues)
 	if issue.Status != data.StatusClosed {
 		recs := gastown.RecommendFormulas(*issue)
@@ -553,7 +507,7 @@ func (d *Detail) renderDAGNode(node *gastown.DAGNode, prefix string, critical bo
 	// Single node
 	result := fmt.Sprintf("  %s", style.Render(sym+" "+title))
 	if critical && node.Status != "done" && node.Status != "closed" {
-		result += " " + ui.MolCritical.Render(ui.SymCrystal)
+		result += " " + ui.MolCritical.Render(ui.SymDiamond)
 	}
 	return result
 }

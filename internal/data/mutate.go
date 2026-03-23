@@ -1,6 +1,7 @@
 package data
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -19,6 +20,26 @@ func ClaimIssue(issueID string) error {
 // CloseIssue runs `bd close <id>` to close an issue.
 func CloseIssue(issueID string) error {
 	return execWithTimeout(timeoutShort, "bd", "close", issueID)
+}
+
+// CloseAndClaimNext runs `bd close --claim-next --json <id>` and returns the
+// next claimed issue ID, if any.
+func CloseAndClaimNext(issueID string) (string, error) {
+	out, err := runWithTimeout(timeoutShort, "bd", "close", "--claim-next", "--json", issueID)
+	if err != nil {
+		return "", wrapExitError("bd close --claim-next", err)
+	}
+
+	var result struct {
+		Claimed *Issue `json:"claimed"`
+	}
+	if err := json.Unmarshal(out, &result); err != nil {
+		return "", fmt.Errorf("bd close --claim-next parse: %w", err)
+	}
+	if result.Claimed == nil {
+		return "", nil
+	}
+	return result.Claimed.ID, nil
 }
 
 // SetPriority runs `bd update <id> --priority=<n>` to change priority.
@@ -51,6 +72,12 @@ func UpdateTitle(issueID, title string) error {
 func AddComment(issueID, body string) error {
 	_, err := runWithTimeout(timeoutShort, "bd", "comments", "add", issueID, "--", body)
 	return wrapExitError("bd comments add", err)
+}
+
+// AddNote runs `bd note <id> -- <body>` to add a note to an issue.
+func AddNote(issueID, body string) error {
+	_, err := runWithTimeout(timeoutShort, "bd", "note", issueID, "--", body)
+	return wrapExitError("bd note", err)
 }
 
 // SetAssignee runs `bd update <id> --assignee=<name>` to assign an issue.

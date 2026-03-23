@@ -84,6 +84,47 @@ func TestMutateResultClosedNoAnimations(t *testing.T) {
 	}
 }
 
+func TestMutateClaimNextResultSuccess(t *testing.T) {
+	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
+	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	got := model.(Model)
+	got.detail.RichIssueID = "open-1"
+
+	model, _ = got.Update(mutateResultMsg{issueID: "open-1", action: "closed → claimed open-2", claimedID: "open-2"})
+	got = model.(Model)
+
+	if got.pendingSelectID != "open-2" {
+		t.Fatalf("pendingSelectID = %q, want %q", got.pendingSelectID, "open-2")
+	}
+	if got.detail.RichIssueID != "" {
+		t.Fatalf("RichIssueID = %q, want empty string", got.detail.RichIssueID)
+	}
+	if !got.confetti.Active() {
+		t.Fatal("expected confetti to be active after claim-next close")
+	}
+	if !strings.Contains(got.toast.Message, "open-1") || !strings.Contains(got.toast.Message, "claimed open-2") {
+		t.Fatalf("unexpected toast message: %q", got.toast.Message)
+	}
+}
+
+func TestMutateClaimNextResultNoReadyWork(t *testing.T) {
+	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
+	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	got := model.(Model)
+
+	model, _ = got.Update(mutateResultMsg{issueID: "open-1", action: "closed (no ready work)"})
+	got = model.(Model)
+
+	if got.pendingSelectID != "" {
+		t.Fatalf("pendingSelectID = %q, want empty string", got.pendingSelectID)
+	}
+	if !strings.Contains(got.toast.Message, "no ready work") {
+		t.Fatalf("unexpected toast message: %q", got.toast.Message)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // TestMutateResultError
 // ---------------------------------------------------------------------------
@@ -245,6 +286,7 @@ func TestBuildPaletteCommandsGasTown(t *testing.T) {
 	// Verify sling/nudge actions are present.
 	foundSling := false
 	foundNudge := false
+	foundAssign := false
 	for _, cmd := range gtCmds {
 		if cmd.Action == components.ActionSlingFormula {
 			foundSling = true
@@ -252,12 +294,18 @@ func TestBuildPaletteCommandsGasTown(t *testing.T) {
 		if cmd.Action == components.ActionNudgeAgent {
 			foundNudge = true
 		}
+		if cmd.Action == components.ActionAssign {
+			foundAssign = true
+		}
 	}
 	if !foundSling {
 		t.Error("expected ActionSlingFormula in gastown palette commands")
 	}
 	if !foundNudge {
 		t.Error("expected ActionNudgeAgent in gastown palette commands")
+	}
+	if !foundAssign {
+		t.Error("expected ActionAssign in gastown palette commands")
 	}
 }
 
@@ -321,6 +369,24 @@ func TestExecutePaletteActions(t *testing.T) {
 			},
 		},
 		{
+			name:   "ActionAddNote sets quick action mode",
+			action: components.ActionAddNote,
+			check: func(t *testing.T, m Model, cmd tea.Cmd) {
+				if m.qaMode != "note" {
+					t.Fatalf("expected qaMode %q after ActionAddNote, got %q", "note", m.qaMode)
+				}
+			},
+		},
+		{
+			name:   "ActionAssign sets creating",
+			action: components.ActionAssign,
+			check: func(t *testing.T, m Model, cmd tea.Cmd) {
+				if !m.creating {
+					t.Fatal("expected creating to be true after ActionAssign")
+				}
+			},
+		},
+		{
 			name:   "ActionToggleClosed flips ShowClosed",
 			action: components.ActionToggleClosed,
 			check: func(t *testing.T, m Model, cmd tea.Cmd) {
@@ -337,6 +403,9 @@ func TestExecutePaletteActions(t *testing.T) {
 			m := New(issues, data.Source{}, data.DefaultBlockingTypes)
 			model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 			got := model.(Model)
+			if tt.action == components.ActionAssign {
+				got.gtEnv.Available = true
+			}
 
 			result, cmd := got.executePaletteAction(tt.action)
 			got = result.(Model)

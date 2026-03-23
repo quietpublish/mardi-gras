@@ -99,12 +99,8 @@ const (
 	SymDAGJoin   = "└"
 	SymDAGArrow  = "↓"
 
-	// HOP quality indicators
-	SymStar      = "★"
-	SymStarEmpty = "☆"
-	SymCrystal   = "◆"
-	SymEphemeral = "◇"
-	SymValidator = "⚖"
+	// Geometric indicators
+	SymDiamond = "◆"
 )
 
 // superscriptDigits maps 0-9 to their Unicode superscript equivalents.

@@ -112,13 +112,6 @@ type Issue struct {
 	DueAt              *time.Time             `json:"due_at,omitempty"`
 	DeferUntil         *time.Time             `json:"defer_until,omitempty"`
 	Metadata           map[string]interface{} `json:"metadata,omitempty"`
-
-	// HOP (Hierarchy of Proof) — agent reputation and quality tracking.
-	// These fields will be populated when Beads ships HOP support.
-	Creator      *EntityRef   `json:"creator,omitempty"`
-	Validations  []Validation `json:"validations,omitempty"`
-	QualityScore *float32     `json:"quality_score,omitempty"`
-	Crystallizes *bool        `json:"crystallizes,omitempty"`
 }
 
 // EvaluateDependencies is the canonical function for classifying all dependency
