@@ -77,7 +77,7 @@ internal/
   agent/              Agent runtime detection (Claude Code, Cursor) and tmux dispatch
   gastown/            Gas Town integration (status, sling, convoy, mail, problems, recovery, analytics)
   tmux/               tmux status line widget (--status mode)
-  ui/                 Theme colors, lipgloss styles, Unicode symbols, HOP badges
+  ui/                 Theme colors, lipgloss styles, Unicode symbols
 
 testdata/             Sample JSONL for development
 docs/                 Architecture docs, internal design docs, screenshots

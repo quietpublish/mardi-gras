@@ -623,81 +623,6 @@ func TestCommentsClearedOnIssueSwitch(t *testing.T) {
 	}
 }
 
-func TestQualitySectionRendered(t *testing.T) {
-	score := float32(0.85)
-	cryst := true
-	issues := []data.Issue{
-		{ID: "mg-001", Title: "HOP Issue", Status: data.StatusClosed,
-			Priority:     data.PriorityMedium,
-			IssueType:    data.TypeTask,
-			CreatedAt:    time.Now(),
-			QualityScore: &score,
-			Crystallizes: &cryst,
-			Creator: &data.EntityRef{
-				Name:     "polecat-alpha",
-				Platform: "gastown",
-				URI:      "hop://gastown/mardi_gras/polecat-alpha",
-			},
-			Validations: []data.Validation{
-				{
-					Validator:    data.EntityRef{Name: "witness", Platform: "gastown"},
-					Outcome:      data.OutcomeAccepted,
-					QualityScore: 0.9,
-				},
-				{
-					Validator:    data.EntityRef{Name: "refinery", Platform: "gastown"},
-					Outcome:      data.OutcomeAccepted,
-					QualityScore: 0.8,
-					Comment:      "Clean implementation",
-				},
-			},
-		},
-	}
-	d := NewDetail(80, 40, issues)
-	d.SetIssue(&issues[0])
-
-	content := d.renderContent()
-
-	if !strings.Contains(content, "QUALITY") {
-		t.Error("content should contain QUALITY section")
-	}
-	if !strings.Contains(content, "0.85") {
-		t.Error("content should contain quality score")
-	}
-	if !strings.Contains(content, "good") {
-		t.Error("content should contain quality label 'good'")
-	}
-	if !strings.Contains(content, "polecat-alpha") {
-		t.Error("content should contain creator name")
-	}
-	if !strings.Contains(content, "witness") {
-		t.Error("content should contain validator name")
-	}
-	if !strings.Contains(content, "refinery") {
-		t.Error("content should contain second validator name")
-	}
-	if !strings.Contains(content, "crystallizes") {
-		t.Error("content should contain crystallization indicator")
-	}
-}
-
-func TestQualitySectionNotRenderedWithoutScore(t *testing.T) {
-	issues := []data.Issue{
-		{ID: "mg-001", Title: "No HOP", Status: data.StatusOpen,
-			Priority:  data.PriorityMedium,
-			IssueType: data.TypeTask,
-			CreatedAt: time.Now()},
-	}
-	d := NewDetail(80, 40, issues)
-	d.SetIssue(&issues[0])
-
-	content := d.renderContent()
-
-	if strings.Contains(content, "QUALITY") {
-		t.Error("content should not contain QUALITY section when no quality score")
-	}
-}
-
 func TestFormulaRecommendationRendered(t *testing.T) {
 	issues := []data.Issue{
 		{ID: "bd-001", Title: "Add authentication middleware", Status: data.StatusOpen,
@@ -778,39 +703,6 @@ func TestFormulaRecommendationNotRenderedForClosed(t *testing.T) {
 
 	if strings.Contains(content, "FORMULA") {
 		t.Error("content should not contain FORMULA section for closed issue")
-	}
-}
-
-func TestQualityRejectedValidation(t *testing.T) {
-	score := float32(0.3)
-	issues := []data.Issue{
-		{ID: "mg-001", Title: "Rejected Issue", Status: data.StatusInProgress,
-			Priority:     data.PriorityMedium,
-			IssueType:    data.TypeTask,
-			CreatedAt:    time.Now(),
-			QualityScore: &score,
-			Validations: []data.Validation{
-				{
-					Validator:    data.EntityRef{Name: "witness"},
-					Outcome:      data.OutcomeRejected,
-					QualityScore: 0.2,
-				},
-			},
-		},
-	}
-	d := NewDetail(80, 40, issues)
-	d.SetIssue(&issues[0])
-
-	content := d.renderContent()
-
-	if !strings.Contains(content, "QUALITY") {
-		t.Error("content should contain QUALITY section")
-	}
-	if !strings.Contains(content, "poor") {
-		t.Error("content should contain quality label 'poor'")
-	}
-	if !strings.Contains(content, "rejected") {
-		t.Error("content should contain 'rejected' outcome")
 	}
 }
 

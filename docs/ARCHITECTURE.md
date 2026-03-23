@@ -26,7 +26,7 @@ internal/
     metadata.go           Beads config parsing, metadata schema, ResolveBeadsDir
     exec.go               Timeout helpers for bd/git commands (short/medium tiers)
     crossrig.go           Cross-rig dependency detection and rendering
-    hop.go                HOP (Hierarchy of Proof) quality score types
+
 
   views/
     parade.go             Left pane: grouped issue list with cursor navigation
@@ -62,7 +62,7 @@ internal/
     vitals.go             Server health + backup freshness from gt vitals
     activity.go           Activity feed event parsing
     velocity.go           Workflow velocity metrics computation
-    scorecard.go          HOP agent scorecards (quality aggregates)
+    scorecard.go          Agent scorecards (quality aggregates)
     predict.go            Convoy ETA prediction from historical throughput
     recommend.go          Formula recommendation heuristics
     comments.go           Issue comment/timeline fetching
@@ -75,7 +75,6 @@ internal/
     styles.go             Pre-built lipgloss styles (parade, detail, Gas Town, DAG)
     symbols.go            Unicode symbols (status, deps, borders, DAG connectors)
     gradient.go           Gradient text rendering
-    hop.go                HOP badge rendering (stars, crystal/ephemeral indicators)
 ```
 
 ### Dependency direction
@@ -92,7 +91,7 @@ app.Model
   --> data     (types, watcher, filter, grouping, mutations)
   --> gastown  (detection, status, sling, convoy, mail, costs, ...)
   --> agent    (Claude Code launch/tracking)
-  --> ui       (theme, styles, symbols, hop)
+  --> ui       (theme, styles, symbols)
 
 views
   --> data     (Issue, DepEval types)
@@ -264,7 +263,7 @@ type Model struct {
 
 **`views.Parade`** — Maintains a flat `[]ParadeItem` list (headers + issue rows + footers), a cursor position, and scroll offset. Renders each parade group with decorated borders. Navigation methods (`MoveUp`, `MoveDown`) skip non-selectable items. Supports multi-select (`selectedIDs` set) for bulk operations.
 
-**`views.Detail`** — Wraps a `viewport.Model` (from bubbles) for scrollable content. Renders the selected issue's metadata, description, notes, due dates, HOP quality badges, full dependency breakdown (blocking/resolved/missing/non-blocking/reverse), comments/timeline, and molecule DAG visualization.
+**`views.Detail`** — Wraps a `viewport.Model` (from bubbles) for scrollable content. Renders the selected issue's metadata, description, notes, due dates, full dependency breakdown (blocking/resolved/missing/non-blocking/reverse), comments/timeline, and molecule DAG visualization.
 
 **`views.GasTown`** — Three-section control surface (agents/convoys/mail) that replaces the detail pane when active. Navigable with `tab` between sections and `j/k` within. Renders agent roster with role badges and state colors, convoy progress bars with expand/collapse, mail inbox with unread counts, cost dashboard, vitals (server health + backup freshness), activity feed, velocity metrics, scorecards, and predictions. Emits `GasTownActionMsg` for user actions.
 
@@ -430,7 +429,7 @@ Each file handles one data domain:
 - **vitals.go** — Parse `gt vitals` text output for Dolt server health and backup freshness
 - **activity.go** — Parse event streams for the activity feed
 - **velocity.go** — Compute issue flow rates and agent utilization
-- **scorecard.go** — Aggregate HOP quality scores per agent
+- **scorecard.go** — Aggregate quality scores per agent
 - **predict.go** — Convoy ETA estimation from historical throughput
 - **recommend.go** — Formula recommendation based on issue characteristics
 
@@ -443,7 +442,7 @@ Issue
   Dependencies []Dependency
   Notes, Design, AcceptanceCriteria, CloseReason
   DueDate, Comments []Comment
-  QualityScore, Crystallizes, Creator, Validations  (HOP fields)
+
 
 Status:        open | in_progress | closed
 IssueType:     task | bug | feature | chore | epic
@@ -509,8 +508,6 @@ All visual constants live in `internal/ui/`:
 - **theme.go** — Color palette (Mardi Gras purple, gold, green), plus `RoleColor()` for all 7 Gas Town agent roles (mayor/coordinator, deacon/health-check, polecat, crew, witness, refinery, dog) and `AgentStateColor()` for working/idle/backoff/stuck/spawning/gate/paused states
 - **styles.go** — Pre-built lipgloss styles for every context: parade items, detail sections, Gas Town panel, DAG connectors, toast notifications, command palette
 - **symbols.go** — Unicode symbols: status indicators (●, ♪, ⊘, ✓), dependency arrows, DAG flow connectors (│, ┌, ├, └), progress bars
-- **hop.go** — HOP badge rendering (star ratings, crystal/ephemeral indicators)
-
 Convention: views and components import `ui` for all visual constants. No raw colors or symbols in view code.
 
 ### Receiver Conventions

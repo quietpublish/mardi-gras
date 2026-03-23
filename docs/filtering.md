@@ -25,7 +25,6 @@ Press `enter` on any issue to focus the detail pane. It shows everything about t
 - **Comments & Timeline** — full conversation history with timestamps
 - **Agent Output** — live tail of the active agent's tmux pane (last 15 lines, ANSI stripped)
 - **Molecule DAG** — multi-step workflows rendered as a visual flow graph with parallel branching (`┌─ ├─ └─`) and connector lines between tiers
-- **HOP Quality** — reputation stars, crystal/ephemeral badges, and validator verdicts for agent-produced work
 
 Press `m` in the detail pane to mark the active molecule step as done.
 
