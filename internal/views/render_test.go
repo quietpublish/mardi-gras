@@ -71,7 +71,8 @@ func TestStatusSymbol(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := statusSymbol(&tc.issue, emptyMap, bt)
+			isBlocked := tc.issue.EvaluateDependencies(emptyMap, bt).IsBlocked
+			got := statusSymbol(&tc.issue, isBlocked)
 			if got != tc.expect {
 				t.Fatalf("statusSymbol(%s) = %q, want %q", tc.issue.ID, got, tc.expect)
 			}
@@ -117,7 +118,8 @@ func TestStatusColor(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := statusColor(&tc.issue, emptyMap, bt)
+			isBlocked := tc.issue.EvaluateDependencies(emptyMap, bt).IsBlocked
+			got := statusColor(&tc.issue, isBlocked)
 			if got != tc.expect {
 				t.Fatalf("statusColor(%s) = %v, want %v", tc.issue.ID, got, tc.expect)
 			}

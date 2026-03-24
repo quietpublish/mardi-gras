@@ -39,6 +39,12 @@ var (
 			Bold(true).
 			Foreground(StatusPassed)
 
+	// Pre-rendered status indicators
+	StatusRollingStr = lipgloss.NewStyle().Foreground(StatusRolling).Render(SymRolling)
+	StatusLinedUpStr = lipgloss.NewStyle().Foreground(StatusLinedUp).Render(SymLinedUp)
+	StatusStalledStr = lipgloss.NewStyle().Foreground(StatusStalled).Render(SymStalled)
+	StatusPassedStr  = lipgloss.NewStyle().Foreground(StatusPassed).Render(SymPassed)
+
 	// Issue items in the list
 	ItemNormal = lipgloss.NewStyle().
 			PaddingLeft(3)
@@ -81,6 +87,13 @@ var (
 	// Priority badge
 	BadgePriority = lipgloss.NewStyle().
 			Bold(true)
+
+	// Pre-rendered priority badges
+	BadgeP0 = BadgePriority.Foreground(PrioP0).Render("P0")
+	BadgeP1 = BadgePriority.Foreground(PrioP1).Render("P1")
+	BadgeP2 = BadgePriority.Foreground(PrioP2).Render("P2")
+	BadgeP3 = BadgePriority.Foreground(PrioP3).Render("P3")
+	BadgeP4 = BadgePriority.Foreground(PrioP4).Render("P4")
 
 	// Type badge
 	BadgeType = lipgloss.NewStyle().
@@ -343,6 +356,11 @@ func SectionDivider(title string, width int, focused bool) string {
 		ruleStyle.Render(trail)
 }
 
+var (
+	matchStyle  = lipgloss.NewStyle().Foreground(BrightGold).Bold(true).Underline(true)
+	normalStyle = lipgloss.NewStyle()
+)
+
 // HighlightMatches renders a string with matched character positions highlighted.
 // Matched characters are rendered in bright gold bold; others use default style.
 func HighlightMatches(text string, indices []int, maxLen int) string {
@@ -356,15 +374,12 @@ func HighlightMatches(text string, indices []int, maxLen int) string {
 		matchSet[idx] = true
 	}
 
-	matchStyle := lipgloss.NewStyle().Foreground(BrightGold).Bold(true).Underline(true)
-	normalStyle := lipgloss.NewStyle()
-
 	var b strings.Builder
 	for i, r := range runes {
 		if matchSet[i] {
 			b.WriteString(matchStyle.Render(string(r)))
 		} else {
-			b.WriteString(normalStyle.Render(string(r)))
+			b.WriteRune(r)
 		}
 	}
 	return b.String()

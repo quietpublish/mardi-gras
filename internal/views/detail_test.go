@@ -34,7 +34,8 @@ func TestParadeLabel(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := paradeLabel(tc.issue, issueMap, bt)
+			isBlocked := tc.issue.EvaluateDependencies(issueMap, bt).IsBlocked
+			got := paradeLabel(tc.issue, isBlocked)
 			if got != tc.expect {
 				t.Fatalf("paradeLabel(%s) = %q, want %q", tc.issue.ID, got, tc.expect)
 			}

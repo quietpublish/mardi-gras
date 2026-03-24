@@ -3063,10 +3063,20 @@ func (m Model) View() tea.View {
 
 // overlayStrings composites non-space characters from overlay onto base.
 func overlayStrings(base, overlay string) string {
+	if overlay == "" {
+		return base
+	}
 	baseLines := splitLines(base)
 	overlayLines := splitLines(overlay)
 
 	for y := 0; y < len(overlayLines) && y < len(baseLines); y++ {
+		if overlayLines[y] == "" {
+			continue
+		}
+		// Fast path: if overlay line is all spaces (after ANSI stripped), skip
+		// Actually, overlay has ANSI. We need to check if there are any non-space visible chars.
+		// But let's just do the rune loop, it's safer.
+
 		baseRunes := []rune(baseLines[y])
 		overlayRunes := []rune(overlayLines[y])
 		for x := 0; x < len(overlayRunes) && x < len(baseRunes); x++ {
@@ -3081,27 +3091,11 @@ func overlayStrings(base, overlay string) string {
 }
 
 func splitLines(s string) []string {
-	var lines []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			lines = append(lines, s[start:i])
-			start = i + 1
-		}
-	}
-	lines = append(lines, s[start:])
-	return lines
+	return strings.Split(s, "\n")
 }
 
 func joinLines(lines []string) string {
-	result := ""
-	for i, line := range lines {
-		if i > 0 {
-			result += "\n"
-		}
-		result += line
-	}
-	return result
+	return strings.Join(lines, "\n")
 }
 
 func plural(n int) string {

@@ -31,16 +31,19 @@ type particle struct {
 	vx, vy float64
 	glyph  string
 	color  color.Color
+	styled string // pre-rendered styled glyph
 }
 
 // necklace is a vertical chain of connected beads that falls together.
 type necklace struct {
-	x      float64       // horizontal position
-	y      float64       // top bead position
-	vy     float64       // vertical velocity
-	vx     float64       // slight horizontal sway
-	beads  []color.Color // color per bead
-	glyphs []string      // glyph per bead
+	x            float64       // horizontal position
+	y            float64       // top bead position
+	vy           float64       // vertical velocity
+	vx           float64       // slight horizontal sway
+	beads        []color.Color // color per bead
+	glyphs       []string      // glyph per bead
+	styledBeads  []string      // pre-rendered styled beads
+	styledConns  []string      // pre-rendered styled connectors
 }
 
 // Confetti is a particle animation triggered on issue close.
@@ -65,13 +68,16 @@ func NewConfetti(width, height int) Confetti {
 
 	particles := make([]particle, confettiParticles)
 	for i := range particles {
+		g := confettiGlyphs[rand.IntN(len(confettiGlyphs))]
+		c := confettiColors[rand.IntN(len(confettiColors))]
 		particles[i] = particle{
-			x:     centerX,
-			y:     centerY,
-			vx:    (rand.Float64() - 0.5) * 6,
-			vy:    (rand.Float64() - 0.8) * 5, // bias upward
-			glyph: confettiGlyphs[rand.IntN(len(confettiGlyphs))],
-			color: confettiColors[rand.IntN(len(confettiColors))],
+			x:      centerX,
+			y:      centerY,
+			vx:     (rand.Float64() - 0.5) * 6,
+			vy:     (rand.Float64() - 0.8) * 5, // bias upward
+			glyph:  g,
+			color:  c,
+			styled: lipgloss.NewStyle().Foreground(c).Render(g),
 		}
 	}
 
@@ -80,20 +86,29 @@ func NewConfetti(width, height int) Confetti {
 	for i := range necklaces {
 		beadColors := make([]color.Color, necklaceLength)
 		beadGlyphs := make([]string, necklaceLength)
+		styledBeads := make([]string, necklaceLength)
+		styledConns := make([]string, necklaceLength)
+
 		// Each necklace uses a consistent Mardi Gras color trio
 		baseIdx := i % 3
 		colorTriple := []color.Color{ui.BrightPurple, ui.BrightGold, ui.BrightGreen}
 		for j := range beadColors {
-			beadColors[j] = colorTriple[(baseIdx+j)%3]
-			beadGlyphs[j] = necklaceGlyphs[j%len(necklaceGlyphs)]
+			c := colorTriple[(baseIdx+j)%3]
+			g := necklaceGlyphs[j%len(necklaceGlyphs)]
+			beadColors[j] = c
+			beadGlyphs[j] = g
+			styledBeads[j] = lipgloss.NewStyle().Foreground(c).Render(g)
+			styledConns[j] = lipgloss.NewStyle().Foreground(c).Render("│")
 		}
 		necklaces[i] = necklace{
-			x:      centerX + (rand.Float64()-0.5)*float64(width)*0.6,
-			y:      -float64(necklaceLength) - rand.Float64()*3, // start above screen
-			vy:     0.8 + rand.Float64()*0.4,                    // gentle fall
-			vx:     (rand.Float64() - 0.5) * 0.3,                // slight sway
-			beads:  beadColors,
-			glyphs: beadGlyphs,
+			x:           centerX + (rand.Float64()-0.5)*float64(width)*0.6,
+			y:           -float64(necklaceLength) - rand.Float64()*3, // start above screen
+			vy:          0.8 + rand.Float64()*0.4,                    // gentle fall
+			vx:          (rand.Float64() - 0.5) * 0.3,                // slight sway
+			beads:       beadColors,
+			glyphs:      beadGlyphs,
+			styledBeads: styledBeads,
+			styledConns: styledConns,
 		}
 	}
 
@@ -151,13 +166,11 @@ func (c Confetti) View() string {
 	}
 
 	// Build a character grid
-	grid := make([][]rune, c.height)
-	colors := make([][]color.Color, c.height)
+	grid := make([][]string, c.height)
 	for y := range grid {
-		grid[y] = make([]rune, c.width)
-		colors[y] = make([]color.Color, c.width)
+		grid[y] = make([]string, c.width)
 		for x := range grid[y] {
-			grid[y][x] = ' '
+			grid[y][x] = " "
 		}
 	}
 
@@ -166,11 +179,7 @@ func (c Confetti) View() string {
 		px := int(p.x)
 		py := int(p.y)
 		if px >= 0 && px < c.width && py >= 0 && py < c.height {
-			runes := []rune(p.glyph)
-			if len(runes) > 0 {
-				grid[py][px] = runes[0]
-				colors[py][px] = p.color
-			}
+			grid[py][px] = p.styled
 		}
 	}
 
@@ -180,21 +189,16 @@ func (c Confetti) View() string {
 		if px < 0 || px >= c.width {
 			continue
 		}
-		for j, beadColor := range n.beads {
+		for j := range n.beads {
 			// Each bead is at y + j*2 (bead, connector, bead, connector...)
 			beadY := int(n.y) + j*2
 			if beadY >= 0 && beadY < c.height {
-				runes := []rune(n.glyphs[j])
-				if len(runes) > 0 {
-					grid[beadY][px] = runes[0]
-					colors[beadY][px] = beadColor
-				}
+				grid[beadY][px] = n.styledBeads[j]
 			}
 			// Connector between beads
 			connY := beadY + 1
 			if j < len(n.beads)-1 && connY >= 0 && connY < c.height {
-				grid[connY][px] = '│'
-				colors[connY][px] = beadColor
+				grid[connY][px] = n.styledConns[j]
 			}
 		}
 	}
@@ -204,13 +208,7 @@ func (c Confetti) View() string {
 	for y := range grid {
 		var line strings.Builder
 		for x := range grid[y] {
-			ch := string(grid[y][x])
-			if grid[y][x] != ' ' {
-				style := lipgloss.NewStyle().Foreground(colors[y][x])
-				line.WriteString(style.Render(ch))
-			} else {
-				line.WriteString(ch)
-			}
+			line.WriteString(grid[y][x])
 		}
 		lines = append(lines, line.String())
 	}

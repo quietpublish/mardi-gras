@@ -55,8 +55,7 @@ func RenderSparkline(values []int, width int) string {
 			c = cMid.BlendLuv(cHigh, (t-0.5)*2)
 		}
 
-		style := lipgloss.NewStyle().Foreground(lipgloss.Color(c.Hex()))
-		b.WriteString(style.Render(sparkBlocks[level]))
+		b.WriteString(getCachedChar([]rune(sparkBlocks[level])[0], c.Hex()))
 	}
 
 	return b.String()
@@ -90,7 +89,7 @@ func HeatChar(eventCount, maxCount int) string {
 		sym = "▮"
 	}
 
-	return lipgloss.NewStyle().Foreground(lipgloss.Color(c.Hex())).Render(sym)
+	return getCachedChar([]rune(sym)[0], c.Hex())
 }
 
 // brailleTable maps pairs of vertical values (left 0-4, right 0-4) to braille chars.

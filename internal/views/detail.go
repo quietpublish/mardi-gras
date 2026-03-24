@@ -35,6 +35,7 @@ type Detail struct {
 	MetadataSchema   *data.MetadataSchema
 	AgentOutput      []string // live captured lines from agent's tmux pane
 	AgentOutputID    string   // which issue the agent output belongs to
+	mdRenderer       *glamour.TermRenderer
 }
 
 // NewDetail creates a detail panel.
@@ -107,12 +108,13 @@ func (d *Detail) SetRichDetail(issueID string, rich *data.Issue) {
 	}
 }
 
-// SetSize updates dimensions.
+// SetSize updates dimensions and re-renders content.
 func (d *Detail) SetSize(width, height int) {
 	d.Width = width
 	d.Height = height
 	d.Viewport.SetWidth(width - 2)
 	d.Viewport.SetHeight(height)
+	d.mdRenderer = nil // re-create with new width
 	if d.Issue != nil {
 		d.Viewport.SetContent(d.renderContent())
 	}
@@ -136,20 +138,29 @@ func (d *Detail) View() string {
 
 // renderMarkdown renders markdown text using glamour with dark theme.
 func (d *Detail) renderMarkdown(text string) string {
+	if text == "" {
+		return ""
+	}
+
 	contentWidth := d.Width - 6
 	if contentWidth < 20 {
 		contentWidth = 20
 	}
-	r, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(contentWidth),
-	)
-	if err != nil {
-		return wordWrap(text, d.Width-4)
+
+	if d.mdRenderer == nil {
+		r, err := glamour.NewTermRenderer(
+			glamour.WithAutoStyle(),
+			glamour.WithWordWrap(contentWidth),
+		)
+		if err != nil {
+			return wordWrap(text, contentWidth)
+		}
+		d.mdRenderer = r
 	}
-	rendered, err := r.Render(text)
+
+	rendered, err := d.mdRenderer.Render(text)
 	if err != nil {
-		return wordWrap(text, d.Width-4)
+		return wordWrap(text, contentWidth)
 	}
 	return strings.TrimRight(rendered, "\n")
 }
@@ -172,10 +183,12 @@ func (d *Detail) renderContent() string {
 	lines = append(lines, "")
 
 	// Status row
-	statusSym := statusSymbol(issue, d.IssueMap, bt)
-	statusLabel := paradeLabel(issue, d.IssueMap, bt)
-	statusStyle := lipgloss.NewStyle().Foreground(statusColor(issue, d.IssueMap, bt))
-	lines = append(lines, d.row("Status:", statusStyle.Render(statusSym+" "+statusLabel+" ("+string(issue.Status)+")")))
+	isBlocked := issue.EvaluateDependencies(d.IssueMap, bt).IsBlocked
+
+	statusSym := statusSymbol(issue, isBlocked)
+	statusLabel := paradeLabel(issue, isBlocked)
+	statusStyle := lipgloss.NewStyle().Foreground(statusColor(issue, isBlocked))
+	lines = append(lines, d.row("Status:", statusSym+" "+statusStyle.Render(statusLabel+" ("+string(issue.Status)+")")))
 
 	// Type
 	typeColor := ui.IssueTypeColor(string(issue.IssueType))
@@ -850,17 +863,17 @@ func (d *Detail) epicProgress(issue *data.Issue) (issueProgress, bool) {
 	return progress, true
 }
 
-func paradeLabel(issue *data.Issue, issueMap map[string]*data.Issue, blockingTypes map[string]bool) string {
+func paradeLabel(issue *data.Issue, isBlocked bool) string {
 	switch issue.Status {
 	case data.StatusClosed:
 		return "Past the Stand"
 	case data.StatusInProgress:
-		if issue.EvaluateDependencies(issueMap, blockingTypes).IsBlocked {
+		if isBlocked {
 			return "Stalled"
 		}
 		return "Rolling"
 	default:
-		if issue.EvaluateDependencies(issueMap, blockingTypes).IsBlocked {
+		if isBlocked {
 			return "Stalled"
 		}
 		return "Lined Up"

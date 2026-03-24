@@ -149,7 +149,10 @@ func (h Header) renderBeadString() string {
 		gradientString = ui.ApplyMardiGrasGradient(rawString)
 	}
 
-	return lipgloss.NewStyle().Width(h.Width).Render(gradientString)
+	if h.Width > visibleWidth {
+		gradientString += strings.Repeat(" ", h.Width-visibleWidth)
+	}
+	return gradientString
 }
 
 func (h Header) renderProgressBar(total, done, length int) string {

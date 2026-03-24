@@ -17,18 +17,19 @@ import (
 
 // paradeSection defines how each parade group renders.
 type paradeSection struct {
-	Title  string
-	Symbol string
-	Style  lipgloss.Style
-	Color  color.Color
-	Status data.ParadeStatus
+	Title          string
+	Symbol         string
+	Style          lipgloss.Style
+	Color          color.Color
+	Status         data.ParadeStatus
+	BorderVertical string
 }
 
 var sections = []paradeSection{
-	{Title: "Rolling", Symbol: ui.SymRolling, Style: ui.SectionRolling, Color: ui.StatusRolling, Status: data.ParadeRolling},
-	{Title: "Lined Up", Symbol: ui.SymLinedUp, Style: ui.SectionLinedUp, Color: ui.StatusLinedUp, Status: data.ParadeLinedUp},
-	{Title: "Stalled", Symbol: ui.SymStalled, Style: ui.SectionStalled, Color: ui.StatusStalled, Status: data.ParadeStalled},
-	{Title: "Past the Stand", Symbol: ui.SymPassed, Style: ui.SectionPassed, Color: ui.StatusPassed, Status: data.ParadePastTheStand},
+	{Title: "Rolling", Symbol: ui.SymRolling, Style: ui.SectionRolling, Color: ui.StatusRolling, Status: data.ParadeRolling, BorderVertical: lipgloss.NewStyle().Foreground(ui.StatusRolling).Render(ui.BoxVertical)},
+	{Title: "Lined Up", Symbol: ui.SymLinedUp, Style: ui.SectionLinedUp, Color: ui.StatusLinedUp, Status: data.ParadeLinedUp, BorderVertical: lipgloss.NewStyle().Foreground(ui.StatusLinedUp).Render(ui.BoxVertical)},
+	{Title: "Stalled", Symbol: ui.SymStalled, Style: ui.SectionStalled, Color: ui.StatusStalled, Status: data.ParadeStalled, BorderVertical: lipgloss.NewStyle().Foreground(ui.StatusStalled).Render(ui.BoxVertical)},
+	{Title: "Past the Stand", Symbol: ui.SymPassed, Style: ui.SectionPassed, Color: ui.StatusPassed, Status: data.ParadePastTheStand, BorderVertical: lipgloss.NewStyle().Foreground(ui.StatusPassed).Render(ui.BoxVertical)},
 }
 
 // ParadeItem is a renderable entry — a section header, footer, or issue.
@@ -37,6 +38,8 @@ type ParadeItem struct {
 	IsFooter bool
 	Section  paradeSection
 	Issue    *data.Issue
+	Eval     *data.DepEval
+	RenderedID string // cached styled ID (heat color)
 }
 
 // isSelectable returns true if this item can receive the cursor.
@@ -127,12 +130,30 @@ func (p *Parade) rebuildItems() {
 		if sec.Status == data.ParadePastTheStand {
 			if p.ShowClosed {
 				for i := range issues {
-					p.Items = append(p.Items, ParadeItem{Issue: &issues[i], Section: sec})
+					eval := issues[i].EvaluateDependencies(p.issueMap, p.blockingTypes)
+					ageDays := int(issues[i].Age().Hours() / 24)
+					agePct := min(ageDays*100/30, 100)
+					idStyle := ui.GradientHeat.At(agePct)
+					p.Items = append(p.Items, ParadeItem{
+						Issue:      &issues[i],
+						Section:    sec,
+						Eval:       &eval,
+						RenderedID: idStyle.Render(issues[i].ID),
+					})
 				}
 			}
 		} else {
 			for i := range issues {
-				p.Items = append(p.Items, ParadeItem{Issue: &issues[i], Section: sec})
+				eval := issues[i].EvaluateDependencies(p.issueMap, p.blockingTypes)
+				ageDays := int(issues[i].Age().Hours() / 24)
+				agePct := min(ageDays*100/30, 100)
+				idStyle := ui.GradientHeat.At(agePct)
+				p.Items = append(p.Items, ParadeItem{
+					Issue:      &issues[i],
+					Section:    sec,
+					Eval:       &eval,
+					RenderedID: idStyle.Render(issues[i].ID),
+				})
 			}
 		}
 
@@ -307,16 +328,15 @@ func (p *Parade) View() string {
 		}
 	}
 
-	content := strings.Join(lines, "\n")
-
 	// Pad to fill height
-	rendered := strings.Count(content, "\n") + 1
+	rendered := len(lines)
+	padLine := strings.Repeat(" ", p.Width)
 	for rendered < p.Height {
-		content += "\n"
+		lines = append(lines, padLine)
 		rendered++
 	}
 
-	return lipgloss.NewStyle().Width(p.Width).Render(content)
+	return strings.Join(lines, "\n")
 }
 
 // renderBorderTop builds a top border line: ╭─ ● Rolling (2) ────────╮
@@ -389,13 +409,48 @@ func (p *Parade) renderBorderBottom(sec paradeSection) string {
 func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int) string {
 	issue := item.Issue
 	sec := item.Section
-	borderStyle := lipgloss.NewStyle().Foreground(sec.Color)
 
-	sym := statusSymbol(issue, p.issueMap, p.blockingTypes)
-	prio := data.PriorityLabel(issue.Priority)
+	var isBlocked bool
+	var eval data.DepEval
+	if item.Eval != nil {
+		eval = *item.Eval
+		isBlocked = eval.IsBlocked
+	} else {
+		eval = issue.EvaluateDependencies(p.issueMap, p.blockingTypes)
+		isBlocked = eval.IsBlocked
+	}
 
-	prioStyle := ui.BadgePriority.Foreground(ui.PriorityColor(int(issue.Priority)))
-	symStyle := lipgloss.NewStyle().Foreground(statusColor(issue, p.issueMap, p.blockingTypes))
+	var symStr string
+	switch issue.Status {
+	case data.StatusClosed:
+		symStr = ui.StatusPassedStr
+	case data.StatusInProgress:
+		if isBlocked {
+			symStr = ui.StatusStalledStr
+		} else {
+			symStr = ui.StatusRollingStr
+		}
+	default:
+		if isBlocked {
+			symStr = ui.StatusStalledStr
+		} else {
+			symStr = ui.StatusLinedUpStr
+		}
+	}
+
+	var prioStr string
+	switch issue.Priority {
+	case 0:
+		prioStr = ui.BadgeP0
+	case 1:
+		prioStr = ui.BadgeP1
+	case 2:
+		prioStr = ui.BadgeP2
+	case 3:
+		prioStr = ui.BadgeP3
+	default:
+		prioStr = ui.BadgeP4
+	}
 
 	// Multi-select checkbox
 	selectPrefix := ""
@@ -488,8 +543,7 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 	// Build the "next blocker" hint for stalled issues
 	var rawHint string
 	hintStyle := lipgloss.NewStyle().Foreground(ui.Muted)
-	eval := issue.EvaluateDependencies(p.issueMap, p.blockingTypes)
-	if eval.IsBlocked && eval.NextBlockerID != "" {
+	if isBlocked && eval.NextBlockerID != "" {
 		if target, ok := p.issueMap[eval.NextBlockerID]; ok {
 			rawHint = fmt.Sprintf(" %s %s %s", ui.SymNextArrow, eval.NextBlockerID, target.Title)
 		} else {
@@ -537,26 +591,30 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 	}
 
 	// Age-based color for issue ID (fresh=green, aging=gold, stale=red)
-	ageDays := int(issue.Age().Hours() / 24)
-	agePct := min(ageDays*100/30, 100) // 30 days = fully stale
-	idStyle := ui.GradientHeat.At(agePct)
+	renderedID := item.RenderedID
+	if renderedID == "" {
+		ageDays := int(issue.Age().Hours() / 24)
+		agePct := min(ageDays*100/30, 100) // 30 days = fully stale
+		idStyle := ui.GradientHeat.At(agePct)
+		renderedID = idStyle.Render(issue.ID)
+	}
 
 	line := fmt.Sprintf("%s%s %s%s%s%s%s%s %s %s",
 		indent,
-		symStyle.Render(sym),
+		symStr,
 		selectPrefix,
 		changePrefix,
 		orphanPrefix,
 		zombiePrefix,
 		agentPrefix,
-		idStyle.Render(issue.ID),
+		renderedID,
 		renderedTitle,
-		prioStyle.Render(prio),
+		prioStr,
 	)
 	line += dueBadge + deferBadge + hint
 
-	leftBorder := borderStyle.Render(ui.BoxVertical)
-	rightBorder := borderStyle.Render(ui.BoxVertical)
+	leftBorder := sec.BorderVertical
+	rightBorder := sec.BorderVertical
 
 	if selected {
 		cursor := ui.ItemCursor.Render(ui.Cursor + " ")
@@ -585,34 +643,34 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 	return leftBorder + " " + content + " " + rightBorder
 }
 
-func statusSymbol(issue *data.Issue, issueMap map[string]*data.Issue, blockingTypes map[string]bool) string {
+func statusSymbol(issue *data.Issue, isBlocked bool) string {
 	switch issue.Status {
 	case data.StatusClosed:
 		return ui.SymPassed
 	case data.StatusInProgress:
-		if issue.EvaluateDependencies(issueMap, blockingTypes).IsBlocked {
+		if isBlocked {
 			return ui.SymStalled
 		}
 		return ui.SymRolling
 	default:
-		if issue.EvaluateDependencies(issueMap, blockingTypes).IsBlocked {
+		if isBlocked {
 			return ui.SymStalled
 		}
 		return ui.SymLinedUp
 	}
 }
 
-func statusColor(issue *data.Issue, issueMap map[string]*data.Issue, blockingTypes map[string]bool) color.Color {
+func statusColor(issue *data.Issue, isBlocked bool) color.Color {
 	switch issue.Status {
 	case data.StatusClosed:
 		return ui.StatusPassed
 	case data.StatusInProgress:
-		if issue.EvaluateDependencies(issueMap, blockingTypes).IsBlocked {
+		if isBlocked {
 			return ui.StatusStalled
 		}
 		return ui.StatusRolling
 	default:
-		if issue.EvaluateDependencies(issueMap, blockingTypes).IsBlocked {
+		if isBlocked {
 			return ui.StatusStalled
 		}
 		return ui.StatusLinedUp
