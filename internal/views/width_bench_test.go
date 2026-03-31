@@ -1,8 +1,8 @@
 package views
 
 import (
-	"testing"
 	"charm.land/lipgloss/v2"
+	"testing"
 )
 
 func BenchmarkLipglossWidthWithAnsi(b *testing.B) {

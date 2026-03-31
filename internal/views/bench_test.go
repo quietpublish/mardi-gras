@@ -1,15 +1,15 @@
 package views
 
 import (
-	"testing"
 	"github.com/matt-wright86/mardi-gras/internal/data"
+	"testing"
 )
 
 func BenchmarkParadeRenderIssue(b *testing.B) {
 	issue := data.Issue{
-		ID:     "mg-1000",
-		Title:  "Test Issue",
-		Status: data.StatusInProgress,
+		ID:       "mg-1000",
+		Title:    "Test Issue",
+		Status:   data.StatusInProgress,
 		Priority: data.PriorityHigh,
 	}
 	bt := data.DefaultBlockingTypes
@@ -26,9 +26,9 @@ func BenchmarkParadeRenderIssue(b *testing.B) {
 
 func BenchmarkParadeRenderIssueSelected(b *testing.B) {
 	issue := data.Issue{
-		ID:     "mg-1000",
-		Title:  "Test Issue",
-		Status: data.StatusInProgress,
+		ID:       "mg-1000",
+		Title:    "Test Issue",
+		Status:   data.StatusInProgress,
 		Priority: data.PriorityHigh,
 	}
 	bt := data.DefaultBlockingTypes

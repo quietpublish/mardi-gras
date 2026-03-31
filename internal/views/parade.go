@@ -34,11 +34,11 @@ var sections = []paradeSection{
 
 // ParadeItem is a renderable entry — a section header, footer, or issue.
 type ParadeItem struct {
-	IsHeader bool
-	IsFooter bool
-	Section  paradeSection
-	Issue    *data.Issue
-	Eval     *data.DepEval
+	IsHeader   bool
+	IsFooter   bool
+	Section    paradeSection
+	Issue      *data.Issue
+	Eval       *data.DepEval
 	RenderedID string // cached styled ID (heat color)
 }
 

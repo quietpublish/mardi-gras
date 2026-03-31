@@ -89,6 +89,27 @@ func TestBdListArgs(t *testing.T) {
 	}
 }
 
+func TestIssuePrefixFromID(t *testing.T) {
+	tests := []struct {
+		id   string
+		want string
+	}{
+		{"mg-7pk", "mg"},
+		{"mcc-tools-7pk", "mcc-tools"},
+		{"my-long-prefix-abc", "my-long-prefix"},
+		{"nohyphen", ""},
+		{"", ""},
+		{"-leading", ""},
+		{"a-b", "a"},
+	}
+	for _, tt := range tests {
+		got := issuePrefixFromID(tt.id)
+		if got != tt.want {
+			t.Errorf("issuePrefixFromID(%q) = %q, want %q", tt.id, got, tt.want)
+		}
+	}
+}
+
 func TestParseIssuesCLIOutputRejectsWrongSinglePrefix(t *testing.T) {
 	out := mustMarshalIssues(t, []Issue{
 		{ID: "vv-12", Title: "wrong project", Status: StatusOpen, Priority: PriorityMedium, IssueType: TypeBug},
@@ -103,6 +124,20 @@ func TestParseIssuesCLIOutputRejectsWrongSinglePrefix(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), `"vv" issues`) {
 		t.Fatalf("expected wrong prefix in error, got %v", err)
+	}
+}
+
+func TestParseIssuesCLIOutputAcceptsHyphenatedPrefix(t *testing.T) {
+	out := mustMarshalIssues(t, []Issue{
+		{ID: "mcc-tools-7pk", Title: "hyphenated prefix", Status: StatusOpen, Priority: PriorityMedium, IssueType: TypeTask},
+	})
+
+	issues, err := parseIssuesCLIOutput(out, "mcc-tools")
+	if err != nil {
+		t.Fatalf("parseIssuesCLIOutput() error = %v", err)
+	}
+	if len(issues) != 1 {
+		t.Fatalf("len(issues) = %d, want 1", len(issues))
 	}
 }
 

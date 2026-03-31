@@ -36,14 +36,14 @@ type particle struct {
 
 // necklace is a vertical chain of connected beads that falls together.
 type necklace struct {
-	x            float64       // horizontal position
-	y            float64       // top bead position
-	vy           float64       // vertical velocity
-	vx           float64       // slight horizontal sway
-	beads        []color.Color // color per bead
-	glyphs       []string      // glyph per bead
-	styledBeads  []string      // pre-rendered styled beads
-	styledConns  []string      // pre-rendered styled connectors
+	x           float64       // horizontal position
+	y           float64       // top bead position
+	vy          float64       // vertical velocity
+	vx          float64       // slight horizontal sway
+	beads       []color.Color // color per bead
+	glyphs      []string      // glyph per bead
+	styledBeads []string      // pre-rendered styled beads
+	styledConns []string      // pre-rendered styled connectors
 }
 
 // Confetti is a particle animation triggered on issue close.

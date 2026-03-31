@@ -356,10 +356,7 @@ func SectionDivider(title string, width int, focused bool) string {
 		ruleStyle.Render(trail)
 }
 
-var (
-	matchStyle  = lipgloss.NewStyle().Foreground(BrightGold).Bold(true).Underline(true)
-	normalStyle = lipgloss.NewStyle()
-)
+var matchStyle = lipgloss.NewStyle().Foreground(BrightGold).Bold(true).Underline(true)
 
 // HighlightMatches renders a string with matched character positions highlighted.
 // Matched characters are rendered in bright gold bold; others use default style.

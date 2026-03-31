@@ -160,11 +160,12 @@ func validateIssuePrefixes(issues []Issue, expectedPrefix string) error {
 }
 
 func issuePrefixFromID(id string) string {
-	prefix, _, ok := strings.Cut(strings.TrimSpace(id), "-")
-	if !ok || prefix == "" {
+	id = strings.TrimSpace(id)
+	lastHyphen := strings.LastIndex(id, "-")
+	if lastHyphen <= 0 {
 		return ""
 	}
-	return prefix
+	return id[:lastHyphen]
 }
 
 // FetchCurrentIssueID runs `bd show --current --json` and returns the active issue ID.
