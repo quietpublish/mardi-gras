@@ -139,6 +139,26 @@ EOF
     esac
     ;;
 
+  patrol)
+    case "$2" in
+      scan)
+        cat <<'EOF'
+{
+  "rig": "test_rig",
+  "timestamp": "2026-03-31T00:00:00Z",
+  "zombies": {"checked": 3, "found": 0},
+  "stalls": {"checked": 3, "found": 0},
+  "completions": {"checked": 3, "found": 0}
+}
+EOF
+        ;;
+      *)
+        echo "fake-gt: unknown patrol command '$2'" >&2
+        exit 1
+        ;;
+    esac
+    ;;
+
   *)
     echo "fake-gt: unknown command '$1'" >&2
     exit 1

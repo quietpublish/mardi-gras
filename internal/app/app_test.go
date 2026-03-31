@@ -125,7 +125,8 @@ func TestFileChangedMsgQueuesDetailRefetchesForPendingSelection(t *testing.T) {
 
 	got.pendingSelectID = "open-2"
 	got.gtEnv.Available = true
-	got.gtPollInFlight = true // suppress gt status polling in this test
+	got.gtPollInFlight = true     // suppress gt status polling
+	got.patrolScanInFlight = true // suppress patrol scan polling
 	got.activeAgents["open-2"] = "Toast"
 	got.detail.CommentsIssueID = "open-1"
 	got.detail.Comments = []gastown.Comment{{Author: "alpha", Body: "cached"}}

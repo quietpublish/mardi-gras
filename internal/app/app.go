@@ -178,6 +178,11 @@ type Model struct {
 	doctorResult   *data.DoctorResult
 	doctorProblems []gastown.Problem
 
+	// Patrol scan from gt patrol scan --json (background TTL poll)
+	patrolScan         *gastown.PatrolScanResult
+	patrolScanInFlight bool
+	lastPatrolScan     time.Time
+
 	// Shared terminal control-sequence guard (used by both the Bubble Tea
 	// filter and app-level deferred key handling).
 	oscGuard *OSCGuard
@@ -342,10 +347,12 @@ func (m *Model) activateGasTown() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// allProblems returns the combined list of Gas Town agent problems and doctor diagnostics.
+// allProblems returns the combined list of Gas Town agent problems, doctor diagnostics,
+// and patrol scan findings.
 func (m Model) allProblems() []gastown.Problem {
 	problems := gastown.DetectProblems(m.townStatus)
 	problems = append(problems, m.doctorProblems...)
+	problems = append(problems, gastown.PatrolScanProblems(m.patrolScan)...)
 	return problems
 }
 
@@ -381,6 +388,11 @@ type agentStatusMsg struct {
 type townStatusMsg struct {
 	status *gastown.TownStatus
 	err    error
+}
+
+type patrolScanMsg struct {
+	scan *gastown.PatrolScanResult
+	err  error
 }
 
 type slingResultMsg struct {
@@ -972,6 +984,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Check if selected issue now has an agent → fetch molecule
 			if cmd := m.maybeFetchMolecule(); cmd != nil {
 				return m, cmd
+			}
+		}
+		return m, nil
+
+	case patrolScanMsg:
+		m.patrolScanInFlight = false
+		if msg.err != nil {
+			// Clear stale patrol data and update TTL to prevent hot-loop retries
+			m.patrolScan = nil
+			m.lastPatrolScan = time.Now()
+			m.header.ProblemCount = len(m.allProblems())
+			if m.showProblems {
+				m.problems.SetProblems(m.allProblems())
+			}
+			return m, nil
+		}
+		if msg.scan != nil {
+			m.patrolScan = msg.scan
+			m.lastPatrolScan = time.Now()
+			m.header.ProblemCount = len(m.allProblems())
+			if m.showProblems {
+				m.problems.SetProblems(m.allProblems())
 			}
 		}
 		return m, nil
@@ -2828,11 +2862,18 @@ func buildZombieIDs(status *gastown.TownStatus, orphanedIDs map[string]bool) map
 // takes ~9s, and this is called from 3 watcher handlers + 8 user-action handlers).
 func (m *Model) gatedPollAgentState() tea.Cmd {
 	if m.gtEnv.Available {
-		if m.gtPollInFlight {
-			return nil
+		var cmds []tea.Cmd
+		if !m.gtPollInFlight {
+			m.gtPollInFlight = true
+			cmds = append(cmds, pollGTStatus)
 		}
-		m.gtPollInFlight = true
-		return pollGTStatus
+		if cmd := m.gatedPollPatrolScan(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		if len(cmds) > 0 {
+			return tea.Batch(cmds...)
+		}
+		return nil
 	}
 	if m.inTmux {
 		return pollTmuxAgentState
@@ -2864,6 +2905,26 @@ func (m Model) newCreateForm() components.CreateForm {
 		return components.NewCreateFormWithGT(m.width, m.height)
 	}
 	return components.NewCreateForm(m.width, m.height)
+}
+
+const patrolScanTTL = 60 * time.Second
+
+// gatedPollPatrolScan returns a Cmd to fetch patrol scan data if gt is available,
+// a scan isn't already in flight, and the TTL has elapsed.
+func (m *Model) gatedPollPatrolScan() tea.Cmd {
+	if !m.gtEnv.Available || m.patrolScanInFlight {
+		return nil
+	}
+	if !m.lastPatrolScan.IsZero() && time.Since(m.lastPatrolScan) < patrolScanTTL {
+		return nil
+	}
+	m.patrolScanInFlight = true
+	return pollPatrolScan
+}
+
+func pollPatrolScan() tea.Msg {
+	scan, err := gastown.FetchPatrolScan()
+	return patrolScanMsg{scan: scan, err: err}
 }
 
 // pollGTStatus fetches Gas Town status via gt status --json.

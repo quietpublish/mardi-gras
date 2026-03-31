@@ -64,6 +64,11 @@ Press `p` to toggle the problems view overlay. It combines two sources of diagno
 
 Dead-rig detection groups all orphaned agents under a single problem instead of emitting individual zombie alerts, reducing alarm fatigue when an entire rig is down.
 
+**Patrol scan** — background polling via `gt patrol scan --json` (requires Gas Town v0.13.0+):
+- **Patrol zombies** — agents detected as dead by the patrol system
+- **Patrol stalls** — agents detected as stalled by the patrol system
+- Augments the agent-level heuristics with patrol-specific diagnostics. Polled every 60 seconds.
+
 **Doctor diagnostics** — from `bd doctor --agent` at startup (also available on-demand via `D`):
 - Core system health (Dolt server, config, hooks)
 - Git integration issues

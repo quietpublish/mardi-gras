@@ -7,7 +7,7 @@
 - `internal/views`: Parade (left pane), Detail (right pane), Gas Town panel, Problems overlay.
 - `internal/components`: Header, Footer, Help overlay, Command palette, Toast notifications, Create form, Float utility.
 - `internal/data`: JSONL loading, grouping, dependency/status logic, filtering, focus mode, mutations (`bd` CLI), cross-rig deps.
-- `internal/gastown`: Gas Town integration — environment detection, `gt status` parsing, sling/nudge/handoff/decommission, convoy CRUD, mail inbox/reply/compose, molecule DAG, costs, vitals (server health + backups), activity feed, velocity, scorecards, predictions, formula recommendations, problem detection (stalled/stuck/backoff/zombie/dead_rig), rig recovery.
+- `internal/gastown`: Gas Town integration — environment detection, `gt status` parsing, sling/nudge/handoff/decommission, convoy CRUD, mail inbox/reply/compose, molecule DAG, costs, vitals (server health + backups), activity feed, velocity, scorecards, predictions, formula recommendations, problem detection (stalled/stuck/backoff/zombie/dead_rig), patrol scan integration, rig recovery.
 - `internal/agent`: Claude Code prompt builder, tmux window launch/discover/kill.
 - `internal/tmux`: tmux status line widget (`mg --status` mode).
 - `internal/ui`: Theme palette (with Gas Town role/state colors), Lipgloss styles, Unicode symbols (including DAG connectors).

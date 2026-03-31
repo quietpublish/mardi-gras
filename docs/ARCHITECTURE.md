@@ -57,6 +57,7 @@ internal/
     molecule.go           Molecule/DAG types, gt mol integration
     dagrender.go          DAG layout engine: LayoutDAG(), critical path
     problems.go           Problem detection heuristics (stalled, stuck, backoff, zombie, dead_rig)
+    patrol.go             Patrol scan integration: gt patrol scan --json parsing, patrol-sourced problems
     recovery.go           Dead-rig recovery: orphan detection, release + re-sling
     costs.go              Cost parsing from gt costs
     vitals.go             Server health + backup freshness from gt vitals
@@ -482,6 +483,11 @@ OrphanedIssue  (from gastown/recovery.go)
 Problem        (from gastown/problems.go)
   Type, Agent, Detail, Severity, Category, Fix
   RigName, Orphans (for dead_rig problems)
+  Types: stalled, stuck, backoff, zombie, dead_rig, doctor, patrol_zombie, patrol_stall
+
+PatrolScanResult (from gastown/patrol.go)
+  Rig, Timestamp, Zombies, Stalls, Completions (each: Checked, Found)
+  Details []PatrolDetail (Agent, Rig, Role, HookBead, Detail)
 ```
 
 ## Agent Integration

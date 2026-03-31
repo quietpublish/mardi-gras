@@ -50,7 +50,7 @@ Do NOT use `bd edit` — it opens `$EDITOR` and blocks agents.
 
 ## Gas Town Integration
 
-Mardi Gras integrates with [Gas Town](https://github.com/steveyegge/gastown) (`gt`) for multi-agent orchestration. The `internal/gastown` package (17 files, no internal deps) handles:
+Mardi Gras integrates with [Gas Town](https://github.com/steveyegge/gastown) (`gt`) for multi-agent orchestration. The `internal/gastown` package (18 files, no internal deps) handles:
 
 - **Environment detection** (`detect.go`): Reads `GT_ROLE`, `GT_RIG`, `GT_SCOPE`, `GT_POLECAT`, `GT_CREW` env vars and checks if `gt` is on PATH. Features activate progressively: Beads-only → gt available → inside Gas Town.
 - **Status parsing** (`status.go`): Parses `gt status --json` output. The raw JSON nests agents under `rigs[].agents`; `normalizeStatus()` flattens them into a single `Agents` slice for the UI. If `AgentRuntime.State` is empty, default to "idle". Gas Town v0.9.0+ always provides State.
@@ -59,8 +59,9 @@ Mardi Gras integrates with [Gas Town](https://github.com/steveyegge/gastown) (`g
 - **Mail** (`mail.go`): Inbox fetch, reply, compose, archive, mark-read via `gt mail` commands.
 - **Molecule DAG** (`molecule.go`, `dagrender.go`): Molecule types and DAG layout engine. `LayoutDAG()` converts tier-grouped steps into renderable rows (single, parallel, connector). `CriticalPathSet()` and `CriticalPathTitles()` for critical path rendering.
 - **Vitals** (`vitals.go`): Dolt server health and backup freshness from `gt vitals` (text parsing with raw fallback).
-- **Analytics** (`costs.go`, `activity.go`, `velocity.go`, `scorecard.go`, `predict.go`, `recommend.go`): Cost dashboard, activity feed, velocity metrics, HOP scorecards, convoy ETA predictions, formula recommendations.
+- **Analytics** (`costs.go`, `activity.go`, `velocity.go`, `scorecard.go`, `predict.go`, `recommend.go`): Cost dashboard, activity feed, velocity metrics, agent scorecards, convoy ETA predictions, formula recommendations.
 - **Problems** (`problems.go`): Detection heuristics for stalled agents, backoff loops, zombie sessions.
+- **Patrol scan** (`patrol.go`): Parses `gt patrol scan --json` output. Background-polled on 60s TTL with in-flight gate. Findings (patrol_zombie, patrol_stall) augment the heuristic-based problems with patrol-specific diagnostics.
 - **Comments** (`comments.go`): Issue comment/timeline fetching.
 
 **Key gotcha**: `gt status --json` takes ~9 seconds to run. Background polling via BubbleTea Cmds may not return before the user interacts. The Gas Town panel (`ctrl+g`) triggers an on-demand fetch if status is nil and shows a loading state while waiting. Always handle nil status gracefully.
