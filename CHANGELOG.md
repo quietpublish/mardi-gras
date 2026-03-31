@@ -2,6 +2,18 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.15.1 (2026-03-31)
+
+### Added
+- **Patrol scan integration** — Problems overlay now includes findings from `gt patrol scan --json` (requires Gas Town v0.13.0+). Polled every 60s in the background with TTL gating and in-flight dedup. Patrol-detected zombies and stalls appear alongside existing heuristics, with agent identity preserved for nudge/handoff/decommission actions. Header warning count updates immediately when patrol data arrives.
+
+### Changed
+- **Performance optimizations** — dependency evaluation cached on parade items (eliminates 3-4x redundant `EvaluateDependencies` calls per issue per render), glamour markdown renderer cached on detail panel (recreated only on resize), confetti particles and necklace beads pre-styled at creation time, status indicators and priority badges pre-rendered as package-level vars, age-colored issue IDs cached during parade rebuild. Contributed by @asbjaare. ([#16](https://github.com/quietpublish/mardi-gras/pull/16))
+- **Dependencies updated** — charmbracelet/ultraviolet, charmbracelet/x, goldmark v1.7.17 (XSS URL escaping fix, table cell panic fix), kr/pretty v0.3.1.
+
+### Fixed
+- **Hyphenated issue prefixes** — CLI mode now correctly handles issue prefixes containing hyphens (e.g., `mcc-tools-7pk`). Previously `issuePrefixFromID()` split on the first hyphen, extracting `mcc` instead of `mcc-tools`. ([#17](https://github.com/quietpublish/mardi-gras/issues/17))
+
 ## v0.15.0 (2026-03-22)
 
 ### Added
