@@ -10,7 +10,7 @@ require (
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/charmbracelet/ultraviolet v0.0.0-20260316091819-b93f6a3b8502
 	github.com/charmbracelet/x/ansi v0.11.6
-	github.com/lucasb-eyer/go-colorful v1.3.0
+	github.com/lucasb-eyer/go-colorful v1.4.0
 	github.com/sahilm/fuzzy v0.1.1
 	gopkg.in/yaml.v3 v3.0.1
 )
