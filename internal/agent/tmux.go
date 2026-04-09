@@ -152,11 +152,22 @@ func sanitizeCaptureOutput(raw string, maxLines int) []string {
 	return allLines
 }
 
-// stripANSI removes ANSI escape sequences from a string.
+// stripANSI removes ANSI escape sequences and stray control characters from a string.
 // Uses charmbracelet/x/ansi which handles all sequence types (CSI, OSC, DCS, etc.),
-// not just CSI sequences.
+// then strips remaining C0/C1 control bytes that aren't part of escape sequences.
 func stripANSI(s string) string {
-	return ansi.Strip(s)
+	s = ansi.Strip(s)
+	// Remove control characters (0x00-0x1F except \t, \n, \r) and DEL (0x7F).
+	// These can leak from captured tmux output and should not reach the TUI.
+	return strings.Map(func(r rune) rune {
+		if r == '\t' || r == '\n' || r == '\r' {
+			return r
+		}
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 // SelectAgentWindow switches focus to the tmux pane for the given issue.

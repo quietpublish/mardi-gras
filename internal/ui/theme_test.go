@@ -42,6 +42,9 @@ func TestIssueTypeColor(t *testing.T) {
 		{"task", "task", ColorTask},
 		{"chore", "chore", ColorChore},
 		{"epic", "epic", ColorEpic},
+		{"spike", "spike", ColorSpike},
+		{"story", "story", ColorStory},
+		{"milestone", "milestone", ColorMilestone},
 		{"empty string falls back to Muted", "", Muted},
 		{"unknown falls back to Muted", "unknown", Muted},
 	}

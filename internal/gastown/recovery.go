@@ -88,8 +88,12 @@ func FindDeadRigs(status *TownStatus) []string {
 
 // ReleaseIssue releases a single orphaned issue back to open status.
 func ReleaseIssue(issueID, reason string) error {
+	if err := validateIssueID(issueID); err != nil {
+		return err
+	}
 	args := []string{"release", issueID}
 	if reason != "" {
+		reason = sanitizeText(reason, maxTextLen)
 		args = append(args, "--reason", reason)
 	}
 	return execWithTimeout(timeoutShort, "gt", args...)

@@ -9,6 +9,9 @@ import (
 // Sling dispatches work via `gt sling`. This is Gas Town's core primitive --
 // it auto-spawns polecats, auto-creates convoys, and starts the work lifecycle.
 func Sling(issueID string) error {
+	if err := validateIssueID(issueID); err != nil {
+		return err
+	}
 	return execWithTimeout(timeoutShort, "gt", "sling", issueID)
 }
 
@@ -16,6 +19,10 @@ func Sling(issueID string) error {
 // e.g., SlingWithFormula("bd-a1b2", "shiny") runs the full
 // design->implement->review->test->submit workflow.
 func SlingWithFormula(issueID, formula string) error {
+	if err := validateIssueID(issueID); err != nil {
+		return err
+	}
+	formula = sanitizeText(formula, maxTextLen)
 	return execWithTimeout(timeoutShort, "gt", "sling", formula, "--on", issueID)
 }
 
@@ -37,6 +44,9 @@ func ListFormulas() ([]string, error) {
 
 // Unsling stops work dispatched via `gt sling`.
 func Unsling(issueID string) error {
+	if err := validateIssueID(issueID); err != nil {
+		return err
+	}
 	return execWithTimeout(timeoutShort, "gt", "unsling", issueID)
 }
 
@@ -62,8 +72,10 @@ func SlingMultipleWithFormula(issueIDs []string, formula string) error {
 
 // Nudge sends a wake-up message to the agent working on the given issue.
 func Nudge(target, message string) error {
+	target = sanitizeText(target, maxTextLen)
 	args := []string{"nudge", target}
 	if message != "" {
+		message = sanitizeText(message, maxTextLen)
 		args = append(args, "--", message)
 	}
 	return execWithTimeout(timeoutShort, "gt", args...)
@@ -95,5 +107,8 @@ func Decommission(address string) error {
 // CascadeClose closes an issue and all its children via `gt close --cascade`.
 // Requires Gas Town v0.11.0+.
 func CascadeClose(issueID string) error {
+	if err := validateIssueID(issueID); err != nil {
+		return err
+	}
 	return execWithTimeout(timeoutShort, "gt", "close", "--cascade", issueID)
 }

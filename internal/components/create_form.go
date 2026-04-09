@@ -32,6 +32,9 @@ var typeOptions = []selectOption{
 	{Label: "Feature", Value: "feature"},
 	{Label: "Chore", Value: "chore"},
 	{Label: "Epic", Value: "epic"},
+	{Label: "Spike", Value: "spike"},
+	{Label: "Story", Value: "story"},
+	{Label: "Milestone", Value: "milestone"},
 }
 
 var priorityOptions = []selectOption{

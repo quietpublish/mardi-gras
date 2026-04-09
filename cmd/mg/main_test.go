@@ -153,6 +153,26 @@ func TestResolveSourceExplicitPath(t *testing.T) {
 	}
 }
 
+func TestResolveSourceExplicitPathTrailingSlash(t *testing.T) {
+	src := resolveSource(t.TempDir(), "/some/path/.beads/issues.jsonl/")
+	if src.Path != "/some/path/.beads/issues.jsonl" {
+		t.Fatalf("expected trailing slash cleaned, got %q", src.Path)
+	}
+	if src.ProjectDir != "/some/path" {
+		t.Fatalf("expected ProjectDir /some/path, got %q", src.ProjectDir)
+	}
+}
+
+func TestResolveSourceExplicitRelativePath(t *testing.T) {
+	src := resolveSource(t.TempDir(), "./project/.beads/issues.jsonl")
+	if !filepath.IsAbs(src.Path) {
+		t.Fatalf("expected absolute path from relative --path, got %q", src.Path)
+	}
+	if !filepath.IsAbs(src.ProjectDir) {
+		t.Fatalf("expected absolute ProjectDir from relative --path, got %q", src.ProjectDir)
+	}
+}
+
 func TestResolveSourceCLIPreferredOverJSONL(t *testing.T) {
 	if _, err := exec.LookPath("bd"); err != nil {
 		t.Skip("bd not on PATH, skipping CLI preference test")

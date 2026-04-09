@@ -191,11 +191,14 @@ func bdOnPath() bool {
 //	neither → empty Source (caller should exit with error)
 func resolveSource(cwd, pathFlag string) data.Source {
 	if pathFlag != "" {
-		cleanPath := filepath.Clean(pathFlag)
+		absPath, err := filepath.Abs(pathFlag)
+		if err != nil {
+			absPath = filepath.Clean(pathFlag)
+		}
 		return data.Source{
 			Mode:       data.SourceJSONL,
-			Path:       cleanPath,
-			ProjectDir: filepath.Dir(filepath.Dir(cleanPath)),
+			Path:       absPath,
+			ProjectDir: filepath.Dir(filepath.Dir(absPath)),
 			Explicit:   true,
 		}
 	}

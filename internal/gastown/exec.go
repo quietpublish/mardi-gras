@@ -8,16 +8,34 @@ import (
 )
 
 // sanitizeOutput truncates command output for error messages to avoid leaking
-// internal paths or stack traces. Returns the first line, capped at 200 chars.
+// internal paths or stack traces. Scrubs absolute paths, takes first line only,
+// and caps at 200 chars.
 func sanitizeOutput(out []byte) string {
 	s := strings.TrimSpace(string(out))
 	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
 		s = s[:idx]
 	}
+	s = scrubPaths(s)
 	if len(s) > 200 {
 		s = s[:200] + "..."
 	}
 	return s
+}
+
+// scrubPaths replaces absolute filesystem paths (/a/b/c) with .../basename
+// to avoid leaking directory structure in user-visible error messages.
+func scrubPaths(s string) string {
+	words := strings.Fields(s)
+	for i, w := range words {
+		clean := strings.TrimRight(w, ":),;")
+		if len(clean) < 3 || clean[0] != '/' || strings.Count(clean, "/") < 2 {
+			continue
+		}
+		if last := strings.LastIndex(clean, "/"); last > 0 {
+			words[i] = ".../" + clean[last+1:] + w[len(clean):]
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 // Default timeout tiers for external command execution.
@@ -37,7 +55,12 @@ var (
 
 // SetCmdTimeout overrides all timeout tiers by scaling them proportionally.
 // A value of 60 (seconds) doubles all timeouts (since the default long is 30s).
-// Values <= 0 are ignored. Must be called before any commands are executed.
+// Values <= 0 are ignored.
+//
+// SAFETY: Must be called during program initialization (main, before
+// tea.NewProgram.Run) — never after command goroutines have started.
+// Go's memory model guarantees that writes in the launching goroutine
+// are visible to goroutines it subsequently spawns.
 func SetCmdTimeout(seconds int) {
 	if seconds <= 0 {
 		return

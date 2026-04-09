@@ -52,3 +52,7 @@ docs/internal/
 # Gas Town / agent workspace artifacts
 __pycache__/
 state.json
+
+# Darker sprint artifacts (ephemeral)
+.darker/sprints/
+.darker/work-orders/

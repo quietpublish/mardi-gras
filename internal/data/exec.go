@@ -23,7 +23,11 @@ var (
 
 // SetCmdTimeout overrides data-layer timeout tiers by scaling proportionally.
 // The seconds value is relative to a 30s baseline (matching gastown.SetCmdTimeout).
-// Must be called before any commands are executed (i.e., during initialization).
+//
+// SAFETY: Must be called during program initialization (main, before
+// tea.NewProgram.Run) — never after command goroutines have started.
+// Go's memory model guarantees that writes in the launching goroutine
+// are visible to goroutines it subsequently spawns.
 func SetCmdTimeout(seconds int) {
 	if seconds <= 0 {
 		return
@@ -68,13 +72,15 @@ func parseBdStderr(stderr []byte) string {
 	// Try structured JSON parse first
 	var bdErr bdStderrError
 	if json.Unmarshal(stderr, &bdErr) == nil && bdErr.Error != "" {
-		msg := bdErr.Error
+		var b strings.Builder
+		b.WriteString(bdErr.Error)
 		for _, d := range bdErr.Details {
 			if d.Message != "" {
-				msg += ": " + d.Message
+				b.WriteString(": ")
+				b.WriteString(d.Message)
 			}
 		}
-		return msg
+		return sanitizeErrMsg(b.String())
 	}
 
 	// Fall back to raw text (strip common prefixes)
@@ -85,7 +91,34 @@ func parseBdStderr(stderr []byte) string {
 	if idx := strings.IndexByte(msg, '\n'); idx >= 0 {
 		msg = msg[:idx]
 	}
+	return sanitizeErrMsg(msg)
+}
+
+// sanitizeErrMsg scrubs absolute paths and truncates an error message
+// for safe display in toast notifications.
+func sanitizeErrMsg(msg string) string {
+	msg = scrubPaths(msg)
+	if len(msg) > 200 {
+		msg = msg[:200] + "..."
+	}
 	return msg
+}
+
+// scrubPaths replaces absolute filesystem paths (/a/b/c) with .../basename
+// to avoid leaking directory structure in user-visible error messages.
+func scrubPaths(s string) string {
+	words := strings.Fields(s)
+	for i, w := range words {
+		// Preserve trailing punctuation attached to the path
+		clean := strings.TrimRight(w, ":),;")
+		if len(clean) < 3 || clean[0] != '/' || strings.Count(clean, "/") < 2 {
+			continue
+		}
+		if last := strings.LastIndex(clean, "/"); last > 0 {
+			words[i] = ".../" + clean[last+1:] + w[len(clean):]
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 // wrapExitError extracts a readable error from an exec.ExitError's stderr,

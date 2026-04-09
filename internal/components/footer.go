@@ -26,6 +26,7 @@ type Footer struct {
 	PathExplicit bool
 	SourceMode   data.SourceMode
 	BeadsContext *data.BeadsContext
+	SourceHealth *data.SourceHealth
 }
 
 // ParadeBindings are the default keybindings for the parade view.
@@ -99,7 +100,13 @@ func (f Footer) View() string {
 			}
 			contextInfo = " · " + contextInfo
 		}
-		sourceInfo = ui.FooterSource.Render(fmt.Sprintf("%s %s · %s%s", name, mode, age, contextInfo))
+
+		// Override rendering when source is in a degraded or fallback state.
+		if f.SourceHealth != nil && f.SourceHealth.IsDegraded() {
+			sourceInfo = f.renderHealthState(age)
+		} else {
+			sourceInfo = ui.FooterSource.Render(fmt.Sprintf("%s %s · %s%s", name, mode, age, contextInfo))
+		}
 	}
 
 	if sourceInfo != "" {
@@ -112,6 +119,41 @@ func (f Footer) View() string {
 	}
 
 	return ui.FooterStyle.Width(f.Width).Render(keybindings)
+}
+
+// renderHealthState builds the source info string for degraded/fallback states.
+// It applies amber or red coloring based on staleness level.
+func (f Footer) renderHealthState(age string) string {
+	h := f.SourceHealth
+	staleness := h.StalenessAge()
+	var ageStr string
+	switch {
+	case staleness == 0:
+		ageStr = age
+	case staleness < time.Minute:
+		ageStr = fmt.Sprintf("%ds ago", int(staleness.Seconds()))
+	case staleness < time.Hour:
+		ageStr = fmt.Sprintf("%dm ago", int(staleness.Minutes()))
+	default:
+		ageStr = fmt.Sprintf("%dh ago", int(staleness.Hours()))
+	}
+
+	var label string
+	switch {
+	case h.InFallback():
+		label = fmt.Sprintf("issues.jsonl (fallback, bd down) · %s", ageStr)
+	default:
+		label = fmt.Sprintf("bd list (degraded, last success %s)", ageStr)
+	}
+
+	style := ui.FooterSource
+	switch h.StalenessLevel() {
+	case 1:
+		style = lipgloss.NewStyle().Foreground(ui.StateStuck) // amber
+	case 2:
+		style = lipgloss.NewStyle().Foreground(ui.StatusStalled) // red
+	}
+	return style.Render(label)
 }
 
 // NewFooter creates a footer with the given width and pane focus.

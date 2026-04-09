@@ -61,6 +61,12 @@ func ConvoyStatus(convoyID string) (*ConvoyDetail, error) {
 // ConvoyCreate creates a new convoy tracking the given issues.
 // Returns the new convoy ID.
 func ConvoyCreate(name string, issueIDs []string) (string, error) {
+	name = sanitizeText(name, maxTextLen)
+	for _, id := range issueIDs {
+		if err := validateIssueID(id); err != nil {
+			return "", err
+		}
+	}
 	args := []string{"convoy", "create", "--", name}
 	args = append(args, issueIDs...)
 	out, err := runCombinedWithTimeout(timeoutShort, "gt", args...)
@@ -95,6 +101,24 @@ func ConvoyClose(convoyID string) error {
 	out, err := runCombinedWithTimeout(timeoutShort, "gt", "convoy", "close", "--", convoyID)
 	if err != nil {
 		return fmt.Errorf("gt convoy close: %w (%s)", err, sanitizeOutput(out))
+	}
+	return nil
+}
+
+// ConvoyWatch subscribes to completion notifications for a convoy.
+func ConvoyWatch(convoyID string) error {
+	out, err := runCombinedWithTimeout(timeoutShort, "gt", "convoy", "watch", "--", convoyID)
+	if err != nil {
+		return fmt.Errorf("gt convoy watch: %w (%s)", err, sanitizeOutput(out))
+	}
+	return nil
+}
+
+// ConvoyUnwatch removes completion notification subscription for a convoy.
+func ConvoyUnwatch(convoyID string) error {
+	out, err := runCombinedWithTimeout(timeoutShort, "gt", "convoy", "unwatch", "--", convoyID)
+	if err != nil {
+		return fmt.Errorf("gt convoy unwatch: %w (%s)", err, sanitizeOutput(out))
 	}
 	return nil
 }

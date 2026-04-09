@@ -228,7 +228,7 @@ func TestGasTownActionNudge(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected GasTownActionMsg, got %T", msg)
 	}
-	if action.Type != "nudge" {
+	if action.Type != ActionNudge {
 		t.Fatalf("expected type 'nudge', got %q", action.Type)
 	}
 	if action.Agent.Name != "toast" {
@@ -253,7 +253,7 @@ func TestGasTownActionHandoff(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected GasTownActionMsg, got %T", msg)
 	}
-	if action.Type != "handoff" {
+	if action.Type != ActionHandoff {
 		t.Fatalf("expected type 'handoff', got %q", action.Type)
 	}
 }
@@ -289,7 +289,7 @@ func TestGasTownActionDecommissionOnlyPolecat(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected GasTownActionMsg, got %T", msg)
 	}
-	if action.Type != "decommission" {
+	if action.Type != ActionDecommission {
 		t.Fatalf("expected type 'decommission', got %q", action.Type)
 	}
 }
@@ -537,7 +537,7 @@ func TestGasTownActionConvoyLand(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected GasTownActionMsg, got %T", msg)
 	}
-	if action.Type != "convoy_land" {
+	if action.Type != ActionConvoyLand {
 		t.Fatalf("expected type 'convoy_land', got %q", action.Type)
 	}
 	if action.ConvoyID != "cv-1" {
@@ -565,7 +565,7 @@ func TestGasTownActionConvoyClose(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected GasTownActionMsg, got %T", msg)
 	}
-	if action.Type != "convoy_close" {
+	if action.Type != ActionConvoyClose {
 		t.Fatalf("expected type 'convoy_close', got %q", action.Type)
 	}
 	if action.ConvoyID != "cv-2" {
@@ -757,7 +757,7 @@ func TestGasTownMailExpandUnreadEmitsMarkRead(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected GasTownActionMsg, got %T", msg)
 	}
-	if action.Type != "mail_read" {
+	if action.Type != ActionMailRead {
 		t.Fatalf("expected type 'mail_read', got %q", action.Type)
 	}
 	if action.Mail.ID != "msg-1" {
@@ -785,7 +785,7 @@ func TestGasTownMailActionReply(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected GasTownActionMsg, got %T", msg)
 	}
-	if action.Type != "mail_reply" {
+	if action.Type != ActionMailReply {
 		t.Fatalf("expected type 'mail_reply', got %q", action.Type)
 	}
 	if action.Mail.ID != "msg-1" {
@@ -813,7 +813,7 @@ func TestGasTownMailActionArchive(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected GasTownActionMsg, got %T", msg)
 	}
-	if action.Type != "mail_archive" {
+	if action.Type != ActionMailArchive {
 		t.Fatalf("expected type 'mail_archive', got %q", action.Type)
 	}
 }
@@ -1086,7 +1086,7 @@ func TestGasTownMailComposeAction(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected GasTownActionMsg, got %T", msg)
 	}
-	if action.Type != "mail_compose" {
+	if action.Type != ActionMailCompose {
 		t.Fatalf("expected type 'mail_compose', got %q", action.Type)
 	}
 	if action.Agent.Name != "quartz" {
@@ -1114,7 +1114,7 @@ func TestGasTownMailComposeFromMail(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected GasTownActionMsg, got %T", msg)
 	}
-	if action.Type != "mail_compose" {
+	if action.Type != ActionMailCompose {
 		t.Fatalf("expected type 'mail_compose', got %q", action.Type)
 	}
 	if action.Agent.Name != "gastown/Toast" {
@@ -1287,7 +1287,7 @@ func TestGasTownAgentNoInfoGraceful(t *testing.T) {
 	}
 }
 
-func TestGasTownMailComposeNoActionInConvoySection(t *testing.T) {
+func TestGasTownConvoyWatchInConvoySection(t *testing.T) {
 	g := NewGasTown(100, 30)
 	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
 	g.SetStatus(status, gastown.Env{Available: true})
@@ -1296,7 +1296,53 @@ func TestGasTownMailComposeNoActionInConvoySection(t *testing.T) {
 	g.section = SectionConvoys
 
 	_, cmd := g.Update(tea.KeyPressMsg{Code: 'w', Text: "w"})
-	if cmd != nil {
-		t.Fatal("w should not produce cmd in convoy section")
+	if cmd == nil {
+		t.Fatal("w should produce convoy_watch cmd in convoy section")
+	}
+	msg := cmd().(GasTownActionMsg)
+	if msg.Type != ActionConvoyWatch {
+		t.Fatalf("expected convoy_watch, got %s", msg.Type)
+	}
+	if msg.ConvoyID != "cv-1" {
+		t.Fatalf("expected cv-1, got %s", msg.ConvoyID)
+	}
+}
+
+func TestGasTownConvoyUnwatchInConvoySection(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	g.SetConvoyDetails([]gastown.ConvoyDetail{{ID: "cv-1", Title: "Sprint"}})
+	g.section = SectionConvoys
+
+	_, cmd := g.Update(tea.KeyPressMsg{Code: 'W', Text: "W"})
+	if cmd == nil {
+		t.Fatal("W should produce convoy_unwatch cmd in convoy section")
+	}
+	msg := cmd().(GasTownActionMsg)
+	if msg.Type != ActionConvoyUnwatch {
+		t.Fatalf("expected convoy_unwatch, got %s", msg.Type)
+	}
+	if msg.ConvoyID != "cv-1" {
+		t.Fatalf("expected cv-1, got %s", msg.ConvoyID)
+	}
+}
+
+func TestGasTownMailMarkAllReadInMailSection(t *testing.T) {
+	g := NewGasTown(100, 30)
+	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}
+	g.SetStatus(status, gastown.Env{Available: true})
+
+	g.SetMailMessages([]gastown.MailMessage{{ID: "m-1", Subject: "test"}})
+	g.section = SectionMail
+
+	_, cmd := g.Update(tea.KeyPressMsg{Code: 'R', Text: "R"})
+	if cmd == nil {
+		t.Fatal("R should produce mail_mark_all_read cmd in mail section")
+	}
+	msg := cmd().(GasTownActionMsg)
+	if msg.Type != ActionMailMarkAllRead {
+		t.Fatalf("expected mail_mark_all_read, got %s", msg.Type)
 	}
 }

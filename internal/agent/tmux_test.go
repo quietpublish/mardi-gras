@@ -132,6 +132,44 @@ func TestSanitizeCaptureOutputContent(t *testing.T) {
 	}
 }
 
+func TestStripANSI_OSC52(t *testing.T) {
+	// OSC 52 clipboard-write: ESC ] 52 ; c ; <base64> ST
+	// This is the attack vector — a compromised agent could write to the
+	// user's clipboard via captured tmux pane output.
+	input := "before\x1b]52;c;SGVsbG8=\x1b\\after"
+	got := stripANSI(input)
+	if got != "beforeafter" {
+		t.Errorf("stripANSI did not remove OSC 52 sequence: got %q", got)
+	}
+}
+
+func TestStripANSI_OSCWindowTitle(t *testing.T) {
+	// OSC 0 (set window title): ESC ] 0 ; <title> BEL
+	input := "text\x1b]0;evil-title\x07more"
+	got := stripANSI(input)
+	if got != "textmore" {
+		t.Errorf("stripANSI did not remove OSC 0 sequence: got %q", got)
+	}
+}
+
+func TestStripANSI_ControlBytes(t *testing.T) {
+	// Control bytes 0x00-0x1F should be stripped, except \n (0x0A),
+	// \t (0x09), and \r (0x0D) which are legitimate whitespace.
+	input := "hello\x00\x01\x02\x03world\x7f"
+	got := stripANSI(input)
+	for _, b := range got {
+		if b < 0x20 && b != '\n' && b != '\t' && b != '\r' {
+			t.Errorf("control byte 0x%02x not stripped from result: %q", b, got)
+		}
+		if b == 0x7f {
+			t.Errorf("DEL (0x7F) not stripped from result: %q", got)
+		}
+	}
+	if got != "helloworld" {
+		t.Errorf("stripANSI(%q) = %q, want %q", input, got, "helloworld")
+	}
+}
+
 func TestSanitizeCaptureOutputTakesLastLines(t *testing.T) {
 	input := "old1\nold2\nold3\nnew1\nnew2\n"
 	lines := sanitizeCaptureOutput(input, 2)

@@ -21,9 +21,27 @@ const (
 	SectionMail
 )
 
+// ActionType identifies a user action from the Gas Town panel.
+type ActionType string
+
+const (
+	ActionNudge           ActionType = "nudge"
+	ActionHandoff         ActionType = "handoff"
+	ActionDecommission    ActionType = "decommission"
+	ActionConvoyLand      ActionType = "convoy_land"
+	ActionConvoyClose     ActionType = "convoy_close"
+	ActionConvoyWatch     ActionType = "convoy_watch"
+	ActionConvoyUnwatch   ActionType = "convoy_unwatch"
+	ActionMailReply       ActionType = "mail_reply"
+	ActionMailArchive     ActionType = "mail_archive"
+	ActionMailRead        ActionType = "mail_read"
+	ActionMailMarkAllRead ActionType = "mail_mark_all_read"
+	ActionMailCompose     ActionType = "mail_compose"
+)
+
 // GasTownActionMsg carries user intent from the Gas Town panel back to app.go.
 type GasTownActionMsg struct {
-	Type     string // "nudge", "handoff", "decommission", "convoy_land", "convoy_close", "mail_reply", "mail_archive", "mail_read", "mail_compose"
+	Type     ActionType
 	Agent    gastown.AgentRuntime
 	ConvoyID string
 	Mail     gastown.MailMessage
@@ -319,7 +337,7 @@ func (g GasTown) Update(msg tea.Msg) (GasTown, tea.Cmd) {
 				if m := g.SelectedMail(); m != nil && !m.Read {
 					mail := *m
 					return g, func() tea.Msg {
-						return GasTownActionMsg{Type: "mail_read", Mail: mail}
+						return GasTownActionMsg{Type: ActionMailRead, Mail: mail}
 					}
 				}
 			}
@@ -331,7 +349,7 @@ func (g GasTown) Update(msg tea.Msg) (GasTown, tea.Cmd) {
 			if a := g.SelectedAgent(); a != nil {
 				agent := *a
 				return g, func() tea.Msg {
-					return GasTownActionMsg{Type: "nudge", Agent: agent}
+					return GasTownActionMsg{Type: ActionNudge, Agent: agent}
 				}
 			}
 		}
@@ -341,7 +359,7 @@ func (g GasTown) Update(msg tea.Msg) (GasTown, tea.Cmd) {
 			if a := g.SelectedAgent(); a != nil {
 				agent := *a
 				return g, func() tea.Msg {
-					return GasTownActionMsg{Type: "handoff", Agent: agent}
+					return GasTownActionMsg{Type: ActionHandoff, Agent: agent}
 				}
 			}
 		}
@@ -351,7 +369,7 @@ func (g GasTown) Update(msg tea.Msg) (GasTown, tea.Cmd) {
 			if a := g.SelectedAgent(); a != nil && a.Role == "polecat" {
 				agent := *a
 				return g, func() tea.Msg {
-					return GasTownActionMsg{Type: "decommission", Agent: agent}
+					return GasTownActionMsg{Type: ActionDecommission, Agent: agent}
 				}
 			}
 		}
@@ -361,7 +379,7 @@ func (g GasTown) Update(msg tea.Msg) (GasTown, tea.Cmd) {
 			if c := g.SelectedConvoy(); c != nil {
 				convoyID := c.ID
 				return g, func() tea.Msg {
-					return GasTownActionMsg{Type: "convoy_land", ConvoyID: convoyID}
+					return GasTownActionMsg{Type: ActionConvoyLand, ConvoyID: convoyID}
 				}
 			}
 		}
@@ -371,7 +389,7 @@ func (g GasTown) Update(msg tea.Msg) (GasTown, tea.Cmd) {
 			if c := g.SelectedConvoy(); c != nil {
 				convoyID := c.ID
 				return g, func() tea.Msg {
-					return GasTownActionMsg{Type: "convoy_close", ConvoyID: convoyID}
+					return GasTownActionMsg{Type: ActionConvoyClose, ConvoyID: convoyID}
 				}
 			}
 		}
@@ -381,7 +399,7 @@ func (g GasTown) Update(msg tea.Msg) (GasTown, tea.Cmd) {
 			if m := g.SelectedMail(); m != nil {
 				mail := *m
 				return g, func() tea.Msg {
-					return GasTownActionMsg{Type: "mail_reply", Mail: mail}
+					return GasTownActionMsg{Type: ActionMailReply, Mail: mail}
 				}
 			}
 		}
@@ -391,18 +409,42 @@ func (g GasTown) Update(msg tea.Msg) (GasTown, tea.Cmd) {
 			if m := g.SelectedMail(); m != nil {
 				mail := *m
 				return g, func() tea.Msg {
-					return GasTownActionMsg{Type: "mail_archive", Mail: mail}
+					return GasTownActionMsg{Type: ActionMailArchive, Mail: mail}
+				}
+			}
+		}
+
+	case "R":
+		if g.section == SectionMail {
+			return g, func() tea.Msg {
+				return GasTownActionMsg{Type: ActionMailMarkAllRead}
+			}
+		}
+
+	case "W":
+		if g.section == SectionConvoys {
+			if c := g.SelectedConvoy(); c != nil {
+				convoyID := c.ID
+				return g, func() tea.Msg {
+					return GasTownActionMsg{Type: ActionConvoyUnwatch, ConvoyID: convoyID}
 				}
 			}
 		}
 
 	case "w":
 		switch g.section {
+		case SectionConvoys:
+			if c := g.SelectedConvoy(); c != nil {
+				convoyID := c.ID
+				return g, func() tea.Msg {
+					return GasTownActionMsg{Type: ActionConvoyWatch, ConvoyID: convoyID}
+				}
+			}
 		case SectionAgents:
 			if a := g.SelectedAgent(); a != nil {
 				agent := *a
 				return g, func() tea.Msg {
-					return GasTownActionMsg{Type: "mail_compose", Agent: agent}
+					return GasTownActionMsg{Type: ActionMailCompose, Agent: agent}
 				}
 			}
 		case SectionMail:
@@ -413,7 +455,7 @@ func (g GasTown) Update(msg tea.Msg) (GasTown, tea.Cmd) {
 					Address: m.From,
 				}
 				return g, func() tea.Msg {
-					return GasTownActionMsg{Type: "mail_compose", Agent: agent}
+					return GasTownActionMsg{Type: ActionMailCompose, Agent: agent}
 				}
 			}
 		}
@@ -1405,9 +1447,9 @@ func (g *GasTown) renderHints() string {
 	case SectionAgents:
 		hint = "n nudge  w mail  h handoff  K decommission  j/k navigate  tab section"
 	case SectionConvoys:
-		hint = "enter expand  l land  x close  j/k navigate  tab section"
+		hint = "enter expand  l land  x close  w watch  W unwatch  j/k navigate  tab section"
 	case SectionMail:
-		hint = "enter read  r reply  w compose  d archive  j/k navigate  tab section"
+		hint = "enter read  r reply  w compose  d archive  R mark-all-read  j/k navigate  tab section"
 	}
 	return "\n" + ui.GasTownHint.Render(hint)
 }

@@ -53,6 +53,7 @@ func MailRead(messageID string) (*MailMessage, error) {
 
 // MailReply replies to a message via `gt mail reply <id> -m <body>`.
 func MailReply(messageID, body string) error {
+	body = sanitizeText(body, maxTextLen)
 	out, err := runCombinedWithTimeout(timeoutShort, "gt", "mail", "reply", "-m", body, "--", messageID)
 	if err != nil {
 		return fmt.Errorf("gt mail reply: %w (%s)", err, sanitizeOutput(out))
@@ -62,6 +63,8 @@ func MailReply(messageID, body string) error {
 
 // MailSend sends a new message via `gt mail send <address> -s <subject> -m <body>`.
 func MailSend(address, subject, body string) error {
+	subject = sanitizeText(subject, maxTextLen)
+	body = sanitizeText(body, maxTextLen)
 	out, err := runCombinedWithTimeout(timeoutShort, "gt", "mail", "send", "-s", subject, "-m", body, "--", address)
 	if err != nil {
 		return fmt.Errorf("gt mail send: %w (%s)", err, sanitizeOutput(out))
@@ -83,6 +86,15 @@ func MailMarkRead(messageID string) error {
 	out, err := runCombinedWithTimeout(timeoutShort, "gt", "mail", "mark-read", "--", messageID)
 	if err != nil {
 		return fmt.Errorf("gt mail mark-read: %w (%s)", err, sanitizeOutput(out))
+	}
+	return nil
+}
+
+// MailMarkAllRead marks all messages as read via `gt mail mark-read --all`.
+func MailMarkAllRead() error {
+	out, err := runCombinedWithTimeout(timeoutShort, "gt", "mail", "mark-read", "--all")
+	if err != nil {
+		return fmt.Errorf("gt mail mark-read --all: %w (%s)", err, sanitizeOutput(out))
 	}
 	return nil
 }

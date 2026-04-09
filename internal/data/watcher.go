@@ -74,3 +74,25 @@ func FileModTime(path string) (time.Time, error) {
 	}
 	return info.ModTime(), nil
 }
+
+// CLIHealthCheckMsg reports a CLI health probe result. It is distinct from the
+// primary FileChangedMsg/FileWatchErrorMsg cycle so the app can route recovery
+// probes separately from normal data polls.
+type CLIHealthCheckMsg struct {
+	Issues []Issue
+	Err    error
+}
+
+const cliHealthCheckInterval = 15 * time.Second
+
+// CLIHealthCheck polls bd list on a longer interval to detect CLI recovery
+// while the app is operating in JSONL fallback mode.
+func CLIHealthCheck(projectDir string) tea.Cmd {
+	return tea.Tick(cliHealthCheckInterval, func(time.Time) tea.Msg {
+		issues, err := FetchIssuesCLI(projectDir)
+		if err != nil {
+			return CLIHealthCheckMsg{Err: err}
+		}
+		return CLIHealthCheckMsg{Issues: issues}
+	})
+}

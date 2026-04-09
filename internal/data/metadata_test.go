@@ -165,6 +165,44 @@ validation:
 	}
 }
 
+func TestResolveBeadsDirRejectsTraversal(t *testing.T) {
+	dir := t.TempDir()
+	beadsDir := filepath.Join(dir, ".beads")
+	if err := os.MkdirAll(beadsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A crafted redirect tries to escape the project root.
+	if err := os.WriteFile(filepath.Join(beadsDir, "redirect"), []byte("../../../../etc"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := ResolveBeadsDir(beadsDir)
+	if got != beadsDir {
+		t.Fatalf("ResolveBeadsDir should reject traversal redirect, got %q (want %q)", got, beadsDir)
+	}
+}
+
+func TestResolveBeadsDirAllowsSiblingRedirect(t *testing.T) {
+	dir := t.TempDir()
+	beadsDir := filepath.Join(dir, ".beads")
+	if err := os.MkdirAll(beadsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A valid sibling redirect stays within the project root.
+	actualBeads := filepath.Join(dir, "actual-beads")
+	if err := os.MkdirAll(actualBeads, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(beadsDir, "redirect"), []byte("../actual-beads"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := ResolveBeadsDir(beadsDir)
+	if got != actualBeads {
+		t.Fatalf("ResolveBeadsDir should follow valid sibling redirect, got %q (want %q)", got, actualBeads)
+	}
+}
+
 func TestFieldTypeLabel(t *testing.T) {
 	tests := []struct {
 		name   string

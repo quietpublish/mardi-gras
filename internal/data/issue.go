@@ -21,11 +21,14 @@ const (
 type IssueType string
 
 const (
-	TypeTask    IssueType = "task"
-	TypeBug     IssueType = "bug"
-	TypeFeature IssueType = "feature"
-	TypeChore   IssueType = "chore"
-	TypeEpic    IssueType = "epic"
+	TypeTask      IssueType = "task"
+	TypeBug       IssueType = "bug"
+	TypeFeature   IssueType = "feature"
+	TypeChore     IssueType = "chore"
+	TypeEpic      IssueType = "epic"
+	TypeSpike     IssueType = "spike"
+	TypeStory     IssueType = "story"
+	TypeMilestone IssueType = "milestone"
 )
 
 // Priority ranges from 0 (critical) to 4 (backlog).

@@ -222,6 +222,50 @@ func TestFilteringModeQStillQuits(t *testing.T) {
 	}
 }
 
+func TestFileChangedMsgDeletedSelectedIssue(t *testing.T) {
+	issues := []data.Issue{
+		testIssue("alpha-1", data.StatusOpen),
+		testIssue("alpha-2", data.StatusOpen),
+		testIssue("alpha-3", data.StatusOpen),
+	}
+
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
+	m.startedAt = time.Now().Add(-time.Second) // bypass startup guard
+	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	got := model.(Model)
+
+	// Move to alpha-2.
+	model, _ = got.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	got = model.(Model)
+	if got.parade.SelectedIssue == nil || got.parade.SelectedIssue.ID != "alpha-2" {
+		t.Fatalf("expected selected issue alpha-2 before refresh, got %+v", got.parade.SelectedIssue)
+	}
+
+	// Simulate a file refresh that removes alpha-2.
+	reduced := []data.Issue{
+		testIssue("alpha-1", data.StatusOpen),
+		testIssue("alpha-3", data.StatusOpen),
+	}
+	model, _ = got.Update(data.FileChangedMsg{Issues: reduced})
+	got = model.(Model)
+
+	// Selection must have moved to a valid, non-nil issue that is not alpha-2.
+	if got.parade.SelectedIssue == nil {
+		t.Fatal("expected non-nil selection after deleted-issue refresh")
+	}
+	if got.parade.SelectedIssue.ID == "alpha-2" {
+		t.Fatal("expected selection to move away from deleted alpha-2")
+	}
+
+	// The transient flag must be cleared after the handler fires the toast.
+	if got.selectionLost {
+		t.Fatal("expected selectionLost to be cleared after FileChangedMsg handling")
+	}
+	if got.lostIssueID != "" {
+		t.Fatalf("expected lostIssueID to be cleared, got %q", got.lostIssueID)
+	}
+}
+
 func TestHelpCanOpenFromFilteringMode(t *testing.T) {
 	issues := []data.Issue{
 		testIssue("alpha-1", data.StatusOpen),

@@ -51,11 +51,14 @@ var (
 	PrioP4 = Muted
 
 	// Issue type colors
-	ColorBug     = lipgloss.Color("#E74C3C")
-	ColorFeature = BrightPurple
-	ColorTask    = BrightGold
-	ColorChore   = Muted
-	ColorEpic    = lipgloss.Color("#3498DB")
+	ColorBug       = lipgloss.Color("#E74C3C")
+	ColorFeature   = BrightPurple
+	ColorTask      = BrightGold
+	ColorChore     = Muted
+	ColorEpic      = lipgloss.Color("#3498DB")
+	ColorSpike     = lipgloss.Color("#F39C12")
+	ColorStory     = lipgloss.Color("#A569BD")
+	ColorMilestone = lipgloss.Color("#00BCD4")
 
 	// Neutrals (extra)
 	Silver = lipgloss.Color("#AAAAAA")
@@ -158,6 +161,12 @@ func IssueTypeColor(t string) color.Color {
 		return ColorChore
 	case "epic":
 		return ColorEpic
+	case "spike":
+		return ColorSpike
+	case "story":
+		return ColorStory
+	case "milestone":
+		return ColorMilestone
 	default:
 		return Muted
 	}
