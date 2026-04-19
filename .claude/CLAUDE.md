@@ -64,7 +64,7 @@ Mardi Gras integrates with [Gas Town](https://github.com/steveyegge/gastown) (`g
 - **Patrol scan** (`patrol.go`): Parses `gt patrol scan --json` output. Background-polled on 60s TTL with in-flight gate. Findings (patrol_zombie, patrol_stall) augment the heuristic-based problems with patrol-specific diagnostics.
 - **Comments** (`comments.go`): Issue comment/timeline fetching.
 
-**Key gotcha**: `gt status --json` takes ~9 seconds to run. Background polling via BubbleTea Cmds may not return before the user interacts. The Gas Town panel (`ctrl+g`) triggers an on-demand fetch if status is nil and shows a loading state while waiting. Always handle nil status gracefully.
+**Key gotcha**: `gt status --json` latency is highly variable (measured seconds-to-tens-of-seconds depending on rig count, agent count, and whether backing services like dolt/daemon are running). Background polling via BubbleTea Cmds may not return before the user interacts. The Gas Town panel (`ctrl+g`) triggers an on-demand fetch if status is nil and shows a loading state while waiting. Always handle nil status gracefully.
 
 **Testing with real gt**: Run mg from a Gas Town workspace (e.g., `cd ~/gt/<rig>/crew/<name> && ~/Work/mardi-gras/mg`). The `gt` source code is at `~/go/pkg/mod/github.com/steveyegge/gastown@v0.9.0/` — check it directly rather than guessing struct shapes. Rig names cannot contain hyphens (use underscores).
 
