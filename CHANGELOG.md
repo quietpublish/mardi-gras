@@ -2,6 +2,28 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.17.0 (2026-04-19)
+
+### Added
+- **`started_at` timestamp in Detail panel** — Beads v1.0.1 added `started_at` to the issue JSON, auto-set on the first `in_progress` transition and preserved across later status changes. mg parses the field into `Issue.StartedAt` and renders a "Started" event in the Detail activity timeline between Created and Due. Contract tests cover populated, minimal, and explicit-null fixtures.
+
+### Changed
+- **`gt status` latency note** — replaced the obsolete "~9 seconds" gotcha in `CLAUDE.md` with a variability note. Gas Town v1.0.0 parallelizes within-rig work ([gastown#3504](https://github.com/steveyegge/gastown/pull/3504)), but latency still ranges from seconds to tens of seconds depending on rig count and whether dolt/daemon/tmux are running.
+- **Dependencies updated** — `bubbletea/v2` 2.0.2 → 2.0.6, `lipgloss/v2` 2.0.2 → 2.0.3, `charmbracelet/ultraviolet` dated bump (2026-03-16 → 2026-04-16), `charmbracelet/x/ansi` 0.11.6 → 0.11.7, plus indirect refresh of `regexp2`, `mattn/go-isatty`, `mattn/go-runewidth`, `yuin/goldmark`, and `golang.org/x/{net,sys,term,text}`. All patch- or date-level within the same major.
+
+## v0.16.0 (2026-04-09)
+
+### Added
+- **Beads v1.0.0 issue types** — `spike`, `story`, and `milestone` are now first-class types with distinct colors in the parade and detail views. Matches the types added in beads v1.0.0 ([beads#2923](https://github.com/steveyegge/beads/pull/2923)).
+- **Convoy watch/unwatch** — new convoy-panel actions to subscribe to or unsubscribe from convoy notifications via `gt convoy watch` / `gt convoy unwatch`.
+- **Mail mark-all-read** — bulk-dismiss mail inbox via `R` in the Gas Town mail section (`gt mail mark-read --all`).
+
+### Security / Hardened
+- **Input validation, source resilience, and ANSI stripping** — broader hardening of CLI-argument paths, `.beads/` discovery fallbacks, and output sanitization.
+
+### Changed
+- **Dependencies updated** — `charm.land/bubbles/v2` 2.0.0 → 2.1.0, `lucasb-eyer/go-colorful` 1.3.0 → 1.4.0. CI: `codecov/codecov-action` 5 → 6.
+
 ## v0.15.1 (2026-03-31)
 
 ### Added
