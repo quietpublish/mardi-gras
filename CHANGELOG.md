@@ -2,6 +2,15 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.19.0 (2026-05-13)
+
+### Added
+- **`label:` filter token** — the `/` filter now accepts `label:foo` alongside `type:` and `priority:`. Case-insensitive exact match against issue labels, AND across tokens (`label:backend label:security` matches issues carrying both), OR within an issue (matches if any of the issue's labels equals the value). Mirrors the v0.18.0 `--exclude-label` flag's semantics so the inline filter and the launch-time flag behave symmetrically. ([#30](https://github.com/quietpublish/mardi-gras/issues/30) / [#35](https://github.com/quietpublish/mardi-gras/pull/35))
+- **`MG_AGENT_RUNTIME` env var + `--agent` flag** — pick between Claude Code and Cursor when both are installed, instead of relying on the hardcoded claude-first detection order. Accepts `claude` or `cursor` (case-insensitive). If the requested binary isn't on PATH, mg falls back to the default detection order rather than failing silently — so a stale env var never leaves you with no runtime. The override applies only to the local launch path; Gas Town `gt sling` dispatch continues to choose the runtime per formula. ([#29](https://github.com/quietpublish/mardi-gras/issues/29) / [#36](https://github.com/quietpublish/mardi-gras/pull/36))
+
+### Fixed
+- **Detail viewport no longer snaps to top during polls** — when reading a long issue, the 5-second CLI / 1.2-second JSONL refresh tick was calling `Viewport.GotoTop()` unconditionally inside `SetIssue`, scrolling the user back to the top every poll. `SetIssue` now only resets scroll position when the displayed issue ID actually changes, matching the existing behavior of `SetMolecule` / `SetComments` / `SetRichDetail` / `SetSize`. Switching to a different issue still snaps to top. Fix also covers the Gas Town status poll path (`propagateAgentState`). Thanks @fixpunkt for the report, root-cause, and clean fix in their first PR. ([#31](https://github.com/quietpublish/mardi-gras/issues/31) / [#32](https://github.com/quietpublish/mardi-gras/pull/32))
+
 ## v0.18.0 (2026-05-13)
 
 ### Added
