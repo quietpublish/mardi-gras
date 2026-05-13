@@ -134,7 +134,7 @@ See the [parade and filtering guide](docs/filtering.md) for the full breakdown o
 
 ## Agent Integration
 
-Press `a` to launch an AI agent on any issue. Supports [Claude Code](https://claude.com/claude-code) and [Cursor](https://cursor.com), with tmux-native multi-agent dispatch when running inside tmux.
+Press `a` to launch an AI agent on any issue. Supports [Claude Code](https://claude.com/claude-code) and [Cursor](https://cursor.com), with tmux-native multi-agent dispatch when running inside tmux. Choose between them with `--agent cursor` / `--agent claude` or the `MG_AGENT_RUNTIME` env var; otherwise mg picks the first one it finds on your PATH.
 
 See the [agent integration guide](docs/agents.md) for runtime detection, tmux dispatch, and requirements.
 

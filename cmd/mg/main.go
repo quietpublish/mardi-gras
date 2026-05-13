@@ -37,11 +37,18 @@ func main() {
 	showVersion := flag.Bool("version", false, "Print version and exit")
 	noAnimations := flag.Bool("no-animations", false, "Disable confetti and header shimmer animations")
 	cmdTimeout := flag.Int("cmd-timeout", 0, "Command timeout in seconds (scales all external command timeouts; default 30)")
+	agentRuntime := flag.String("agent", "", "Preferred agent runtime: claude or cursor (default: claude if available, else cursor)")
 	flag.Parse()
 
 	// MG_NO_ANIMATIONS=1 env var as alternative to --no-animations flag
 	if !*noAnimations && os.Getenv("MG_NO_ANIMATIONS") == "1" {
 		*noAnimations = true
+	}
+
+	// --agent flag takes precedence over MG_AGENT_RUNTIME env var; both feed
+	// the same env-based contract consumed by internal/agent.DetectRuntime.
+	if *agentRuntime != "" {
+		os.Setenv("MG_AGENT_RUNTIME", *agentRuntime)
 	}
 
 	// MG_CMD_TIMEOUT env var as alternative to --cmd-timeout flag

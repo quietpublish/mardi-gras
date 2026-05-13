@@ -4,8 +4,22 @@ Press `a` on any selected issue to launch an AI agent session pre-loaded with th
 
 Mardi Gras supports multiple agent runtimes:
 
-- **[Claude Code](https://claude.com/claude-code)** (preferred) — detected via `claude` on PATH
+- **[Claude Code](https://claude.com/claude-code)** (default) — detected via `claude` on PATH
 - **[Cursor](https://cursor.com)** (fallback) — detected via `cursor-agent` on PATH, launched with `-f -p` flags
+
+## Choosing a runtime
+
+By default, mg prefers `claude` and falls back to `cursor-agent` when claude isn't installed. Override the default with the `--agent` flag or the `MG_AGENT_RUNTIME` env var:
+
+```bash
+mg --agent cursor                 # use cursor-agent for this session
+MG_AGENT_RUNTIME=cursor mg        # same, via env var
+MG_AGENT_RUNTIME=claude mg        # force claude even if you have other tools installed
+```
+
+Accepted values are `claude` and `cursor` (or `cursor-agent`). The override is honored only if the matching binary is on PATH — if you request a runtime that isn't installed, mg falls back to the default detection order rather than failing silently. Unknown values are ignored.
+
+The override applies only to mg's local launch path. When Gas Town is available, the `a` key dispatches through `gt sling` and the runtime is chosen by the Gas Town formula (see [Gas Town docs](https://github.com/steveyegge/gastown)).
 
 ## Tmux-native dispatch (multi-agent)
 

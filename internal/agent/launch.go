@@ -4,6 +4,7 @@ package agent
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -18,9 +19,25 @@ const (
 	RuntimeCursor Runtime = "cursor-agent"
 )
 
-// DetectRuntime returns the first available agent runtime on PATH.
-// Prefers Claude Code, falls back to Cursor.
+// DetectRuntime returns the agent runtime to launch.
+//
+// If MG_AGENT_RUNTIME is set to "claude" or "cursor" (or "cursor-agent") and
+// the corresponding binary is on PATH, that runtime wins. Unknown values or
+// missing binaries fall through to the default detection order: claude first,
+// then cursor-agent.
 func DetectRuntime() Runtime {
+	if pref := strings.ToLower(strings.TrimSpace(os.Getenv("MG_AGENT_RUNTIME"))); pref != "" {
+		switch pref {
+		case "claude":
+			if _, err := exec.LookPath("claude"); err == nil {
+				return RuntimeClaude
+			}
+		case "cursor", "cursor-agent":
+			if _, err := exec.LookPath("cursor-agent"); err == nil {
+				return RuntimeCursor
+			}
+		}
+	}
 	if _, err := exec.LookPath("claude"); err == nil {
 		return RuntimeClaude
 	}
