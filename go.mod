@@ -11,7 +11,7 @@ require (
 	github.com/charmbracelet/ultraviolet v0.0.0-20260428153724-66037269d7be
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/lucasb-eyer/go-colorful v1.4.0
-	github.com/sahilm/fuzzy v0.1.1
+	github.com/sahilm/fuzzy v0.1.2
 	gopkg.in/yaml.v3 v3.0.1
 )
 
