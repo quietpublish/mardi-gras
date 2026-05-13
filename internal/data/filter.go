@@ -91,7 +91,7 @@ func FilterIssues(issues []Issue, query string) []Issue {
 
 // isStructuredToken returns true for tokens with explicit prefixes or priority shorthands.
 func isStructuredToken(token string) bool {
-	if strings.HasPrefix(token, "type:") || strings.HasPrefix(token, "priority:") {
+	if strings.HasPrefix(token, "type:") || strings.HasPrefix(token, "priority:") || strings.HasPrefix(token, "label:") {
 		return true
 	}
 	// Priority shorthands: p0, p1, p2, p3, p4
@@ -130,6 +130,15 @@ func matchesStructuredTokens(issue Issue, tokens []string) bool {
 				matched = true
 			case val == "4" && issuePriorityLevel == PriorityBacklog:
 				matched = true
+			}
+
+		case strings.HasPrefix(token, "label:"):
+			val := strings.TrimPrefix(token, "label:")
+			for _, label := range issue.Labels {
+				if strings.ToLower(label) == val {
+					matched = true
+					break
+				}
 			}
 
 		case token == issuePriorityLabel:

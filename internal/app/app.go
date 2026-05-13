@@ -241,7 +241,7 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 	}
 	ti := textinput.New()
 	ti.Prompt = ui.InputPrompt.Render("/ ")
-	ti.Placeholder = "Filter type:bug, p1, or fuzzy text..."
+	ti.Placeholder = "Filter type:bug, label:foo, p1, or fuzzy text..."
 	ti.SetWidth(50)
 
 	// Build initial status snapshot for change detection

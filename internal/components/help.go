@@ -131,6 +131,7 @@ func allSections() []helpSection {
 				{key: "esc", desc: "Clear query and exit"},
 				{key: "enter", desc: "Apply query and exit"},
 				{key: "type:bug", desc: "Match issue type"},
+				{key: "label:foo", desc: "Match issue label (case-insensitive)"},
 				{key: "p0, p1...", desc: "Match priority level"},
 			},
 		},

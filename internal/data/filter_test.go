@@ -58,10 +58,10 @@ func TestExcludeByLabelCaseInsensitive(t *testing.T) {
 
 func TestFilterIssues(t *testing.T) {
 	issues := []Issue{
-		{ID: "vv-001", Title: "Fix login bug", IssueType: TypeBug, Priority: PriorityCritical},
-		{ID: "vv-002", Title: "Add search feature", IssueType: TypeFeature, Priority: PriorityHigh},
+		{ID: "vv-001", Title: "Fix login bug", IssueType: TypeBug, Priority: PriorityCritical, Labels: []string{"backend", "security"}},
+		{ID: "vv-002", Title: "Add search feature", IssueType: TypeFeature, Priority: PriorityHigh, Labels: []string{"Frontend"}},
 		{ID: "vv-003", Title: "Update documentation", IssueType: TypeChore, Priority: PriorityLow},
-		{ID: "vv-004", Title: "Refactor auth flow", IssueType: TypeTask, Priority: PriorityMedium},
+		{ID: "vv-004", Title: "Refactor auth flow", IssueType: TypeTask, Priority: PriorityMedium, Labels: []string{"backend"}},
 	}
 
 	tests := []struct {
@@ -128,6 +128,36 @@ func TestFilterIssues(t *testing.T) {
 			name:     "Multiple structured tokens combined",
 			query:    "type:feature p1",
 			expected: []string{"vv-002"},
+		},
+		{
+			name:     "Label filter exact",
+			query:    "label:security",
+			expected: []string{"vv-001"},
+		},
+		{
+			name:     "Label filter matches multiple issues",
+			query:    "label:backend",
+			expected: []string{"vv-001", "vv-004"},
+		},
+		{
+			name:     "Label filter case insensitive",
+			query:    "label:frontend",
+			expected: []string{"vv-002"},
+		},
+		{
+			name:     "Label filter no match",
+			query:    "label:nonexistent",
+			expected: []string{},
+		},
+		{
+			name:     "Label combined with type",
+			query:    "label:backend type:task",
+			expected: []string{"vv-004"},
+		},
+		{
+			name:     "Multiple label tokens AND",
+			query:    "label:backend label:security",
+			expected: []string{"vv-001"},
 		},
 	}
 
@@ -278,11 +308,13 @@ func TestIsStructuredToken(t *testing.T) {
 	}{
 		{"type:bug", true},
 		{"priority:high", true},
+		{"label:backend", true},
 		{"p0", true},
 		{"p4", true},
 		{"p5", false},
 		{"login", false},
 		{"type", false},
+		{"label", false},
 	}
 
 	for _, tt := range tests {
