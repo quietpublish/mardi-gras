@@ -103,6 +103,57 @@ func TestDetectRuntimeNoRuntimeAvailable(t *testing.T) {
 	}
 }
 
+func TestDetectRuntimeFallsBackToCodex(t *testing.T) {
+	t.Setenv("MG_AGENT_RUNTIME", "")
+	withFakePath(t, "codex")
+	if got := DetectRuntime(); got != RuntimeCodex {
+		t.Errorf("expected codex when it is the only binary on PATH, got %q", got)
+	}
+}
+
+func TestDetectRuntimeDefaultOrderPrefersCursorOverCodex(t *testing.T) {
+	t.Setenv("MG_AGENT_RUNTIME", "")
+	withFakePath(t, "cursor-agent", "codex")
+	if got := DetectRuntime(); got != RuntimeCursor {
+		t.Errorf("default order should pick cursor-agent before codex, got %q", got)
+	}
+}
+
+func TestDetectRuntimeEnvOverrideToCodex(t *testing.T) {
+	withFakePath(t, "claude", "cursor-agent", "codex")
+	t.Setenv("MG_AGENT_RUNTIME", "codex")
+	if got := DetectRuntime(); got != RuntimeCodex {
+		t.Errorf("MG_AGENT_RUNTIME=codex should select codex even when claude is on PATH, got %q", got)
+	}
+}
+
+func TestDetectRuntimeEnvOverrideCodexFallsBackWhenMissing(t *testing.T) {
+	withFakePath(t, "claude")
+	t.Setenv("MG_AGENT_RUNTIME", "codex")
+	if got := DetectRuntime(); got != RuntimeClaude {
+		t.Errorf("expected fallback to claude when codex is missing, got %q", got)
+	}
+}
+
+func TestCommandCodexArgs(t *testing.T) {
+	withFakePath(t, "codex")
+	t.Setenv("MG_AGENT_RUNTIME", "codex")
+
+	cmd := Command("hello world", "/tmp/project")
+	if cmd.Dir != "/tmp/project" {
+		t.Errorf("expected Dir=%q, got %q", "/tmp/project", cmd.Dir)
+	}
+	want := []string{"codex", "--sandbox", "workspace-write", "-a", "on-request", "-C", "/tmp/project", "hello world"}
+	if len(cmd.Args) != len(want) {
+		t.Fatalf("expected %d args, got %d: %v", len(want), len(cmd.Args), cmd.Args)
+	}
+	for i, w := range want {
+		if cmd.Args[i] != w {
+			t.Errorf("arg[%d] = %q, want %q", i, cmd.Args[i], w)
+		}
+	}
+}
+
 func TestRuntimeLabel(t *testing.T) {
 	tests := []struct {
 		runtime Runtime
@@ -110,6 +161,7 @@ func TestRuntimeLabel(t *testing.T) {
 	}{
 		{RuntimeClaude, "Claude Code"},
 		{RuntimeCursor, "Cursor"},
+		{RuntimeCodex, "Codex"},
 		{Runtime(""), "unknown"},
 		{Runtime("frobnicate"), "unknown"},
 	}
@@ -305,6 +357,16 @@ func TestCommandDir(t *testing.T) {
 		}
 		if cmd.Args[3] != "hello world" {
 			t.Errorf("expected Args[3]=%q, got %q", "hello world", cmd.Args[3])
+		}
+	case RuntimeCodex:
+		if len(cmd.Args) != 8 {
+			t.Fatalf("expected 8 args for codex, got %d: %v", len(cmd.Args), cmd.Args)
+		}
+		if cmd.Args[0] != "codex" {
+			t.Errorf("expected Args[0]=%q, got %q", "codex", cmd.Args[0])
+		}
+		if cmd.Args[len(cmd.Args)-1] != "hello world" {
+			t.Errorf("expected prompt at last arg, got %q", cmd.Args[len(cmd.Args)-1])
 		}
 	default:
 		t.Skip("no agent runtime on PATH")

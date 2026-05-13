@@ -33,6 +33,14 @@ func LaunchInTmux(prompt, projectDir, issueID string) (string, error) {
 	switch DetectRuntime() {
 	case RuntimeCursor:
 		agentArgs = []string{"cursor-agent", "-f", "-p", prompt}
+	case RuntimeCodex:
+		// --no-alt-screen preserves tmux scrollback inside the split pane.
+		agentArgs = []string{"codex",
+			"--no-alt-screen",
+			"--sandbox", "workspace-write",
+			"-a", "on-request",
+			"-C", projectDir,
+			prompt}
 	default: // Claude Code
 		agentArgs = []string{"claude", "--teammate-mode", "tmux", prompt}
 	}

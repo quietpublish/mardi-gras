@@ -17,14 +17,15 @@ type Runtime string
 const (
 	RuntimeClaude Runtime = "claude"
 	RuntimeCursor Runtime = "cursor-agent"
+	RuntimeCodex  Runtime = "codex"
 )
 
 // DetectRuntime returns the agent runtime to launch.
 //
-// If MG_AGENT_RUNTIME is set to "claude" or "cursor" (or "cursor-agent") and
-// the corresponding binary is on PATH, that runtime wins. Unknown values or
-// missing binaries fall through to the default detection order: claude first,
-// then cursor-agent.
+// If MG_AGENT_RUNTIME is set to "claude", "cursor" (or "cursor-agent"), or
+// "codex" and the corresponding binary is on PATH, that runtime wins. Unknown
+// values or missing binaries fall through to the default detection order:
+// claude, then cursor-agent, then codex.
 func DetectRuntime() Runtime {
 	if pref := strings.ToLower(strings.TrimSpace(os.Getenv("MG_AGENT_RUNTIME"))); pref != "" {
 		switch pref {
@@ -36,6 +37,10 @@ func DetectRuntime() Runtime {
 			if _, err := exec.LookPath("cursor-agent"); err == nil {
 				return RuntimeCursor
 			}
+		case "codex":
+			if _, err := exec.LookPath("codex"); err == nil {
+				return RuntimeCodex
+			}
 		}
 	}
 	if _, err := exec.LookPath("claude"); err == nil {
@@ -43,6 +48,9 @@ func DetectRuntime() Runtime {
 	}
 	if _, err := exec.LookPath("cursor-agent"); err == nil {
 		return RuntimeCursor
+	}
+	if _, err := exec.LookPath("codex"); err == nil {
+		return RuntimeCodex
 	}
 	return ""
 }
@@ -59,6 +67,8 @@ func (r Runtime) RuntimeLabel() string {
 		return "Claude Code"
 	case RuntimeCursor:
 		return "Cursor"
+	case RuntimeCodex:
+		return "Codex"
 	default:
 		return "unknown"
 	}
@@ -127,12 +137,24 @@ func BuildPrompt(issue data.Issue, deps data.DepEval, issueMap map[string]*data.
 
 // Command returns an *exec.Cmd that launches the detected agent runtime
 // with the given prompt, working directory set to projectDir.
+//
+// Codex defaults to sandboxed execution with interactive approval prompts,
+// which would block unattended agent sessions. We pass --sandbox workspace-write
+// and -a on-request to match the zero-friction posture Claude and Cursor have
+// out of the box. Power users can override via codex profiles or
+// MG_AGENT_RUNTIME=codex combined with a custom shell alias.
 func Command(prompt, projectDir string) *exec.Cmd {
 	rt := DetectRuntime()
 	var c *exec.Cmd
 	switch rt {
 	case RuntimeCursor:
 		c = exec.Command("cursor-agent", "-f", "-p", prompt)
+	case RuntimeCodex:
+		c = exec.Command("codex",
+			"--sandbox", "workspace-write",
+			"-a", "on-request",
+			"-C", projectDir,
+			prompt)
 	default: // Claude Code
 		c = exec.Command("claude", prompt)
 	}
