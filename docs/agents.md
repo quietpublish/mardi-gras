@@ -34,6 +34,14 @@ A few practical gotchas:
 - **AGENTS.md**: codex automatically reads `AGENTS.md` from the project root (and merges with `~/.codex/AGENTS.md`). Keep build/test/convention guidance in `AGENTS.md` — mg's prompt focuses on the specific Beads issue and lets codex pick up project context from the file.
 - **Beads integration on Homebrew bd v1.0.4**: bd's `codex-hook` subcommand (which injects Beads context into codex sessions) shipped on bd main but is missing from the v1.0.4 release (steveyegge/beads#3924). Until v1.0.5 cuts, codex with bd-installed hooks will log "unknown command 'codex-hook'" once per prompt. This is cosmetic for the agent's work but worth knowing.
 
+### Resuming a prior Codex session
+
+When codex is the active runtime inside tmux, the command palette (`:` or `Ctrl+K`) shows a **"Resume last Codex session"** action. It launches `codex resume --last` in a new tmux split rooted at the project directory. The action is gated on a rollout file actually existing under `~/.codex/sessions/YYYY/MM/DD/*.jsonl` so a never-launched codex doesn't surface as a confusing empty pane.
+
+### Gas Town routing for Codex
+
+When Gas Town is on PATH and `MG_AGENT_RUNTIME=codex` (or `--agent codex`) is active, mg's sling commands pass `--agent codex` to `gt sling`, so the agent preference propagates from mg into Gas Town. Requires gt v1.1.0+ (earlier versions reject the `--agent` flag). For `claude` / `cursor-agent`, mg continues to let gt pick its default agent — the v0.19.0 behavior is unchanged.
+
 ## Tmux-native dispatch (multi-agent)
 
 When running inside tmux, agents launch in **new tmux windows** instead of suspending the TUI. This means:

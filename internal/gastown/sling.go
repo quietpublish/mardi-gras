@@ -15,6 +15,19 @@ func Sling(issueID string) error {
 	return execWithTimeout(timeoutShort, "gt", "sling", issueID)
 }
 
+// SlingWithAgent dispatches via `gt sling --agent <name> <id>`, overriding
+// the runtime that gt would otherwise pick by default. Use this when the
+// caller has a specific agent preference (e.g. mg's MG_AGENT_RUNTIME=codex)
+// that should propagate to the Gas Town sling. Requires gt v1.1.0+; earlier
+// versions reject the --agent flag.
+func SlingWithAgent(issueID, agentName string) error {
+	if err := validateIssueID(issueID); err != nil {
+		return err
+	}
+	agentName = sanitizeText(agentName, maxTextLen)
+	return execWithTimeout(timeoutShort, "gt", "sling", "--agent", agentName, issueID)
+}
+
 // SlingWithFormula dispatches work using a named formula.
 // e.g., SlingWithFormula("bd-a1b2", "shiny") runs the full
 // design->implement->review->test->submit workflow.
@@ -55,6 +68,17 @@ func SlingMultiple(issueIDs []string) error {
 	for _, id := range issueIDs {
 		if err := Sling(id); err != nil {
 			return fmt.Errorf("sling %s: %w", id, err)
+		}
+	}
+	return nil
+}
+
+// SlingMultipleWithAgent dispatches multiple issues sequentially with a
+// specific agent override. See SlingWithAgent for requirements.
+func SlingMultipleWithAgent(issueIDs []string, agentName string) error {
+	for _, id := range issueIDs {
+		if err := SlingWithAgent(id, agentName); err != nil {
+			return fmt.Errorf("sling %s with agent %s: %w", id, agentName, err)
 		}
 	}
 	return nil

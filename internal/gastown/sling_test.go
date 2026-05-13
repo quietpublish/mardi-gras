@@ -47,6 +47,70 @@ func TestSlingArgs(t *testing.T) {
 	}
 }
 
+func TestSlingWithAgentArgs(t *testing.T) {
+	calls, restore := mockExecCapture(nil)
+	defer restore()
+	err := SlingWithAgent("mg-42", "codex")
+	if err != nil {
+		t.Fatalf("SlingWithAgent() error = %v", err)
+	}
+	if len(*calls) != 1 {
+		t.Fatalf("expected 1 call, got %d", len(*calls))
+	}
+	args := (*calls)[0]
+	want := []string{"gt", "sling", "--agent", "codex", "mg-42"}
+	if len(args) != len(want) {
+		t.Fatalf("args = %v, want %v", args, want)
+	}
+	for i, w := range want {
+		if args[i] != w {
+			t.Errorf("args[%d] = %q, want %q", i, args[i], w)
+		}
+	}
+}
+
+func TestSlingWithAgentRejectsBadID(t *testing.T) {
+	calls, restore := mockExecCapture(nil)
+	defer restore()
+	if err := SlingWithAgent("../etc/passwd", "codex"); err == nil {
+		t.Fatal("expected error for invalid issue ID")
+	}
+	if len(*calls) != 0 {
+		t.Errorf("invalid ID should not invoke gt, got %d calls", len(*calls))
+	}
+}
+
+func TestSlingMultipleWithAgentArgs(t *testing.T) {
+	calls, restore := mockExecCapture(nil)
+	defer restore()
+	err := SlingMultipleWithAgent([]string{"mg-1", "mg-2"}, "codex")
+	if err != nil {
+		t.Fatalf("SlingMultipleWithAgent() error = %v", err)
+	}
+	if len(*calls) != 2 {
+		t.Fatalf("expected 2 calls, got %d", len(*calls))
+	}
+	wantIDs := []string{"mg-1", "mg-2"}
+	for i, args := range *calls {
+		want := []string{"gt", "sling", "--agent", "codex", wantIDs[i]}
+		if len(args) != len(want) {
+			t.Fatalf("call[%d] args = %v, want %v", i, args, want)
+		}
+		for j, w := range want {
+			if args[j] != w {
+				t.Errorf("call[%d] args[%d] = %q, want %q", i, j, args[j], w)
+			}
+		}
+	}
+}
+
+func TestSlingMultipleWithAgentEmpty(t *testing.T) {
+	err := SlingMultipleWithAgent(nil, "codex")
+	if err != nil {
+		t.Fatalf("expected nil error for empty slice, got %v", err)
+	}
+}
+
 func TestSlingWithFormulaArgs(t *testing.T) {
 	calls, restore := mockExecCapture(nil)
 	defer restore()

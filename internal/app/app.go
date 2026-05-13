@@ -6,7 +6,9 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -440,6 +442,25 @@ type multiSlingResultMsg struct {
 	count   int
 	formula string
 	err     error
+}
+
+// slingWithRuntime dispatches via `gt sling`, passing `--agent codex` when
+// the active mg runtime is codex so MG_AGENT_RUNTIME=codex propagates into
+// Gas Town. Other runtimes keep gt's default agent selection (the v0.19.0
+// contract is unchanged for claude/cursor users).
+func slingWithRuntime(id string, runtime agent.Runtime) error {
+	if runtime == agent.RuntimeCodex {
+		return gastown.SlingWithAgent(id, "codex")
+	}
+	return gastown.Sling(id)
+}
+
+// slingMultipleWithRuntime is the bulk variant of slingWithRuntime.
+func slingMultipleWithRuntime(ids []string, runtime agent.Runtime) error {
+	if runtime == agent.RuntimeCodex {
+		return gastown.SlingMultipleWithAgent(ids, "codex")
+	}
+	return gastown.SlingMultiple(ids)
 }
 
 type nudgeResultMsg struct {
@@ -1138,16 +1159,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case formulaListMsg:
 		if msg.err != nil || len(msg.formulas) == 0 {
 			var slingCmd tea.Cmd
+			runtime := m.agentRuntime
 			if m.formulaMulti != nil {
 				ids := m.formulaMulti
 				slingCmd = func() tea.Msg {
-					err := gastown.SlingMultiple(ids)
+					err := slingMultipleWithRuntime(ids, runtime)
 					return multiSlingResultMsg{count: len(ids), err: err}
 				}
 			} else {
 				issueID := m.formulaTarget
 				slingCmd = func() tea.Msg {
-					err := gastown.Sling(issueID)
+					err := slingWithRuntime(issueID, runtime)
 					return slingResultMsg{issueID: issueID, err: err}
 				}
 			}
@@ -1759,8 +1781,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				ids[i] = iss.ID
 			}
 			m.parade.ClearSelection()
+			runtime := m.agentRuntime
 			return m, func() tea.Msg {
-				err := gastown.SlingMultiple(ids)
+				err := slingMultipleWithRuntime(ids, runtime)
 				return multiSlingResultMsg{count: len(ids), err: err}
 			}
 		}
@@ -1776,8 +1799,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 		if m.gtEnv.Available {
 			issueID := issue.ID
+			runtime := m.agentRuntime
 			return m, func() tea.Msg {
-				err := gastown.Sling(issueID)
+				err := slingWithRuntime(issueID, runtime)
 				return slingResultMsg{issueID: issueID, err: err}
 			}
 		}
@@ -2177,6 +2201,38 @@ func (m Model) runClaimNextReady() (tea.Model, tea.Cmd) {
 	}
 }
 
+// resumeCodexSession launches `codex resume --last` in a new tmux pane,
+// preserving the active project's prior agent session. Surfaces a toast if no
+// codex session is on disk (~/.codex/sessions/YYYY/MM/DD/*.jsonl) so the user
+// doesn't get a confusing empty tmux pane from a no-op resume.
+func (m Model) resumeCodexSession() (tea.Model, tea.Cmd) {
+	if !m.inTmux {
+		toast, cmd := components.ShowToast("Codex resume requires tmux", components.ToastInfo, toastDuration)
+		m.toast = toast
+		return m, cmd
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		toast, cmd := components.ShowToast("Codex resume: cannot resolve $HOME", components.ToastError, toastDuration)
+		m.toast = toast
+		return m, cmd
+	}
+	sessionsDir := filepath.Join(home, ".codex", "sessions")
+	if !agent.CodexHasPriorSession(sessionsDir) {
+		toast, cmd := components.ShowToast("No prior Codex session to resume", components.ToastInfo, toastDuration)
+		m.toast = toast
+		return m, cmd
+	}
+	if _, err := agent.LaunchCodexResumeInTmux(m.projectDir); err != nil {
+		toast, cmd := components.ShowToast("Codex resume: "+err.Error(), components.ToastError, toastDuration)
+		m.toast = toast
+		return m, cmd
+	}
+	toast, cmd := components.ShowToast("Resumed last Codex session", components.ToastSuccess, toastDuration)
+	m.toast = toast
+	return m, cmd
+}
+
 // setPriority runs bd update to change issue priority. Works on multi-selection if active.
 func (m Model) setPriority(priority data.Priority) (tea.Model, tea.Cmd) {
 	// Bulk mode
@@ -2299,6 +2355,11 @@ func (m Model) buildPaletteCommands() []components.PaletteCommand {
 			components.PaletteCommand{Name: "Launch agent", Desc: fmt.Sprintf("Start %s agent on issue", m.agentRuntime.RuntimeLabel()), Key: "a", Action: components.ActionLaunchAgent},
 			components.PaletteCommand{Name: "Kill agent", Desc: "Stop agent working on issue", Key: "A", Action: components.ActionKillAgent},
 		)
+		if m.agentRuntime == agent.RuntimeCodex && m.inTmux {
+			cmds = append(cmds,
+				components.PaletteCommand{Name: "Resume last Codex session", Desc: "codex resume --last in a new tmux pane", Key: "", Action: components.ActionCodexResume},
+			)
+		}
 	}
 
 	if m.gtEnv.Available {
@@ -2432,6 +2493,8 @@ func (m Model) executePaletteAction(action components.PaletteAction) (tea.Model,
 		return m.runPrune(false)
 	case components.ActionClaimNextReady:
 		return m.runClaimNextReady()
+	case components.ActionCodexResume:
+		return m.resumeCodexSession()
 	case components.ActionHelp:
 		m.showHelp = true
 		return m, nil
