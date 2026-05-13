@@ -2,6 +2,21 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.20.0 (2026-05-13)
+
+The codex release. Adds OpenAI Codex as a third agent runtime alongside Claude Code and Cursor, with first-class Gas Town routing and a session-resume palette action for codex-specific workflows.
+
+### Added
+- **Codex as a third agent runtime** — `codex` is now detected on PATH alongside `claude` and `cursor-agent`. Default detection order is claude → cursor-agent → codex, and the existing `MG_AGENT_RUNTIME` env var / `--agent` flag now accept `codex` as a value. mg launches codex with `--sandbox workspace-write -a on-request -C <projectDir>` (plus `--no-alt-screen` inside tmux) so unattended agents don't block on permission prompts. Docs cover first-run auth (`codex login`), project-trust gating, nvm install caveats, and the AGENTS.md ecosystem. ([#39](https://github.com/quietpublish/mardi-gras/pull/39))
+- **Gas Town sling routing for codex** — when mg's active runtime is codex and `gt` is on PATH, sling dispatches `gt sling --agent codex <id>` so `MG_AGENT_RUNTIME=codex` propagates into Gas Town. Requires gt v1.1.0+ which added first-class `--agent` support. Claude/cursor behavior with gt is intentionally unchanged. ([#41](https://github.com/quietpublish/mardi-gras/pull/41))
+- **"Resume last Codex session" palette entry** — visible when codex is the active runtime inside tmux. Launches `codex resume --last --no-alt-screen -C <projectDir>` in a new tmux split. Gated on a rollout file actually existing under `~/.codex/sessions/YYYY/MM/DD/*.jsonl` so a never-launched codex doesn't surface as a confusing empty pane. ([#41](https://github.com/quietpublish/mardi-gras/pull/41))
+
+### Changed
+- **Test coverage raised from 64% → 71.6%** — backfill of high-ROI tests across `internal/ui`, `internal/data`, `internal/gastown`, and `internal/views`. No behavior change. ([#38](https://github.com/quietpublish/mardi-gras/pull/38))
+
+### Deferred
+- **Codex MCP-server integration** ([#40](https://github.com/quietpublish/mardi-gras/issues/40)) — codex exposes an `mcp-server` stdio mode that mg could speak to and surface live agent state (tool calls, messages) inside the TUI rather than black-boxing a tmux pane. Substantially bigger scope (MCP client in Go, BubbleTea message routing, transcript UI), filed as a separate issue.
+
 ## v0.19.0 (2026-05-13)
 
 ### Added
