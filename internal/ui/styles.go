@@ -317,6 +317,8 @@ func StateBadge(state string) string {
 		sym = SymGate
 	case "fix_needed":
 		sym = SymFixNeeded
+	case "patrolling":
+		sym = SymPatrolling
 	case "paused", "muted":
 		sym = SymPaused
 	}

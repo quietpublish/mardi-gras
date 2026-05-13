@@ -74,14 +74,15 @@ var (
 	RoleDefault  = Silver
 
 	// Gas Town agent state colors
-	StateWorking   = BrightGreen
-	StateIdle      = Silver
-	StateBackoff   = lipgloss.Color("#E74C3C")
-	StateStuck     = lipgloss.Color("#FF8C00") // Amber — agent requesting help
-	StateSpawn     = lipgloss.Color("#3498DB") // Cyan — session starting
-	StateGate      = BrightGold                // Waiting on external trigger
-	StateFixNeeded = lipgloss.Color("#E056A0") // Pink — review feedback, needs rework
-	StatePropelled = lipgloss.Color("#00CED1") // Dark turquoise — ACP propulsion, output suppressed
+	StateWorking    = BrightGreen
+	StateIdle       = Silver
+	StateBackoff    = lipgloss.Color("#E74C3C")
+	StateStuck      = lipgloss.Color("#FF8C00") // Amber — agent requesting help
+	StateSpawn      = lipgloss.Color("#3498DB") // Cyan — session starting
+	StateGate       = BrightGold                // Waiting on external trigger
+	StateFixNeeded  = lipgloss.Color("#E056A0") // Pink — review feedback, needs rework
+	StatePropelled  = lipgloss.Color("#00CED1") // Dark turquoise — ACP propulsion, output suppressed
+	StatePatrolling = lipgloss.Color("#5DADE2") // Sky blue — witness/deacon scanning rounds
 )
 
 // PriorityColor returns the theme color for a priority level.
@@ -142,6 +143,8 @@ func AgentStateColor(state string) color.Color {
 		return StateFixNeeded
 	case "propelled":
 		return StatePropelled
+	case "patrolling":
+		return StatePatrolling
 	case "paused", "muted":
 		return Dim
 	default:

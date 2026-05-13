@@ -98,7 +98,7 @@ func TestInitialLayoutExcludesHiddenTypesButKeepsDetailIssueMap(t *testing.T) {
 	}
 	issues[1].IssueType = data.TypeEpic
 
-	m := New(issues, data.Source{}, data.DefaultBlockingTypes, map[string]bool{"epic": true})
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes, Filters{ExcludeTypes: map[string]bool{"epic": true}})
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	got := model.(Model)
 

@@ -22,6 +22,30 @@ func ExcludeByType(issues []Issue, excludeTypes map[string]bool) []Issue {
 	return filtered
 }
 
+// ExcludeByLabel filters out issues that carry any label in excludeLabels.
+// Keys in excludeLabels must be lowercase (parseTypeSet ensures this at input).
+// Issues with no labels are always kept.
+func ExcludeByLabel(issues []Issue, excludeLabels map[string]bool) []Issue {
+	if len(excludeLabels) == 0 {
+		return issues
+	}
+
+	filtered := make([]Issue, 0, len(issues))
+	for _, issue := range issues {
+		skip := false
+		for _, label := range issue.Labels {
+			if excludeLabels[strings.ToLower(label)] {
+				skip = true
+				break
+			}
+		}
+		if !skip {
+			filtered = append(filtered, issue)
+		}
+	}
+	return filtered
+}
+
 // FilterIssues returns a new slice of issues that match the search query.
 // It supports explicit tokens (type:bug, p1, priority:high) and fuzzy free-text
 // search on ID and Title. All tokens in the query must match (AND logic).

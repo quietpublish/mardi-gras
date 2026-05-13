@@ -700,6 +700,8 @@ func (g *GasTown) renderAgentRoster(width int) string {
 			stateSym = ui.SymFixNeeded
 		case "propelled":
 			stateSym = ui.SymPropelled
+		case "patrolling":
+			stateSym = ui.SymPatrolling
 		case "paused", "muted":
 			stateSym = ui.SymPaused
 		}

@@ -20,6 +20,42 @@ func TestExcludeByType(t *testing.T) {
 	}
 }
 
+func TestExcludeByLabel(t *testing.T) {
+	issues := []Issue{
+		{ID: "vv-001", Title: "Fix login bug", Labels: []string{"backend", "security"}},
+		{ID: "vv-002", Title: "Bot-tracked", Labels: []string{"gt:agent"}},
+		{ID: "vv-003", Title: "No labels"},
+		{ID: "vv-004", Title: "Mixed", Labels: []string{"Frontend", "gt:agent"}},
+	}
+
+	result := ExcludeByLabel(issues, map[string]bool{"gt:agent": true})
+	if len(result) != 2 {
+		t.Fatalf("expected 2 issues after exclude, got %d: %+v", len(result), result)
+	}
+	if result[0].ID != "vv-001" || result[1].ID != "vv-003" {
+		t.Fatalf("expected vv-001 and vv-003 to remain, got %q and %q", result[0].ID, result[1].ID)
+	}
+}
+
+func TestExcludeByLabelEmpty(t *testing.T) {
+	issues := []Issue{{ID: "vv-001", Labels: []string{"x"}}}
+	result := ExcludeByLabel(issues, nil)
+	if len(result) != 1 {
+		t.Fatalf("empty exclude set should passthrough, got %d issues", len(result))
+	}
+}
+
+func TestExcludeByLabelCaseInsensitive(t *testing.T) {
+	issues := []Issue{
+		{ID: "vv-001", Labels: []string{"Backend"}},
+		{ID: "vv-002", Labels: []string{"frontend"}},
+	}
+	result := ExcludeByLabel(issues, map[string]bool{"backend": true})
+	if len(result) != 1 || result[0].ID != "vv-002" {
+		t.Fatalf("expected case-insensitive match; got %+v", result)
+	}
+}
+
 func TestFilterIssues(t *testing.T) {
 	issues := []Issue{
 		{ID: "vv-001", Title: "Fix login bug", IssueType: TypeBug, Priority: PriorityCritical},

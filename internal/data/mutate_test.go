@@ -161,6 +161,45 @@ func TestCloseAndClaimNextExecError(t *testing.T) {
 	}
 }
 
+func TestClaimNextReadyArgsAndParse(t *testing.T) {
+	calls, restore := mockRunCapture([]byte(`[{"id":"mg-77","title":"Make the parade roll faster"}]`), nil)
+	defer restore()
+
+	issue, err := ClaimNextReady()
+	if err != nil {
+		t.Fatalf("ClaimNextReady() error = %v", err)
+	}
+	if issue == nil || issue.ID != "mg-77" || issue.Title != "Make the parade roll faster" {
+		t.Fatalf("issue = %+v, want mg-77 with title", issue)
+	}
+
+	args := (*calls)[0]
+	if len(args) != 4 || args[0] != "bd" || args[1] != "ready" || args[2] != "--claim" || args[3] != "--json" {
+		t.Errorf("args = %v", args)
+	}
+}
+
+func TestClaimNextReadyEmpty(t *testing.T) {
+	defer mockRun([]byte(`[]`), nil)()
+
+	issue, err := ClaimNextReady()
+	if err != nil {
+		t.Fatalf("ClaimNextReady() error = %v", err)
+	}
+	if issue != nil {
+		t.Fatalf("issue = %+v, want nil", issue)
+	}
+}
+
+func TestClaimNextReadyExecError(t *testing.T) {
+	defer mockRun(nil, errors.New("unknown flag: --claim"))()
+
+	_, err := ClaimNextReady()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
 func TestSetPriorityArgs(t *testing.T) {
 	calls, restore := mockExecCapture(nil)
 	defer restore()

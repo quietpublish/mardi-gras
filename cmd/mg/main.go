@@ -32,6 +32,7 @@ func main() {
 	path := flag.String("path", "", "Path to .beads/issues.jsonl file")
 	blockTypesFlag := flag.String("block-types", "", "Comma-separated dependency types that count as blockers (default: blocks)")
 	excludeTypesFlag := flag.String("exclude-type", "", "Comma-separated issue types to hide from the parade and status output")
+	excludeLabelsFlag := flag.String("exclude-label", "", "Comma-separated labels to hide from the parade and status output")
 	statusMode := flag.Bool("status", false, "Output tmux status line and exit")
 	showVersion := flag.Bool("version", false, "Print version and exit")
 	noAnimations := flag.Bool("no-animations", false, "Disable confetti and header shimmer animations")
@@ -67,6 +68,7 @@ func main() {
 	// Parse blocking types from flag, env var, or default
 	blockingTypes := parseBlockingTypes(*blockTypesFlag)
 	excludeTypes := parseTypeSet(*excludeTypesFlag)
+	excludeLabels := parseTypeSet(*excludeLabelsFlag)
 
 	// Resolve data source: JSONL file or bd CLI fallback
 	cwd, err := os.Getwd()
@@ -104,15 +106,18 @@ func main() {
 		}
 	}
 
+	filters := app.Filters{ExcludeTypes: excludeTypes, ExcludeLabels: excludeLabels}
+
 	if *statusMode {
-		groups := data.GroupByParade(data.ExcludeByType(issues, excludeTypes), blockingTypes)
+		visible := data.ExcludeByLabel(data.ExcludeByType(issues, excludeTypes), excludeLabels)
+		groups := data.GroupByParade(visible, blockingTypes)
 		fmt.Print(tmux.StatusLine(groups))
 		return
 	}
 
 	// Run TUI
 	guard := app.NewOSCGuard()
-	model := app.NewWithGuard(issues, source, blockingTypes, guard, *noAnimations, excludeTypes)
+	model := app.NewWithGuard(issues, source, blockingTypes, guard, *noAnimations, filters)
 	p := tea.NewProgram(model, tea.WithFilter(guard.Filter()))
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

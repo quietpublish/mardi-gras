@@ -74,6 +74,7 @@ const (
 	SymPaused        = "⏸" // alias of SymDeferred — intentionally suspended
 	SymFixNeeded     = "🔧" // review feedback — needs rework
 	SymPropelled     = "⚡" // ACP propulsion — output suppressed
+	SymPatrolling    = "⊙" // witness/deacon scanning rounds
 	SymProgress      = "█"
 	SymProgressEmpty = "░"
 	SymDog           = "🐕"

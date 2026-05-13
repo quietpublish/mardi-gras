@@ -61,6 +61,7 @@ type Model struct {
 	lastFileMod   time.Time
 	blockingTypes map[string]bool
 	excludeTypes  map[string]bool
+	excludeLabels map[string]bool
 	filterInput   textinput.Model
 	filtering     bool
 	showHelp      bool
@@ -206,20 +207,27 @@ type Model struct {
 	lostIssueID   string
 }
 
+// Filters bundles CLI-level filter inputs so the New/NewWithGuard surface
+// area stays small as more filter axes are added.
+type Filters struct {
+	ExcludeTypes  map[string]bool
+	ExcludeLabels map[string]bool
+}
+
 // New creates a new app model from loaded issues.
-func New(issues []data.Issue, source data.Source, blockingTypes map[string]bool, excludeTypes ...map[string]bool) Model {
-	return NewWithGuard(issues, source, blockingTypes, nil, false, excludeTypes...)
+func New(issues []data.Issue, source data.Source, blockingTypes map[string]bool, filters ...Filters) Model {
+	return NewWithGuard(issues, source, blockingTypes, nil, false, filters...)
 }
 
 // NewWithGuard creates a new app model from loaded issues and attaches a
 // shared OSC guard when one is provided. When noAnimations is true, confetti
 // and header shimmer animations are disabled.
-func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[string]bool, guard *OSCGuard, noAnimations bool, excludeTypes ...map[string]bool) Model {
-	var excluded map[string]bool
-	if len(excludeTypes) > 0 {
-		excluded = excludeTypes[0]
+func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[string]bool, guard *OSCGuard, noAnimations bool, filters ...Filters) Model {
+	var f Filters
+	if len(filters) > 0 {
+		f = filters[0]
 	}
-	groups := data.GroupByParade(data.ExcludeByType(issues, excluded), blockingTypes)
+	groups := data.GroupByParade(data.ExcludeByLabel(data.ExcludeByType(issues, f.ExcludeTypes), f.ExcludeLabels), blockingTypes)
 
 	watchPath := source.Path
 	pathExplicit := source.Explicit
@@ -253,7 +261,8 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 		pathExplicit:   pathExplicit,
 		lastFileMod:    lastFileMod,
 		blockingTypes:  blockingTypes,
-		excludeTypes:   excluded,
+		excludeTypes:   f.ExcludeTypes,
+		excludeLabels:  f.ExcludeLabels,
 		filterInput:    ti,
 		agentAvail:     agent.Available(),
 		agentRuntime:   agent.DetectRuntime(),
@@ -554,6 +563,19 @@ type mutateResultMsg struct {
 	action    string
 	err       error
 	claimedID string // non-empty when --claim-next claimed a follow-up issue
+}
+
+// pruneResultMsg is sent when a bd prune invocation completes.
+type pruneResultMsg struct {
+	summary string // first line of bd prune output (e.g. "42 beads pruned")
+	dryRun  bool
+	err     error
+}
+
+// claimNextReadyMsg is sent when `bd ready --claim --json` returns.
+type claimNextReadyMsg struct {
+	issue *data.Issue // nil when nothing was claimable
+	err   error
 }
 
 // changeIndicatorExpiredMsg clears change indicators after timeout.
@@ -1342,6 +1364,66 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case recoveryResultMsg:
 		return m.handleRecoveryResult(msg)
 
+	case pruneResultMsg:
+		if msg.err != nil {
+			prefix := "bd prune"
+			if msg.dryRun {
+				prefix = "bd prune --dry-run"
+			}
+			toast, cmd := components.ShowToast(
+				fmt.Sprintf("%s: %s", prefix, msg.err),
+				components.ToastError, toastDuration,
+			)
+			m.toast = toast
+			return m, cmd
+		}
+		label := "Pruned"
+		if msg.dryRun {
+			label = "Prune preview"
+		}
+		summary := msg.summary
+		if summary == "" {
+			summary = "(no output)"
+		}
+		toast, cmd := components.ShowToast(
+			fmt.Sprintf("%s: %s", label, summary),
+			components.ToastSuccess, toastDuration,
+		)
+		m.toast = toast
+		if !msg.dryRun {
+			// Force refresh so the parade drops any pruned issues.
+			m.lastFileMod = time.Time{}
+			return m, tea.Batch(cmd, m.startPollImmediate())
+		}
+		return m, cmd
+
+	case claimNextReadyMsg:
+		if msg.err != nil {
+			toast, cmd := components.ShowToast(
+				fmt.Sprintf("bd ready --claim: %s", msg.err),
+				components.ToastError, toastDuration,
+			)
+			m.toast = toast
+			return m, cmd
+		}
+		if msg.issue == nil {
+			toast, cmd := components.ShowToast(
+				"No ready work to claim",
+				components.ToastInfo, toastDuration,
+			)
+			m.toast = toast
+			return m, cmd
+		}
+		toast, toastCmd := components.ShowToast(
+			fmt.Sprintf("Claimed %s — %s", msg.issue.ID, msg.issue.Title),
+			components.ToastSuccess, toastDuration,
+		)
+		m.toast = toast
+		m.pendingSelectID = msg.issue.ID
+		m.detail.RichIssueID = ""
+		m.lastFileMod = time.Time{}
+		return m, tea.Batch(toastCmd, m.startPollImmediate())
+
 	case mutateResultMsg:
 		if msg.err != nil {
 			toast, cmd := components.ShowToast(
@@ -2069,6 +2151,32 @@ func (m Model) cascadeCloseIssue() (tea.Model, tea.Cmd) {
 	}
 }
 
+// runPrune runs `bd prune --older-than 30d` in dry-run or force mode and
+// surfaces the first line of output via a toast.
+func (m Model) runPrune(dryRun bool) (tea.Model, tea.Cmd) {
+	return m, func() tea.Msg {
+		var (
+			summary string
+			err     error
+		)
+		if dryRun {
+			summary, err = data.PrunePreview("30d")
+		} else {
+			summary, err = data.PruneClosed("30d")
+		}
+		return pruneResultMsg{summary: summary, dryRun: dryRun, err: err}
+	}
+}
+
+// runClaimNextReady atomically claims the highest-priority ready issue via
+// `bd ready --claim --json` and selects the result in the parade.
+func (m Model) runClaimNextReady() (tea.Model, tea.Cmd) {
+	return m, func() tea.Msg {
+		issue, err := data.ClaimNextReady()
+		return claimNextReadyMsg{issue: issue, err: err}
+	}
+}
+
 // setPriority runs bd update to change issue priority. Works on multi-selection if active.
 func (m Model) setPriority(priority data.Priority) (tea.Model, tea.Cmd) {
 	// Bulk mode
@@ -2181,6 +2289,9 @@ func (m Model) buildPaletteCommands() []components.PaletteCommand {
 		{Name: "Help", Desc: "Show keybinding help", Key: "?", Action: components.ActionHelp},
 		{Name: "Quit", Desc: "Exit Mardi Gras", Key: "q", Action: components.ActionQuit},
 		{Name: "Cycle layout", Desc: "Switch panel arrangement", Key: "", Action: components.ActionCycleLayout},
+		{Name: "Prune preview (closed > 30d)", Desc: "Dry-run: report closed non-ephemeral beads older than 30d", Key: "", Action: components.ActionPrunePreview},
+		{Name: "Prune closed > 30d (force)", Desc: "Delete closed non-ephemeral beads older than 30d — destructive, no undo", Key: "", Action: components.ActionPruneClosed},
+		{Name: "Claim next ready", Desc: "Atomically claim the top-priority ready bead (bd ready --claim)", Key: "", Action: components.ActionClaimNextReady},
 	}
 
 	if m.agentAvail {
@@ -2315,6 +2426,12 @@ func (m Model) executePaletteAction(action components.PaletteAction) (tea.Model,
 		m.recovering = true
 		m.recoveryDialog = components.NewRecoveryDialog(rigName, orphans, m.width, m.height)
 		return m, nil
+	case components.ActionPrunePreview:
+		return m.runPrune(true)
+	case components.ActionPruneClosed:
+		return m.runPrune(false)
+	case components.ActionClaimNextReady:
+		return m.runClaimNextReady()
 	case components.ActionHelp:
 		m.showHelp = true
 		return m, nil
@@ -2694,7 +2811,7 @@ func (m *Model) layout() {
 	m.detail.MetadataSchema = m.metadataSchema
 
 	if len(m.parade.Items) == 0 {
-		visibleIssues := data.ExcludeByType(m.issues, m.excludeTypes)
+		visibleIssues := data.ExcludeByLabel(data.ExcludeByType(m.issues, m.excludeTypes), m.excludeLabels)
 		m.parade = views.NewParadeWithData(visibleIssues, m.groups, detailIssueMap, paradeW, bodyH, m.blockingTypes)
 		m.syncSelection()
 		if m.pendingCurrentID != "" {
@@ -2738,14 +2855,14 @@ func (m *Model) rebuildParade() {
 	}
 
 	filteredIssues, highlights := data.FilterIssuesWithHighlights(m.issues, m.filterInput.Value())
-	filteredIssues = data.ExcludeByType(filteredIssues, m.excludeTypes)
+	filteredIssues = data.ExcludeByLabel(data.ExcludeByType(filteredIssues, m.excludeTypes), m.excludeLabels)
 	if m.focusMode {
 		filteredIssues = data.FocusFilter(filteredIssues, m.blockingTypes)
 	}
 	groups := m.groups
 	detailIssueMap := data.BuildIssueMap(m.issues)
 	paradeIssueMap := detailIssueMap
-	if m.filterInput.Value() != "" || m.focusMode || len(m.excludeTypes) > 0 {
+	if m.filterInput.Value() != "" || m.focusMode || len(m.excludeTypes) > 0 || len(m.excludeLabels) > 0 {
 		groups = data.GroupByParade(filteredIssues, m.blockingTypes)
 		paradeIssueMap = data.BuildIssueMap(filteredIssues)
 	}

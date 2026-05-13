@@ -23,6 +23,24 @@ func ClaimIssue(issueID string) error {
 	return execWithTimeout(timeoutShort, "bd", "update", issueID, "--claim")
 }
 
+// ClaimNextReady runs `bd ready --claim --json` to atomically claim the highest-priority
+// ready issue from the queue. Returns nil if nothing is claimable. Available on bd v1.0.4+
+// (PR #3578); on older bd it surfaces "unknown flag: --claim" via wrapExitError.
+func ClaimNextReady() (*Issue, error) {
+	out, err := runWithTimeout(timeoutShort, "bd", "ready", "--claim", "--json")
+	if err != nil {
+		return nil, wrapExitError("bd ready --claim", err)
+	}
+	var issues []Issue
+	if err := json.Unmarshal(out, &issues); err != nil {
+		return nil, fmt.Errorf("bd ready --claim parse: %w", err)
+	}
+	if len(issues) == 0 {
+		return nil, nil
+	}
+	return &issues[0], nil
+}
+
 // CloseIssue runs `bd close <id>` to close an issue.
 func CloseIssue(issueID string) error {
 	if err := ValidateIssueID(issueID); err != nil {
@@ -124,6 +142,38 @@ func AddLabel(issueID, label string) error {
 	}
 	label = sanitizeText(label, maxTextLen)
 	return execWithTimeout(timeoutShort, "bd", "label", "add", issueID, "--", label)
+}
+
+// PrunePreview runs `bd prune --older-than <age> --dry-run` and returns
+// the raw output so callers can surface it in a toast. Available on bd v1.1+.
+func PrunePreview(olderThan string) (string, error) {
+	if olderThan == "" {
+		olderThan = "30d"
+	}
+	out, err := runWithTimeout(timeoutMedium, "bd", "prune", "--older-than", olderThan, "--dry-run")
+	if err != nil {
+		return "", wrapExitError("bd prune --dry-run", err)
+	}
+	return firstLine(string(out)), nil
+}
+
+// PruneClosed runs `bd prune --older-than <age> --force` to actually delete
+// closed non-ephemeral beads. Available on bd v1.1+.
+func PruneClosed(olderThan string) (string, error) {
+	if olderThan == "" {
+		olderThan = "30d"
+	}
+	out, err := runWithTimeout(timeoutMedium, "bd", "prune", "--older-than", olderThan, "--force")
+	if err != nil {
+		return "", wrapExitError("bd prune", err)
+	}
+	return firstLine(string(out)), nil
+}
+
+func firstLine(s string) string {
+	s = strings.TrimSpace(s)
+	first, _, _ := strings.Cut(s, "\n")
+	return strings.TrimSpace(first)
 }
 
 // AddDependency runs `bd dep add <id> -- <depends-on-id>` to add a blocking dependency.

@@ -61,11 +61,22 @@ mg --exclude-type=epic          # hide epics
 mg --exclude-type=epic,chore    # hide epics and chores
 ```
 
+## Excluding Labels
+
+Use `--exclude-label` to hide issues carrying specific labels. Match is case-insensitive. Issues without any labels are always kept. Useful for suppressing bot-tracked beads (`gt:agent`) or any workflow tag you don't want cluttering the parade.
+
+```bash
+mg --exclude-label=gt:agent            # hide agent-tracked beads
+mg --exclude-label=gt:agent,wip        # hide agent + wip-labeled issues
+```
+
 ## Command Palette
 
 Press `:` or `Ctrl+K` to open a fuzzy-match command palette. Type to filter available actions, then press `enter` to execute. The palette includes:
 
 - **Add note** — append a note to the selected issue via `bd note`
+- **Claim next ready** — atomically claim the top-priority ready bead via `bd ready --claim --json` (requires bd v1.0.4+)
+- **Prune preview / Prune closed > 30d** — dry-run or force-delete closed non-ephemeral beads older than 30 days via `bd prune` (requires bd v1.1+)
 - **Create & assign to crew** — open the issue create form with the Gas Town crew field (requires Gas Town)
 - **Cascade close** — close an issue and all its children (requires Gas Town v0.11+)
 - All keybinding actions (close, set priority, sling, nudge, etc.)

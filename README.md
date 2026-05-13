@@ -87,6 +87,9 @@ MG_BLOCK_TYPES=blocks,conditional-blocks,parent-child mg
 # Hide specific issue types from the parade
 mg --exclude-type=epic,chore
 
+# Hide issues carrying specific labels
+mg --exclude-label=gt:agent
+
 # Disable animations (useful over SSH)
 mg --no-animations
 # or via environment variable

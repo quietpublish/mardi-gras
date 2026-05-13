@@ -2,6 +2,7 @@ package gastown
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -75,19 +76,42 @@ func SetCmdTimeout(seconds int) {
 var runWithTimeout = func(timeout time.Duration, name string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	return exec.CommandContext(ctx, name, args...).Output()
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = bdChildEnv(name)
+	return cmd.Output()
 }
 
 // runCombinedWithTimeout executes a command with a context timeout and returns combined stdout+stderr.
 var runCombinedWithTimeout = func(timeout time.Duration, name string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	return exec.CommandContext(ctx, name, args...).CombinedOutput()
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = bdChildEnv(name)
+	return cmd.CombinedOutput()
 }
 
 // execWithTimeout executes a command with a context timeout, discarding output.
 var execWithTimeout = func(timeout time.Duration, name string, args ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	return exec.CommandContext(ctx, name, args...).Run()
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = bdChildEnv(name)
+	return cmd.Run()
+}
+
+// bdChildEnv pins BD_JSON_ENVELOPE=0 for `bd` subprocesses so a user's shell
+// setting cannot flip bd's --json output into envelope form. See
+// internal/data/exec.go for the rationale.
+func bdChildEnv(name string) []string {
+	if name != "bd" {
+		return nil
+	}
+	env := os.Environ()
+	filtered := env[:0]
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, "BD_JSON_ENVELOPE=") {
+			filtered = append(filtered, kv)
+		}
+	}
+	return append(filtered, "BD_JSON_ENVELOPE=0")
 }
