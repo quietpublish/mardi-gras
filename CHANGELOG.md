@@ -2,6 +2,20 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.18.0 (2026-05-13)
+
+### Added
+- **`--exclude-label` CLI flag** — hide issues carrying specific labels from the parade and status output, mirroring `--exclude-type`. Case-insensitive match. Issues with no labels are always kept. Useful for suppressing `gt:agent` bot-tracked beads. Parallels the upstream [beads `bd ready --exclude-label`](https://github.com/gastownhall/beads/commit/34a580c) that landed 2026-04-24.
+- **`bd prune` palette actions** — new command-palette entries for `bd prune --older-than 30d --dry-run` (preview) and `bd prune --older-than 30d --force` (delete). Tees into the upstream [beads `bd prune`](https://github.com/gastownhall/beads/pull/3353) command. Available when bd v1.1+ is installed; older bd will surface a command-not-found error toast.
+- **`Claim next ready` palette action** — atomically claims the highest-priority ready bead via `bd ready --claim --json` and selects it in the parade. Replaces the two-step "find ready, then `bd update --claim`" flow with a single CAS-protected call. Available on bd v1.0.4+ ([beads#3578](https://github.com/gastownhall/beads/pull/3578)); older bd surfaces an "unknown flag" toast.
+- **Gas City detection (informational)** — `gastown.Detect()` now also reports `gc` binary availability and the nearest `city.toml` ancestor path. No behavior change; groundwork for a future Gas City driver. Driven by the Gas City v1.0 rewrite announcement.
+- **`patrolling` agent state** — Gas Town v1.1.0 main exposes a typed `AgentState` enum that promotes `patrolling` to a first-class state (witness/deacon scanning rounds). mg now renders it with a sky-blue badge (`StatePatrolling = #5DADE2`) and a `⊙` symbol, distinct from `idle` and `working`. Previously patrolling agents fell through to idle styling.
+
+### Changed
+- **Pin `BD_JSON_ENVELOPE=0` for `bd` subprocesses** — defensive against the upcoming beads v2.0 default where `--json` output will be wrapped as `{schema_version, data}`. Set in `internal/data/exec.go` and `internal/gastown/exec.go` so a user's shell setting can't flip bd output into a shape mg doesn't yet parse. Migration before bd v2.0 will add envelope-aware unmarshalling.
+- **Pin `BD_DOLT_AUTO_COMMIT=off` for read-only `bd` subprocesses** — `internal/data/exec.go` now allowlists read-only bd subcommands (`list`, `show`, `context`, `doctor`, `--version`, plain `ready`, `prune --dry-run`, and `comments` read) and pins `BD_DOLT_AUTO_COMMIT=off` for them. Without this, each read fires a no-op `dolt_commit()` that opens a fresh connection and fails with "nothing to commit". Mutating calls keep bd's auto-commit default. Mirrors the upstream gas town pattern from [gastown GH#3596](https://github.com/steveyegge/gastown/issues/3596).
+- **Dependencies updated** — `charmbracelet/ultraviolet` dated bump (2026-04-16 → 2026-04-22 → 2026-04-28).
+
 ## v0.17.0 (2026-04-19)
 
 ### Added

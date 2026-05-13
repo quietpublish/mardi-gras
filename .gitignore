@@ -54,5 +54,4 @@ __pycache__/
 state.json
 
 # Darker sprint artifacts (ephemeral)
-.darker/sprints/
-.darker/work-orders/
+.darker/
