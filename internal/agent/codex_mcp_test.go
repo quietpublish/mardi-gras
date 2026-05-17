@@ -186,6 +186,63 @@ func TestLaunchCodexMCPReportsTransportError(t *testing.T) {
 	}
 }
 
+// TestLaunchCtxDoesNotKillSession was added after a v0.21.0 field report
+// where the transcript overlay stayed "waiting for first event..." for
+// minutes despite a real codex session running. Root cause: mg's
+// codexLaunchCmd defer-canceled the launch ctx as soon as LaunchCodexMCP
+// returned, and StartSession had parented its callCtx to that launch ctx —
+// so awaitResponse picked <-ctx.Done() before any event flowed and pushed
+// a "context canceled" SessionResult, leaving the UI frozen at "running".
+//
+// This test reproduces the failure mode (launch ctx is canceled immediately
+// after LaunchCodexMCP returns) and asserts the session survives long enough
+// to deliver a streamed event + the terminal result.
+func TestLaunchCtxDoesNotKillSession(t *testing.T) {
+	prev := codexTransportFactory
+	codexTransportFactory = func(opts LaunchCodexMCPOptions) (codexmcp.Transport, *codexmcp.SubprocessTransport, error) {
+		tp, sp, _ := newFakePipe(t)
+		return tp, sp, nil
+	}
+	t.Cleanup(func() { codexTransportFactory = prev })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	h, err := LaunchCodexMCP(ctx, LaunchCodexMCPOptions{
+		Prompt:     "do thing",
+		ProjectDir: "/tmp",
+	})
+	if err != nil {
+		t.Fatalf("LaunchCodexMCP: %v", err)
+	}
+	t.Cleanup(func() { _ = h.Close() })
+
+	// Cancel the launch ctx immediately — mirrors mg's codexLaunchCmd
+	// behavior of `defer cancel()` after the launch goroutine returns.
+	cancel()
+
+	// The session must still receive its streamed event.
+	select {
+	case ev, ok := <-h.Session().Events():
+		if !ok {
+			t.Fatal("events channel closed before event arrived — launch ctx still killing session")
+		}
+		if ev.EventType() != "agent_message" {
+			t.Fatalf("unexpected event type %q", ev.EventType())
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no event after 2s — launch ctx still killing session")
+	}
+
+	// And the terminal result.
+	select {
+	case res := <-h.Session().Done():
+		if res.Err != nil {
+			t.Fatalf("session ended with error: %v", res.Err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Done not delivered")
+	}
+}
+
 func TestCloseIsIdempotent(t *testing.T) {
 	prev := codexTransportFactory
 	codexTransportFactory = func(opts LaunchCodexMCPOptions) (codexmcp.Transport, *codexmcp.SubprocessTransport, error) {

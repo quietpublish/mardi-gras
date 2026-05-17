@@ -2,6 +2,16 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.21.1 (2026-05-16)
+
+### Fixed
+- **Codex MCP transcript stuck at "waiting for first event…"** — the transcript overlay opened, status displayed `running`, and the elapsed timer ticked, but no events ever rendered even though codex was streaming them on the wire. Two collaborating bugs caused this:
+  1. `internal/app/codex.go::codexLaunchCmd` ran a `defer cancel()` on the 90s launch context. `internal/agent/codex_mcp.go::LaunchCodexMCP` then handed that same context to `Client.StartSession`, which parented its session-wide `callCtx` to it. As soon as the launch goroutine returned `codexLaunchedMsg`, the deferred cancel fired and `awaitResponse` picked `<-ctx.Done()`, pushing `Err: context.Canceled` onto the session's done channel — the session died before the first event was rendered. Fix: `LaunchCodexMCP` now passes `context.Background()` to `StartSession`; the launch ctx still bounds the handshake (Dial), but the session itself outlives the launch goroutine and lives until `CodexMCPHandle.Close()`.
+  2. `codexNextEventCmd`'s select had two ready cases when the session terminated (`Events` closed AND `Done` populated). Go picks pseudo-randomly, so half the time the closed-Events branch won, returned `codexEventMsg{done: true}`, and the handler returned `nil` without scheduling another reader — the terminal result on `Done` was never delivered and the UI stayed at `running` indefinitely. Fix: when `Events` returns closed, block on `Done` in the same Cmd. `awaitResponse` always pushes to `Done` before `signalStop` closes events, so the read returns immediately.
+- **Companion fix in `internal/codexmcp/session.go::awaitResponse`** — added a `<-s.client.Done()` arm so the goroutine unblocks when the subprocess exits before responding. Without it, the new background-context lifetime meant `awaitResponse` could block forever on `respCh` if codex crashed mid-session.
+
+Regression test in `internal/agent/codex_mcp_test.go::TestLaunchCtxDoesNotKillSession` reproduces the original failure mode and asserts events + terminal result both still flow after the launch ctx is canceled.
+
 ## v0.21.0 (2026-05-16)
 
 The MCP release. Adds first-class Model Context Protocol support so mg can speak directly to `codex mcp-server`, surfacing live agent state in the TUI instead of black-boxing a tmux pane.

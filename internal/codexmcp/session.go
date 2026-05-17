@@ -233,6 +233,18 @@ func (s *Session) awaitResponse(ctx context.Context, respCh chan response) {
 	case <-ctx.Done():
 		s.client.pending.Delete(s.reqID)
 		s.done <- SessionResult{ThreadID: s.ThreadID(), Err: ctx.Err()}
+	case <-s.client.Done():
+		// Transport closed (subprocess exited) before any response — surface
+		// the underlying read error if there was one. Without this branch,
+		// awaitResponse would block on respCh forever because the client no
+		// longer closes pending channels on Close (that closed a race window
+		// with readLoop's dispatch).
+		s.client.pending.Delete(s.reqID)
+		err := s.client.ReadError()
+		if err == nil {
+			err = errors.New("codex mcp transport closed")
+		}
+		s.done <- SessionResult{ThreadID: s.ThreadID(), Err: err}
 	case resp, ok := <-respCh:
 		if !ok {
 			s.done <- SessionResult{ThreadID: s.ThreadID(), Err: errors.New("client closed")}

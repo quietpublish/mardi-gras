@@ -126,7 +126,13 @@ func LaunchCodexMCP(ctx context.Context, opts LaunchCodexMCPOptions) (*CodexMCPH
 		approval = "never"
 	}
 
-	session, err := client.StartSession(ctx, codexmcp.SessionOptions{
+	// Use a background context for the session — the launch ctx is bounded
+	// (mg passes a 90s handshake timeout) and would propagate cancellation
+	// to awaitResponse the moment the caller's launch goroutine returns,
+	// killing the session before any events flow. The session lives until
+	// the user explicitly cancels via Session.Cancel (called from
+	// CodexMCPHandle.Close) or the subprocess exits.
+	session, err := client.StartSession(context.Background(), codexmcp.SessionOptions{
 		Prompt:         opts.Prompt,
 		Cwd:            opts.ProjectDir,
 		Sandbox:        sandbox,

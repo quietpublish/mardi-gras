@@ -50,17 +50,23 @@ type codexDoneMsg struct {
 	result  codexmcp.SessionResult
 }
 
-// codexNextEventCmd returns a tea.Cmd that reads the next event (or done)
-// from the session and dispatches the appropriate message.
+// codexNextEventCmd returns a tea.Cmd that reads the next event (or terminal
+// result) from the session and dispatches the appropriate message.
 //
-// The reader returns codexEventMsg{done:true} when the events channel closes
-// before any event arrives — that's the signal to wait for Done().
+// Special case: when the session terminates, the underlying client closes
+// s.events AND pushes a SessionResult onto s.done (via awaitResponse). Both
+// channels become ready simultaneously and Go's select picks pseudo-randomly.
+// If the closed s.events branch wins we still need to surface the terminal
+// result rather than dropping the message — block on Done() in the same
+// goroutine. awaitResponse always pushes to Done before signalStop closes
+// s.events, so this read returns immediately.
 func codexNextEventCmd(issueID string, sess *codexmcp.Session) tea.Cmd {
 	return func() tea.Msg {
 		select {
 		case ev, ok := <-sess.Events():
 			if !ok {
-				return codexEventMsg{issueID: issueID, done: true}
+				res := <-sess.Done()
+				return codexDoneMsg{issueID: issueID, result: res}
 			}
 			return codexEventMsg{issueID: issueID, ev: ev}
 		case res := <-sess.Done():
