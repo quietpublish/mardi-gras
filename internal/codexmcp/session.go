@@ -62,17 +62,44 @@ type SessionResult struct {
 //
 // The provided ctx governs the tools/call only — events continue to drain
 // until the session terminates. Use Cancel to stop early.
+//
+// The Client supports *sequential* tool calls (one Session at a time); see
+// StartReplySession for continuing a conversation under the same threadId.
 func (c *Client) StartSession(ctx context.Context, opts SessionOptions) (*Session, error) {
 	if opts.Prompt == "" {
 		return nil, errors.New("codexmcp: SessionOptions.Prompt is required")
 	}
+	return c.startToolSession(ctx, codexToolName, buildCodexArgs(opts))
+}
 
-	args := buildCodexArgs(opts)
-	params := toolsCallParams{
-		Name:      codexToolName,
-		Arguments: args,
+// StartReplySession continues an existing codex conversation by calling the
+// codex-reply tool with the given threadID and prompt. Returns a new Session
+// whose Events()/Done() streams correspond to the *new* tools/call; the
+// original Session has already terminated. The underlying codex subprocess
+// (and its conversation history at threadID) is reused, so replies are
+// near-instant compared to the cold-start handshake.
+//
+// Callers must ensure the prior Session has reached Done() before calling
+// this — codex serializes tool calls on its end.
+func (c *Client) StartReplySession(ctx context.Context, threadID, prompt string) (*Session, error) {
+	if prompt == "" {
+		return nil, errors.New("codexmcp: StartReplySession requires a prompt")
 	}
+	if threadID == "" {
+		return nil, errors.New("codexmcp: StartReplySession requires a threadID")
+	}
+	return c.startToolSession(ctx, codexReplyToolName, map[string]any{
+		"threadId": threadID,
+		"prompt":   prompt,
+	})
+}
 
+// startToolSession is the shared core of StartSession and StartReplySession:
+// it marshals a tools/call request for the named tool, registers a pending
+// response channel, writes the request, and spawns the demux + await
+// goroutines.
+func (c *Client) startToolSession(ctx context.Context, toolName string, args map[string]any) (*Session, error) {
+	params := toolsCallParams{Name: toolName, Arguments: args}
 	callCtx, cancel := context.WithCancel(ctx)
 
 	s := &Session{
@@ -83,7 +110,6 @@ func (c *Client) StartSession(ctx context.Context, opts SessionOptions) (*Sessio
 		stop:       make(chan struct{}),
 	}
 
-	// Marshal first so failures here don't leak a reserved request id.
 	rawParams, err := json.Marshal(params)
 	if err != nil {
 		cancel()

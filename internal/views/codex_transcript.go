@@ -34,6 +34,10 @@ type CodexTranscriptState struct {
 	Entries  []CodexTranscriptEntry
 	StartAt  time.Time
 	EndAt    time.Time
+	// TurnStartAt is the start time of the current turn (initial or reply).
+	// Reset on each codex-reply dispatch so the status-line elapsed timer
+	// reflects per-turn duration rather than total session lifetime.
+	TurnStartAt time.Time
 }
 
 // maxTranscriptEntries caps Entries to prevent unbounded growth over long
@@ -110,7 +114,7 @@ func (c CodexTranscript) body() string {
 		out = append(out, rendered...)
 	}
 
-	hint := lipgloss.NewStyle().Foreground(ui.Dim).Render("  M close  K kill session  esc back")
+	hint := lipgloss.NewStyle().Foreground(ui.Dim).Render("  r reply  M close  K kill session  esc back")
 	out = append(out, "", hint)
 
 	return strings.Join(out, "\n")
@@ -158,12 +162,18 @@ func (c CodexTranscript) statusLine() string {
 		style = lipgloss.NewStyle().Foreground(ui.BrightGold)
 	}
 	elapsed := ""
-	if !st.StartAt.IsZero() {
+	// Prefer per-turn timing when a reply is in flight; fall back to total
+	// session lifetime otherwise.
+	startRef := st.StartAt
+	if !st.TurnStartAt.IsZero() && st.Status == "running" {
+		startRef = st.TurnStartAt
+	}
+	if !startRef.IsZero() {
 		end := st.EndAt
-		if end.IsZero() {
+		if end.IsZero() || st.Status == "running" {
 			end = time.Now()
 		}
-		elapsed = fmt.Sprintf("  (%s)", end.Sub(st.StartAt).Truncate(time.Second))
+		elapsed = fmt.Sprintf("  (%s)", end.Sub(startRef).Truncate(time.Second))
 	}
 	return style.Render(sym+" "+label) + lipgloss.NewStyle().Foreground(ui.Dim).Render(elapsed)
 }

@@ -4,9 +4,12 @@ import (
 	"context"
 	"time"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"github.com/matt-wright86/mardi-gras/internal/agent"
 	"github.com/matt-wright86/mardi-gras/internal/codexmcp"
+	"github.com/matt-wright86/mardi-gras/internal/components"
+	"github.com/matt-wright86/mardi-gras/internal/ui"
 	"github.com/matt-wright86/mardi-gras/internal/views"
 )
 
@@ -47,6 +50,23 @@ type codexDoneMsg struct {
 	result  codexmcp.SessionResult
 }
 
+// codexReplyDispatchedMsg lands when CodexMCPHandle.Reply has succeeded and
+// the new session is ready to stream events. The handler swaps the active
+// session pointer (already done by Handle.Reply) and starts a fresh
+// codexNextEventCmd against it.
+type codexReplyDispatchedMsg struct {
+	issueID string
+	sess    *codexmcp.Session
+}
+
+// codexReplyErrorMsg lands when CodexMCPHandle.Reply fails (e.g. empty
+// threadID or write error). The handler shows a toast; the session state
+// is unchanged.
+type codexReplyErrorMsg struct {
+	issueID string
+	err     error
+}
+
 // codexNextEventCmd returns a tea.Cmd that reads the next event or terminal
 // result from the session.
 //
@@ -67,6 +87,24 @@ func codexNextEventCmd(issueID string, sess *codexmcp.Session) tea.Cmd {
 		case res := <-sess.Done():
 			return codexDoneMsg{issueID: issueID, result: res}
 		}
+	}
+}
+
+// codexReplyCmd invokes Handle.Reply in a goroutine and returns the
+// resulting tea.Msg (either codexReplyDispatchedMsg with the new session
+// or codexReplyErrorMsg).
+func codexReplyCmd(issueID, prompt string, handle *agent.CodexMCPHandle) tea.Cmd {
+	return func() tea.Msg {
+		// Use a generous context for the reply tools/call. Like the initial
+		// launch, the session itself uses context.Background() internally so
+		// this ctx only bounds the request setup, not the session lifetime.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		sess, err := handle.Reply(ctx, prompt)
+		if err != nil {
+			return codexReplyErrorMsg{issueID: issueID, err: err}
+		}
+		return codexReplyDispatchedMsg{issueID: issueID, sess: sess}
 	}
 }
 
@@ -98,6 +136,64 @@ func codexLaunchCmd(issueID, prompt, projectDir, clientVersion string) tea.Cmd {
 			},
 		}
 	}
+}
+
+// startCodexReply initializes the reply input bar for the given session's
+// issue. Returns a textinput.Blink cmd to start the cursor blinking.
+// Mirrors the mail-reply setup pattern from views.ActionMailReply handling.
+func (m *Model) startCodexReply(issueID string) tea.Cmd {
+	m.codexReplying = true
+	m.codexReplyID = issueID
+	m.codexReplyInput = textinput.New()
+	m.codexReplyInput.Prompt = ui.InputPrompt.Render("reply> ")
+	m.codexReplyInput.Placeholder = "Send a follow-up to codex..."
+	m.codexReplyInput.SetWidth(50)
+	m.codexReplyInput.Focus()
+	return textinput.Blink
+}
+
+// openCodexReply is the `r`-key handler when the codex overlay is visible.
+// It validates that a session exists, is terminal (not mid-turn), and has
+// a usable threadID, then opens the reply input. On gate failure it surfaces
+// a toast and leaves state untouched.
+func (m Model) openCodexReply() (tea.Model, tea.Cmd) {
+	issue := m.parade.SelectedIssue
+	if issue == nil {
+		return m, nil
+	}
+	reason := codexReplyGateReason(m.codexSessions[issue.ID])
+	if reason != "" {
+		cmd := m.codexReplyToast(reason)
+		return m, cmd
+	}
+	cmd := m.startCodexReply(issue.ID)
+	return m, cmd
+}
+
+// codexReplyGateReason returns a user-facing message explaining why the
+// reply gate is blocking, or "" if the reply is allowed.
+func codexReplyGateReason(sess *codexSession) string {
+	if sess == nil {
+		return "No codex session for this issue."
+	}
+	if sess.state == nil || sess.state.ThreadID == "" {
+		return "Codex session not ready yet."
+	}
+	if sess.state.Status == "running" {
+		return "Codex turn still running."
+	}
+	if sess.handle == nil {
+		return "Session handle is closed — press M to relaunch."
+	}
+	return ""
+}
+
+// codexReplyToast emits a short transient toast and returns its cmd. Kept
+// separate from openCodexReply so the gate logic reads as a flat list.
+func (m *Model) codexReplyToast(text string) tea.Cmd {
+	toast, cmd := components.ShowToast(text, components.ToastWarn, toastDuration)
+	m.toast = toast
+	return cmd
 }
 
 // applyCodexEvent updates a session's transcript state when an event lands.

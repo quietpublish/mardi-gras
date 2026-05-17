@@ -152,6 +152,12 @@ type Model struct {
 	codexTranscript views.CodexTranscript
 	codexSessions   map[string]*codexSession
 
+	// Codex MCP follow-up reply input state. Activated by `r` while the
+	// transcript overlay is open and the prior turn is terminal.
+	codexReplying   bool
+	codexReplyID    string // issue ID whose session we are replying to
+	codexReplyInput textinput.Model
+
 	// Recovery confirmation dialog
 	recovering     bool
 	recoveryDialog components.RecoveryDialog
@@ -834,6 +840,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	// Forward all messages to codex reply input when active
+	if m.codexReplying {
+		if km, ok := msg.(tea.KeyPressMsg); ok {
+			switch km.String() {
+			case "ctrl+c":
+				return m, tea.Quit
+			case "esc":
+				m.codexReplying = false
+				m.codexReplyID = ""
+				return m, nil
+			case "enter":
+				m.codexReplying = false
+				issueID := m.codexReplyID
+				body := m.codexReplyInput.Value()
+				m.codexReplyID = ""
+				if body == "" {
+					return m, nil
+				}
+				sess, ok := m.codexSessions[issueID]
+				if !ok || sess == nil || sess.handle == nil {
+					return m, nil
+				}
+				// Flip transcript back to running for the new turn.
+				if sess.state != nil {
+					sess.state.Status = "running"
+					sess.state.TurnStartAt = time.Now()
+					if m.showCodex && m.parade.SelectedIssue != nil && m.parade.SelectedIssue.ID == issueID {
+						m.codexTranscript.SetState(sess.state)
+					}
+				}
+				return m, codexReplyCmd(issueID, body, sess.handle)
+			}
+		}
+		var cmd tea.Cmd
+		m.codexReplyInput, cmd = m.codexReplyInput.Update(msg)
+		return m, cmd
+	}
+
 	// Forward all messages to mail reply input when active
 	if m.mailReplying {
 		if km, ok := msg.(tea.KeyPressMsg); ok {
@@ -1138,6 +1182,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		toast, cmd := components.ShowToast(msgText, kind, toastDuration)
 		m.toast = toast
+		return m, cmd
+
+	case codexReplyDispatchedMsg:
+		// The handle's session pointer has already been rotated by
+		// CodexMCPHandle.Reply. Schedule a fresh codexNextEventCmd against
+		// the new session and update the displayed transcript pointer if
+		// this is the currently-shown issue.
+		sess := m.codexSessions[msg.issueID]
+		if sess == nil || sess.handle == nil {
+			return m, nil
+		}
+		if m.showCodex && m.parade.SelectedIssue != nil && m.parade.SelectedIssue.ID == msg.issueID {
+			m.codexTranscript.SetState(sess.state)
+		}
+		return m, codexNextEventCmd(msg.issueID, msg.sess)
+
+	case codexReplyErrorMsg:
+		toast, cmd := components.ShowToast(
+			fmt.Sprintf("Codex reply failed: %s", msg.err),
+			components.ToastError, toastDuration,
+		)
+		m.toast = toast
+		// Revert the status flip we did in the input-enter handler so the
+		// transcript doesn't get stuck at "running".
+		if sess := m.codexSessions[msg.issueID]; sess != nil && sess.state != nil {
+			sess.state.Status = "done"
+			sess.state.TurnStartAt = time.Time{}
+			if m.showCodex && m.parade.SelectedIssue != nil && m.parade.SelectedIssue.ID == msg.issueID {
+				m.codexTranscript.SetState(sess.state)
+			}
+		}
 		return m, cmd
 
 	case agentStatusMsg:
@@ -1981,7 +2056,13 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.editForm = components.NewEditForm(m.width, m.height, issue)
 		return m, m.editForm.Init()
 
-	case "r": // Comment (remark)
+	case "r": // Reply (codex transcript) OR Comment (remark) on parade
+		// When the codex transcript overlay is visible, r opens the reply
+		// input bar against the active session instead of the normal
+		// parade-level comment action.
+		if m.showCodex {
+			return m.openCodexReply()
+		}
 		issue := m.parade.SelectedIssue
 		if issue == nil {
 			return m, nil
@@ -3386,6 +3467,8 @@ func (m Model) View() tea.View {
 		bottomBar = inputBarStyle.Render(m.mailComposeInput.View())
 	case m.mailReplying:
 		bottomBar = inputBarStyle.Render(m.mailReplyInput.View())
+	case m.codexReplying:
+		bottomBar = inputBarStyle.Render(m.codexReplyInput.View())
 	case m.convoyCreating:
 		bottomBar = inputBarStyle.Render(m.convoyInput.View())
 	case m.filtering || m.filterInput.Value() != "":

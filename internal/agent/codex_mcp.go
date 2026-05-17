@@ -12,8 +12,9 @@ import (
 )
 
 // CodexMCPHandle owns the lifecycle of one codex MCP subprocess plus the
-// session running against it. Callers must call Close when done; mg's app
-// closes all handles on quit.
+// most recent session running against it. Callers must call Close when done;
+// mg's app closes all handles on quit. Replies rotate the session pointer
+// (see Reply); the underlying subprocess is reused across replies.
 type CodexMCPHandle struct {
 	transport *codexmcp.SubprocessTransport
 	client    *codexmcp.Client
@@ -23,8 +24,33 @@ type CodexMCPHandle struct {
 	closeErr  error
 }
 
-// Session returns the underlying codexmcp.Session for event/done channels.
+// Session returns the most recent codexmcp.Session attached to this handle.
+// After Reply rotates the session, Session() returns the new one.
 func (h *CodexMCPHandle) Session() *codexmcp.Session { return h.session }
+
+// Reply continues the conversation by invoking codex-reply with the given
+// prompt against the threadID captured from the original session. The new
+// session becomes h.Session(); the old session has already terminated by the
+// time the caller is allowed to call Reply (mg gates the call on the prior
+// session's terminal Done, per #47's v0 design).
+func (h *CodexMCPHandle) Reply(ctx context.Context, prompt string) (*codexmcp.Session, error) {
+	if h.client == nil {
+		return nil, errors.New("agent: CodexMCPHandle has no client (already closed?)")
+	}
+	threadID := ""
+	if h.session != nil {
+		threadID = h.session.ThreadID()
+	}
+	if threadID == "" {
+		return nil, errors.New("agent: cannot Reply — original session has no threadID yet")
+	}
+	sess, err := h.client.StartReplySession(ctx, threadID, prompt)
+	if err != nil {
+		return nil, fmt.Errorf("start codex-reply session: %w", err)
+	}
+	h.session = sess
+	return sess, nil
+}
 
 // Close cancels the session, terminates the subprocess, and releases pipes.
 // Safe to call multiple times.

@@ -233,6 +233,150 @@ func TestLaunchCtxDoesNotKillSession(t *testing.T) {
 	}
 }
 
+func TestReplyRotatesSession(t *testing.T) {
+	// Build a fake-MCP transport that:
+	//   1. Auto-responds to initialize
+	//   2. Handles the first tools/call (codex) with a session_configured
+	//      event so the session captures a threadID, then resolves it.
+	//   3. Handles the second tools/call (codex-reply) by echoing the
+	//      threadId arg back as an agent_message and resolving.
+	// Drives Reply and asserts the rotated session yields the expected
+	// agent_message.
+	cr, sw := io.Pipe()
+	sr, cw := io.Pipe()
+	transport := &pipeTransport{clientRead: cr, clientWrite: cw}
+
+	fs := &fakeMCPServer{
+		dec:    json.NewDecoder(bufio.NewReader(sr)),
+		enc:    json.NewEncoder(sw),
+		closed: make(chan struct{}),
+	}
+
+	go func() {
+		defer func() {
+			_ = sr.Close()
+			_ = sw.Close()
+			close(fs.closed)
+		}()
+		var init map[string]any
+		if err := fs.dec.Decode(&init); err != nil {
+			return
+		}
+		id, _ := init["id"].(float64)
+		fs.respond(int(id), map[string]any{
+			"protocolVersion": "2025-03-26",
+			"capabilities":    map[string]any{"tools": map[string]any{}},
+		})
+		// notifications/initialized
+		var notif map[string]any
+		if err := fs.dec.Decode(&notif); err != nil {
+			return
+		}
+		// First tools/call (codex)
+		var call1 map[string]any
+		if err := fs.dec.Decode(&call1); err != nil {
+			return
+		}
+		id1, _ := call1["id"].(float64)
+		// Emit session_configured so the session captures the threadId.
+		fs.notify("codex/event", map[string]any{
+			"_meta": map[string]any{"requestId": int(id1), "threadId": "thr-rot"},
+			"id":    "1",
+			"msg":   map[string]any{"type": "session_configured", "thread_id": "thr-rot", "model": "gpt-5-mini"},
+		})
+		fs.respond(int(id1), map[string]any{
+			"structuredContent": map[string]any{"threadId": "thr-rot", "content": "initial"},
+		})
+		// Second tools/call (codex-reply)
+		var call2 map[string]any
+		if err := fs.dec.Decode(&call2); err != nil {
+			return
+		}
+		id2, _ := call2["id"].(float64)
+		params := call2["params"].(map[string]any)
+		args := params["arguments"].(map[string]any)
+		thread := args["threadId"].(string)
+		fs.notify("codex/event", map[string]any{
+			"_meta": map[string]any{"requestId": int(id2), "threadId": thread},
+			"id":    "2",
+			"msg":   map[string]any{"type": "agent_message", "message": "reply for " + thread},
+		})
+		fs.respond(int(id2), map[string]any{
+			"structuredContent": map[string]any{"threadId": thread, "content": "reply-done"},
+		})
+		// Keep draining.
+		for {
+			var m map[string]any
+			if err := fs.dec.Decode(&m); err != nil {
+				return
+			}
+		}
+	}()
+
+	prev := codexTransportFactory
+	codexTransportFactory = func(opts LaunchCodexMCPOptions) (codexmcp.Transport, *codexmcp.SubprocessTransport, error) {
+		return transport, nil, nil
+	}
+	t.Cleanup(func() { codexTransportFactory = prev })
+
+	h, err := LaunchCodexMCP(context.Background(), LaunchCodexMCPOptions{Prompt: "initial"})
+	if err != nil {
+		t.Fatalf("LaunchCodexMCP: %v", err)
+	}
+	t.Cleanup(func() { _ = h.Close() })
+
+	// Drain the first session to terminal Done so ThreadID is populated.
+	origSession := h.Session()
+	for {
+		select {
+		case ev, ok := <-origSession.Events():
+			if !ok {
+				goto firstDone
+			}
+			_ = ev
+		case res := <-origSession.Done():
+			if res.Err != nil {
+				t.Fatalf("first session.Err: %v", res.Err)
+			}
+			goto firstDone
+		case <-time.After(2 * time.Second):
+			t.Fatal("first session never finished")
+		}
+	}
+firstDone:
+	if got := h.Session().ThreadID(); got != "thr-rot" {
+		t.Fatalf("threadID = %q after first session", got)
+	}
+
+	replySess, err := h.Reply(context.Background(), "follow up")
+	if err != nil {
+		t.Fatalf("Reply: %v", err)
+	}
+	if h.Session() != replySess {
+		t.Fatal("Reply did not rotate handle.session")
+	}
+	if h.Session() == origSession {
+		t.Fatal("Reply returned the same session as the original")
+	}
+
+	// The new session should yield the agent_message event echoed back.
+	select {
+	case ev, ok := <-replySess.Events():
+		if !ok {
+			t.Fatal("reply events closed")
+		}
+		if ev.EventType() != "agent_message" {
+			t.Fatalf("event type = %q", ev.EventType())
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no reply event")
+	}
+	res := <-replySess.Done()
+	if res.Err != nil {
+		t.Fatalf("reply Done.Err: %v", res.Err)
+	}
+}
+
 func TestCloseIsIdempotent(t *testing.T) {
 	withFakeCodexTransport(t)
 
