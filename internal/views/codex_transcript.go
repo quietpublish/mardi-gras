@@ -36,6 +36,22 @@ type CodexTranscriptState struct {
 	EndAt    time.Time
 }
 
+// maxTranscriptEntries caps Entries to prevent unbounded growth over long
+// codex sessions. The view only renders a screen-height tail, so older
+// entries are not visible — we drop them rather than retain forever.
+const maxTranscriptEntries = 500
+
+// AppendEntry appends e and trims Entries to the most recent
+// maxTranscriptEntries by dropping the oldest in batches. Exported because
+// codexDoneMsg handling in internal/app appends synthesized "final" /
+// "error" entries that also need bounded growth.
+func (s *CodexTranscriptState) AppendEntry(e CodexTranscriptEntry) {
+	s.Entries = append(s.Entries, e)
+	if overflow := len(s.Entries) - maxTranscriptEntries; overflow > 0 {
+		s.Entries = append(s.Entries[:0], s.Entries[overflow:]...)
+	}
+}
+
 // CodexTranscript renders the right-pane overlay showing live agent state.
 type CodexTranscript struct {
 	width  int
@@ -229,7 +245,7 @@ func (s *CodexTranscriptState) AppendEvent(ev codexmcp.CodexEvent) bool {
 		}
 		s.Model = sc.Model
 		s.Cwd = sc.Cwd
-		s.Entries = append(s.Entries, CodexTranscriptEntry{
+		s.AppendEntry(CodexTranscriptEntry{
 			At:    now,
 			Kind:  "info",
 			Title: fmt.Sprintf("session ready  %s  %s", sc.Model, sc.ApprovalPolicy),
@@ -238,7 +254,7 @@ func (s *CodexTranscriptState) AppendEvent(ev codexmcp.CodexEvent) bool {
 	case "task_started":
 		var ts codexmcp.TaskStartedEvent
 		_ = json.Unmarshal(ev.Msg, &ts)
-		s.Entries = append(s.Entries, CodexTranscriptEntry{
+		s.AppendEntry(CodexTranscriptEntry{
 			At:    now,
 			Kind:  "task",
 			Title: "turn " + ts.TurnID + " started",
@@ -247,7 +263,7 @@ func (s *CodexTranscriptState) AppendEvent(ev codexmcp.CodexEvent) bool {
 	case "task_complete":
 		var tc codexmcp.TaskCompleteEvent
 		_ = json.Unmarshal(ev.Msg, &tc)
-		s.Entries = append(s.Entries, CodexTranscriptEntry{
+		s.AppendEntry(CodexTranscriptEntry{
 			At:    now,
 			Kind:  "task",
 			Title: "turn complete",
@@ -256,7 +272,7 @@ func (s *CodexTranscriptState) AppendEvent(ev codexmcp.CodexEvent) bool {
 	case "agent_message":
 		var am codexmcp.AgentMessageEvent
 		_ = json.Unmarshal(ev.Msg, &am)
-		s.Entries = append(s.Entries, CodexTranscriptEntry{
+		s.AppendEntry(CodexTranscriptEntry{
 			At:    now,
 			Kind:  "agent",
 			Title: firstLine(am.Message),
@@ -266,7 +282,7 @@ func (s *CodexTranscriptState) AppendEvent(ev codexmcp.CodexEvent) bool {
 	case "user_message":
 		var um codexmcp.UserMessageEvent
 		_ = json.Unmarshal(ev.Msg, &um)
-		s.Entries = append(s.Entries, CodexTranscriptEntry{
+		s.AppendEntry(CodexTranscriptEntry{
 			At:    now,
 			Kind:  "user",
 			Title: firstLine(um.Message),
@@ -275,7 +291,7 @@ func (s *CodexTranscriptState) AppendEvent(ev codexmcp.CodexEvent) bool {
 	case "exec_command_begin":
 		var ec codexmcp.ExecCommandBeginEvent
 		_ = json.Unmarshal(ev.Msg, &ec)
-		s.Entries = append(s.Entries, CodexTranscriptEntry{
+		s.AppendEntry(CodexTranscriptEntry{
 			At:    now,
 			Kind:  "exec",
 			Title: strings.Join(ec.Command, " "),
@@ -284,7 +300,7 @@ func (s *CodexTranscriptState) AppendEvent(ev codexmcp.CodexEvent) bool {
 	case "exec_command_end":
 		var ec codexmcp.ExecCommandEndEvent
 		_ = json.Unmarshal(ev.Msg, &ec)
-		s.Entries = append(s.Entries, CodexTranscriptEntry{
+		s.AppendEntry(CodexTranscriptEntry{
 			At:    now,
 			Kind:  "exec",
 			Title: fmt.Sprintf("exit %d", ec.ExitCode),
@@ -294,7 +310,7 @@ func (s *CodexTranscriptState) AppendEvent(ev codexmcp.CodexEvent) bool {
 	case "mcp_tool_call_begin":
 		var mc codexmcp.MCPToolCallBeginEvent
 		_ = json.Unmarshal(ev.Msg, &mc)
-		s.Entries = append(s.Entries, CodexTranscriptEntry{
+		s.AppendEntry(CodexTranscriptEntry{
 			At:    now,
 			Kind:  "tool",
 			Title: mc.Invocation.Server + "/" + mc.Invocation.Tool,
@@ -307,7 +323,7 @@ func (s *CodexTranscriptState) AppendEvent(ev codexmcp.CodexEvent) bool {
 		if mc.IsError {
 			title = "tool errored"
 		}
-		s.Entries = append(s.Entries, CodexTranscriptEntry{
+		s.AppendEntry(CodexTranscriptEntry{
 			At:    now,
 			Kind:  "tool",
 			Title: title,
@@ -317,7 +333,7 @@ func (s *CodexTranscriptState) AppendEvent(ev codexmcp.CodexEvent) bool {
 	case "error":
 		var er codexmcp.ErrorEvent
 		_ = json.Unmarshal(ev.Msg, &er)
-		s.Entries = append(s.Entries, CodexTranscriptEntry{
+		s.AppendEntry(CodexTranscriptEntry{
 			At:    now,
 			Kind:  "agent",
 			Title: er.Message,

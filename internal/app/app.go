@@ -1105,13 +1105,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if sess == nil {
 			return m, nil
 		}
-		if msg.done {
-			// Event stream closed; the Done channel will deliver the terminal
-			// result via codexDoneMsg. Just stop polling for events.
-			return m, nil
-		}
-		applyCodexEvent(sess, msg.ev)
-		if m.showCodex && m.parade.SelectedIssue != nil && m.parade.SelectedIssue.ID == msg.issueID {
+		// Only re-render when the event is display-worthy. Codex emits many
+		// noisy event types (raw_response_item, agent_message_content_delta,
+		// mcp_startup_update) that AppendEvent drops; without this guard a
+		// long session triggers hundreds of no-op transcript re-renders.
+		appended := applyCodexEvent(sess, msg.ev)
+		if appended && m.showCodex && m.parade.SelectedIssue != nil && m.parade.SelectedIssue.ID == msg.issueID {
 			m.codexTranscript.SetState(sess.state)
 		}
 		if sess.handle == nil {

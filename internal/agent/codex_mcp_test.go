@@ -118,14 +118,20 @@ func (f *fakeMCPServer) notify(method string, params any) {
 	_ = f.enc.Encode(map[string]any{"jsonrpc": "2.0", "method": method, "params": params})
 }
 
-func TestLaunchCodexMCPBridgesEventsAndDone(t *testing.T) {
-	// Swap the transport factory to use the pipe-based fake.
+// withFakeCodexTransport swaps the package-level codexTransportFactory for a
+// pipe-backed fake and restores it on cleanup. Shared by every bridge test.
+func withFakeCodexTransport(t *testing.T) {
+	t.Helper()
 	prev := codexTransportFactory
-	codexTransportFactory = func(opts LaunchCodexMCPOptions) (codexmcp.Transport, *codexmcp.SubprocessTransport, error) {
+	codexTransportFactory = func(LaunchCodexMCPOptions) (codexmcp.Transport, *codexmcp.SubprocessTransport, error) {
 		tp, sp, _ := newFakePipe(t)
 		return tp, sp, nil
 	}
 	t.Cleanup(func() { codexTransportFactory = prev })
+}
+
+func TestLaunchCodexMCPBridgesEventsAndDone(t *testing.T) {
+	withFakeCodexTransport(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -186,24 +192,12 @@ func TestLaunchCodexMCPReportsTransportError(t *testing.T) {
 	}
 }
 
-// TestLaunchCtxDoesNotKillSession was added after a v0.21.0 field report
-// where the transcript overlay stayed "waiting for first event..." for
-// minutes despite a real codex session running. Root cause: mg's
-// codexLaunchCmd defer-canceled the launch ctx as soon as LaunchCodexMCP
-// returned, and StartSession had parented its callCtx to that launch ctx —
-// so awaitResponse picked <-ctx.Done() before any event flowed and pushed
-// a "context canceled" SessionResult, leaving the UI frozen at "running".
-//
-// This test reproduces the failure mode (launch ctx is canceled immediately
-// after LaunchCodexMCP returns) and asserts the session survives long enough
-// to deliver a streamed event + the terminal result.
+// TestLaunchCtxDoesNotKillSession asserts the session outlives the launch
+// context. Without this guarantee, mg's codexLaunchCmd defer-cancel would
+// race awaitResponse's <-ctx.Done() arm and push a context.Canceled result
+// onto Done before any event is rendered.
 func TestLaunchCtxDoesNotKillSession(t *testing.T) {
-	prev := codexTransportFactory
-	codexTransportFactory = func(opts LaunchCodexMCPOptions) (codexmcp.Transport, *codexmcp.SubprocessTransport, error) {
-		tp, sp, _ := newFakePipe(t)
-		return tp, sp, nil
-	}
-	t.Cleanup(func() { codexTransportFactory = prev })
+	withFakeCodexTransport(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	h, err := LaunchCodexMCP(ctx, LaunchCodexMCPOptions{
@@ -215,11 +209,8 @@ func TestLaunchCtxDoesNotKillSession(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = h.Close() })
 
-	// Cancel the launch ctx immediately — mirrors mg's codexLaunchCmd
-	// behavior of `defer cancel()` after the launch goroutine returns.
 	cancel()
 
-	// The session must still receive its streamed event.
 	select {
 	case ev, ok := <-h.Session().Events():
 		if !ok {
@@ -232,7 +223,6 @@ func TestLaunchCtxDoesNotKillSession(t *testing.T) {
 		t.Fatal("no event after 2s — launch ctx still killing session")
 	}
 
-	// And the terminal result.
 	select {
 	case res := <-h.Session().Done():
 		if res.Err != nil {
@@ -244,12 +234,7 @@ func TestLaunchCtxDoesNotKillSession(t *testing.T) {
 }
 
 func TestCloseIsIdempotent(t *testing.T) {
-	prev := codexTransportFactory
-	codexTransportFactory = func(opts LaunchCodexMCPOptions) (codexmcp.Transport, *codexmcp.SubprocessTransport, error) {
-		tp, sp, _ := newFakePipe(t)
-		return tp, sp, nil
-	}
-	t.Cleanup(func() { codexTransportFactory = prev })
+	withFakeCodexTransport(t)
 
 	h, err := LaunchCodexMCP(context.Background(), LaunchCodexMCPOptions{Prompt: "x"})
 	if err != nil {
