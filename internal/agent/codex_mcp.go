@@ -33,7 +33,14 @@ func (h *CodexMCPHandle) Session() *codexmcp.Session { return h.session }
 // session becomes h.Session(); the old session has already terminated by the
 // time the caller is allowed to call Reply (mg gates the call on the prior
 // session's terminal Done, per #47's v0 design).
+//
+// The ctx parameter is currently unused for the session lifetime — like
+// LaunchCodexMCP, Reply detaches the session from the caller's ctx so a
+// defer-cancel in the dispatch goroutine doesn't kill the session before
+// any reply event is rendered (the same trap v0.21.1 fixed on the launch
+// path). ctx is reserved for a future setup-only timeout if needed.
 func (h *CodexMCPHandle) Reply(ctx context.Context, prompt string) (*codexmcp.Session, error) {
+	_ = ctx // reserved; intentionally not propagated to StartReplySession
 	if h.client == nil {
 		return nil, errors.New("agent: CodexMCPHandle has no client (already closed?)")
 	}
@@ -44,7 +51,7 @@ func (h *CodexMCPHandle) Reply(ctx context.Context, prompt string) (*codexmcp.Se
 	if threadID == "" {
 		return nil, errors.New("agent: cannot Reply — original session has no threadID yet")
 	}
-	sess, err := h.client.StartReplySession(ctx, threadID, prompt)
+	sess, err := h.client.StartReplySession(context.Background(), threadID, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("start codex-reply session: %w", err)
 	}

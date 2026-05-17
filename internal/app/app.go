@@ -154,8 +154,11 @@ type Model struct {
 
 	// Codex MCP follow-up reply input state. Activated by `r` while the
 	// transcript overlay is open and the prior turn is terminal.
+	// codexReplyID captures the issue ID at input-open time so submit
+	// resolves the session by the captured ID rather than current parade
+	// selection — guards against the user scrolling the parade mid-typing.
 	codexReplying   bool
-	codexReplyID    string // issue ID whose session we are replying to
+	codexReplyID    string
 	codexReplyInput textinput.Model
 
 	// Recovery confirmation dialog
@@ -866,7 +869,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if sess.state != nil {
 					sess.state.Status = "running"
 					sess.state.TurnStartAt = time.Now()
-					if m.showCodex && m.parade.SelectedIssue != nil && m.parade.SelectedIssue.ID == issueID {
+					if m.isCodexShownFor(issueID) {
 						m.codexTranscript.SetState(sess.state)
 					}
 				}
@@ -1126,7 +1129,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case codexLaunchedMsg:
 		m.codexSessions[msg.issueID] = msg.sess
-		if m.showCodex && m.parade.SelectedIssue != nil && m.parade.SelectedIssue.ID == msg.issueID {
+		if m.isCodexShownFor(msg.issueID) {
 			m.codexTranscript.SetState(msg.sess.state)
 		}
 		toast, cmd := components.ShowToast(
@@ -1154,7 +1157,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// mcp_startup_update) that AppendEvent drops; without this guard a
 		// long session triggers hundreds of no-op transcript re-renders.
 		appended := applyCodexEvent(sess, msg.ev)
-		if appended && m.showCodex && m.parade.SelectedIssue != nil && m.parade.SelectedIssue.ID == msg.issueID {
+		if appended && m.isCodexShownFor(msg.issueID) {
 			m.codexTranscript.SetState(sess.state)
 		}
 		if sess.handle == nil {
@@ -1168,7 +1171,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		finalizeCodexSession(sess, msg.result)
-		if m.showCodex && m.parade.SelectedIssue != nil && m.parade.SelectedIssue.ID == msg.issueID {
+		if m.isCodexShownFor(msg.issueID) {
 			m.codexTranscript.SetState(sess.state)
 		}
 		var msgText string
@@ -1185,16 +1188,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case codexReplyDispatchedMsg:
-		// The handle's session pointer has already been rotated by
-		// CodexMCPHandle.Reply. Schedule a fresh codexNextEventCmd against
-		// the new session and update the displayed transcript pointer if
-		// this is the currently-shown issue.
+		// Handle.Reply rotated the underlying session pointer; the
+		// transcript state pointer is unchanged so no SetState is needed.
+		// Just schedule a fresh codexNextEventCmd against the new session.
 		sess := m.codexSessions[msg.issueID]
 		if sess == nil || sess.handle == nil {
 			return m, nil
-		}
-		if m.showCodex && m.parade.SelectedIssue != nil && m.parade.SelectedIssue.ID == msg.issueID {
-			m.codexTranscript.SetState(sess.state)
 		}
 		return m, codexNextEventCmd(msg.issueID, msg.sess)
 
@@ -1209,7 +1208,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if sess := m.codexSessions[msg.issueID]; sess != nil && sess.state != nil {
 			sess.state.Status = "done"
 			sess.state.TurnStartAt = time.Time{}
-			if m.showCodex && m.parade.SelectedIssue != nil && m.parade.SelectedIssue.ID == msg.issueID {
+			if m.isCodexShownFor(msg.issueID) {
 				m.codexTranscript.SetState(sess.state)
 			}
 		}
@@ -1856,6 +1855,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.showGasTown {
 			m.showDoctor = false
 			m.showCodex = false
+			m.dismissCodexReply()
 			cmd := m.activateGasTown()
 			return m, cmd
 		}
@@ -1870,6 +1870,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.showGasTown = false
 			m.showDoctor = false
 			m.showCodex = false
+			m.dismissCodexReply()
 			m.problems.SetProblems(m.allProblems())
 		}
 		return m, nil
@@ -1880,6 +1881,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.showGasTown = false
 			m.showProblems = false
 			m.showCodex = false
+			m.dismissCodexReply()
 			// Set existing result if available, then refresh
 			if m.doctorResult != nil {
 				m.doctor.SetResult(m.doctorResult)

@@ -50,18 +50,11 @@ type codexDoneMsg struct {
 	result  codexmcp.SessionResult
 }
 
-// codexReplyDispatchedMsg lands when CodexMCPHandle.Reply has succeeded and
-// the new session is ready to stream events. The handler swaps the active
-// session pointer (already done by Handle.Reply) and starts a fresh
-// codexNextEventCmd against it.
 type codexReplyDispatchedMsg struct {
 	issueID string
 	sess    *codexmcp.Session
 }
 
-// codexReplyErrorMsg lands when CodexMCPHandle.Reply fails (e.g. empty
-// threadID or write error). The handler shows a toast; the session state
-// is unchanged.
 type codexReplyErrorMsg struct {
 	issueID string
 	err     error
@@ -138,6 +131,23 @@ func codexLaunchCmd(issueID, prompt, projectDir, clientVersion string) tea.Cmd {
 	}
 }
 
+// isCodexShownFor returns true when the codex transcript overlay is visible
+// and currently showing the session for issueID. Used as a guard before
+// updating the displayed transcript state.
+func (m *Model) isCodexShownFor(issueID string) bool {
+	return m.showCodex &&
+		m.parade.SelectedIssue != nil &&
+		m.parade.SelectedIssue.ID == issueID
+}
+
+// dismissCodexReply clears any in-flight reply input state. Called whenever
+// the overlay closes or a sibling overlay opens, so a stranded codexReplying
+// flag can't intercept all keypresses after the user has moved on.
+func (m *Model) dismissCodexReply() {
+	m.codexReplying = false
+	m.codexReplyID = ""
+}
+
 // startCodexReply initializes the reply input bar for the given session's
 // issue. Returns a textinput.Blink cmd to start the cursor blinking.
 // Mirrors the mail-reply setup pattern from views.ActionMailReply handling.
@@ -188,8 +198,6 @@ func codexReplyGateReason(sess *codexSession) string {
 	return ""
 }
 
-// codexReplyToast emits a short transient toast and returns its cmd. Kept
-// separate from openCodexReply so the gate logic reads as a flat list.
 func (m *Model) codexReplyToast(text string) tea.Cmd {
 	toast, cmd := components.ShowToast(text, components.ToastWarn, toastDuration)
 	m.toast = toast
@@ -260,6 +268,7 @@ func (m *Model) Cleanup() {
 func (m Model) toggleCodexTranscript() (tea.Model, tea.Cmd) {
 	if m.showCodex {
 		m.showCodex = false
+		m.dismissCodexReply()
 		return m, nil
 	}
 

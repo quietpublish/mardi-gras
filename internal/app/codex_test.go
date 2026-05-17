@@ -77,95 +77,74 @@ func TestCodexEventMsgAppendsToTranscript(t *testing.T) {
 	}
 }
 
-func TestKeyROpensCodexReplyWhenSessionTerminal(t *testing.T) {
-	got := setupModel(t)
-	issueID := got.parade.SelectedIssue.ID
-
-	// Open the codex overlay manually and prime a terminal session.
-	got.showCodex = true
-	got.codexSessions[issueID] = &codexSession{
-		state: &views.CodexTranscriptState{
-			IssueID:  issueID,
-			ThreadID: "thr-test",
-			Status:   "done",
-			StartAt:  time.Now(),
+func TestKeyRGate(t *testing.T) {
+	const issueID = "open-1"
+	tests := []struct {
+		name         string
+		overlay      bool
+		sess         *codexSession
+		wantReplying bool
+		wantQAMode   string
+	}{
+		{
+			name:    "terminal session opens reply",
+			overlay: true,
+			sess: &codexSession{
+				state:  &views.CodexTranscriptState{IssueID: issueID, ThreadID: "thr-test", Status: "done"},
+				handle: &agent.CodexMCPHandle{},
+			},
+			wantReplying: true,
 		},
-		handle: &agent.CodexMCPHandle{}, // gate only checks non-nil
-	}
-
-	model, _ := got.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
-	got = model.(Model)
-
-	if !got.codexReplying {
-		t.Fatal("expected codexReplying=true after r on terminal session")
-	}
-	if got.codexReplyID != issueID {
-		t.Fatalf("codexReplyID = %q", got.codexReplyID)
-	}
-}
-
-func TestKeyRRefusesWhileSessionRunning(t *testing.T) {
-	got := setupModel(t)
-	issueID := got.parade.SelectedIssue.ID
-
-	got.showCodex = true
-	got.codexSessions[issueID] = &codexSession{
-		state: &views.CodexTranscriptState{
-			IssueID:  issueID,
-			ThreadID: "thr-test",
-			Status:   "running",
-			StartAt:  time.Now(),
+		{
+			name:    "running session refuses",
+			overlay: true,
+			sess: &codexSession{
+				state:  &views.CodexTranscriptState{IssueID: issueID, ThreadID: "thr-test", Status: "running"},
+				handle: &agent.CodexMCPHandle{},
+			},
+			wantReplying: false,
 		},
-		handle: &agent.CodexMCPHandle{},
-	}
-
-	model, _ := got.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
-	got = model.(Model)
-
-	if got.codexReplying {
-		t.Fatal("codexReplying should remain false while session is running")
-	}
-}
-
-func TestKeyRRefusesWhenNoThreadIDYet(t *testing.T) {
-	got := setupModel(t)
-	issueID := got.parade.SelectedIssue.ID
-
-	got.showCodex = true
-	got.codexSessions[issueID] = &codexSession{
-		state: &views.CodexTranscriptState{
-			IssueID: issueID,
-			Status:  "done",
-			// no ThreadID
-			StartAt: time.Now(),
+		{
+			name:    "no threadID yet refuses",
+			overlay: true,
+			sess: &codexSession{
+				state:  &views.CodexTranscriptState{IssueID: issueID, Status: "done"},
+				handle: &agent.CodexMCPHandle{},
+			},
+			wantReplying: false,
 		},
-		handle: &agent.CodexMCPHandle{},
+		{
+			name:         "overlay closed falls through to comment",
+			overlay:      false,
+			sess:         nil,
+			wantReplying: false,
+			wantQAMode:   "comment",
+		},
 	}
-
-	model, _ := got.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
-	got = model.(Model)
-
-	if got.codexReplying {
-		t.Fatal("codexReplying should be false when threadID is empty")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := setupModel(t)
+			m.showCodex = tc.overlay
+			if tc.sess != nil {
+				m.codexSessions[m.parade.SelectedIssue.ID] = tc.sess
+			}
+			model, _ := m.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
+			got := model.(Model)
+			if got.codexReplying != tc.wantReplying {
+				t.Errorf("codexReplying = %v, want %v", got.codexReplying, tc.wantReplying)
+			}
+			if got.qaMode != tc.wantQAMode {
+				t.Errorf("qaMode = %q, want %q", got.qaMode, tc.wantQAMode)
+			}
+		})
 	}
 }
 
-func TestKeyRWithoutOverlayActsAsComment(t *testing.T) {
-	got := setupModel(t)
-
-	// Codex overlay closed -> r should NOT trigger codexReplying.
-	model, _ := got.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
-	got = model.(Model)
-
-	if got.codexReplying {
-		t.Fatal("codexReplying should remain false when overlay is closed")
-	}
-	if got.qaMode != "comment" {
-		t.Fatalf("expected r to fall through to comment quick-action; qaMode = %q", got.qaMode)
-	}
-}
-
-func TestCodexReplyEnterCallsHandleReply(t *testing.T) {
+// TestCodexReplyEnterDispatchesAndFlipsStatus drives the codexReplying
+// enter path: type a body, hit enter, observe state.Status flip to
+// "running" and codexReplying clear. Doesn't drive Handle.Reply itself —
+// that's covered by TestReplyRotatesSession in internal/agent.
+func TestCodexReplyEnterDispatchesAndFlipsStatus(t *testing.T) {
 	got := setupModel(t)
 	issueID := got.parade.SelectedIssue.ID
 
@@ -177,24 +156,17 @@ func TestCodexReplyEnterCallsHandleReply(t *testing.T) {
 			Status:   "done",
 			StartAt:  time.Now(),
 		},
-		// nil handle on purpose — codexReplyCmd will fail at handle.Reply
-		// because the gate only confirms handle != nil; we want to exercise
-		// the input enter path without spawning a real subprocess. The
-		// error lands as codexReplyErrorMsg which we don't drive here.
 		handle: &agent.CodexMCPHandle{},
 	}
 
-	// Open the reply input.
 	model, _ := got.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
 	got = model.(Model)
 	if !got.codexReplying {
 		t.Fatal("codexReplying not set")
 	}
 
-	// Type something.
 	got.codexReplyInput.SetValue("follow up")
 
-	// Press enter — KeyPressMsg's String() returns "enter" for KeyEnter.
 	model, _ = got.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	got = model.(Model)
 
@@ -204,6 +176,22 @@ func TestCodexReplyEnterCallsHandleReply(t *testing.T) {
 	if got.codexSessions[issueID].state.Status != "running" {
 		t.Fatalf("session state should flip to running after enter; got %q",
 			got.codexSessions[issueID].state.Status)
+	}
+}
+
+// TestDismissCodexReplyClearsState asserts dismissCodexReply zeroes the
+// reply input triad. The helper is called from every showCodex=false site
+// so an in-flight reply input never leaks past overlay close.
+func TestDismissCodexReplyClearsState(t *testing.T) {
+	m := setupModel(t)
+	m.codexReplying = true
+	m.codexReplyID = "open-1"
+	m.dismissCodexReply()
+	if m.codexReplying {
+		t.Error("codexReplying should be false")
+	}
+	if m.codexReplyID != "" {
+		t.Errorf("codexReplyID = %q, want empty", m.codexReplyID)
 	}
 }
 
