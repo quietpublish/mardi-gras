@@ -1,0 +1,16 @@
+# oapi-codegen config for the Gas City Supervisor API client.
+# Regenerate with `make gc-client` after bumping openapi.json to a new
+# pinned gascity tag. The spec is OpenAPI 3.1 (oapi-codegen >= v2.4 required).
+#
+# Generation is scoped to the read endpoints mg needs today; widen
+# include-operation-ids as later phases add mutations (sling, mail, convoy…).
+package: gcclient
+output: client_gen.go
+generate:
+  models: true
+  client: true
+output-options:
+  include-operation-ids:
+    - get-v0-cities
+    - get-v0-city-by-city-name-agents
+    - get-v0-city-by-city-name-status

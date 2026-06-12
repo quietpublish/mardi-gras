@@ -295,7 +295,7 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 		inTmux:         agent.InTmux() && agent.TmuxAvailable(),
 		activeAgents:   make(map[string]string),
 		gtEnv:          gtEnv,
-		driver:         gastown.NewGTDriver(),
+		driver:         gastown.SelectDriver(),
 		gtPollInFlight: gtEnv.Available, // Init() launches the first poll; gate subsequent ones
 		changedIDs:     make(map[string]bool),
 		prevIssueMap:   prevMap,
