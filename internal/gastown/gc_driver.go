@@ -210,12 +210,16 @@ func derefString(s *string) string {
 const gcRequestToken = "mardi-gras"
 
 // Formulas lists available formula names via GET /v0/city/{city}/formulas.
+// The endpoint requires a scope (scope_kind=city|rig + scope_ref); mg asks for
+// the city scope, which returns every formula visible in the city.
 func (d *GCDriver) Formulas(ctx context.Context) ([]string, error) {
 	city, err := d.resolveCity(ctx)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := d.client.GetV0CityByCityNameFormulasWithResponse(ctx, city, nil)
+	scopeKind := "city"
+	resp, err := d.client.GetV0CityByCityNameFormulasWithResponse(ctx, city,
+		&gcclient.GetV0CityByCityNameFormulasParams{ScopeKind: &scopeKind, ScopeRef: &city})
 	if err != nil {
 		return nil, fmt.Errorf("gc formulas: %w", err)
 	}

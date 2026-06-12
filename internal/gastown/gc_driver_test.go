@@ -210,13 +210,24 @@ func TestGCDeriveRigs(t *testing.T) {
 }
 
 func TestGCBaseURL(t *testing.T) {
-	t.Setenv(EnvGCAPI, "")
-	if got := GCBaseURL(); got != gcDefaultBaseURL {
-		t.Errorf("default GCBaseURL = %q, want %q", got, gcDefaultBaseURL)
-	}
+	// An explicit http(s) URL is used verbatim (trailing slash trimmed).
 	t.Setenv(EnvGCAPI, "http://10.0.0.5:9000/")
 	if got := GCBaseURL(); got != "http://10.0.0.5:9000" {
 		t.Errorf("GCBaseURL = %q, want trailing slash trimmed", got)
+	}
+}
+
+func TestGCParseSupervisorLog(t *testing.T) {
+	const line = "gc supervisor: starting\nSupervisor API listening on http://127.0.0.1:8372\nmore\n"
+	if got := gcParseSupervisorLog(line); got != "http://127.0.0.1:8372" {
+		t.Errorf("parse = %q, want http://127.0.0.1:8372", got)
+	}
+	// A restart appends a new line on a new port — the latest wins.
+	if got := gcParseSupervisorLog(line + "Supervisor API listening on http://127.0.0.1:9999\n"); got != "http://127.0.0.1:9999" {
+		t.Errorf("parse latest = %q, want http://127.0.0.1:9999", got)
+	}
+	if got := gcParseSupervisorLog("no listen line"); got != "" {
+		t.Errorf("parse none = %q, want empty", got)
 	}
 }
 
@@ -237,7 +248,11 @@ func gcMailServer(t *testing.T, lastCSRF *string) *httptest.Server {
 	t.Helper()
 	recordCSRF := func(r *http.Request) { *lastCSRF = r.Header.Get("X-GC-Request") }
 	mux := http.NewServeMux()
-	mux.HandleFunc("/v0/city/mardi_gras/formulas", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/v0/city/mardi_gras/formulas", func(w http.ResponseWriter, r *http.Request) {
+		// The endpoint 400s without a scope; mg must send city scope.
+		if q := r.URL.Query(); q.Get("scope_kind") != "city" || q.Get("scope_ref") != "mardi_gras" {
+			t.Errorf("formulas: missing/wrong scope params: %q", r.URL.RawQuery)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"items":[{"name":"shiny","description":"d","version":"1","var_defs":[],"run_count":0,"recent_runs":[]},{"name":"quick","description":"d","version":"1","var_defs":[],"run_count":0,"recent_runs":[]}],"total":2,"partial":false}`))
 	})
