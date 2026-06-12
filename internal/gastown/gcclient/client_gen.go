@@ -4,6 +4,7 @@
 package gcclient
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -99,6 +100,48 @@ type ErrorModel struct {
 	Type *string `json:"type,omitempty"`
 }
 
+// FormulaListBody defines model for FormulaListBody.
+type FormulaListBody struct {
+	// Items Formula summaries.
+	Items *[]FormulaSummaryResponse `json:"items"`
+
+	// Partial Whether the list is partial.
+	Partial bool `json:"partial"`
+
+	// Total Total number of formulas in the list.
+	Total int64 `json:"total"`
+}
+
+// FormulaRecentRunResponse defines model for FormulaRecentRunResponse.
+type FormulaRecentRunResponse struct {
+	StartedAt  string `json:"started_at"`
+	Status     string `json:"status"`
+	Target     string `json:"target"`
+	UpdatedAt  string `json:"updated_at"`
+	WorkflowId string `json:"workflow_id"`
+}
+
+// FormulaSummaryResponse defines model for FormulaSummaryResponse.
+type FormulaSummaryResponse struct {
+	Description string                      `json:"description"`
+	Name        string                      `json:"name"`
+	RecentRuns  *[]FormulaRecentRunResponse `json:"recent_runs"`
+	RunCount    int64                       `json:"run_count"`
+	VarDefs     *[]FormulaVarDefResponse    `json:"var_defs"`
+	Version     string                      `json:"version"`
+}
+
+// FormulaVarDefResponse defines model for FormulaVarDefResponse.
+type FormulaVarDefResponse struct {
+	Default     interface{} `json:"default,omitempty"`
+	Description *string     `json:"description,omitempty"`
+	Enum        *[]string   `json:"enum,omitempty"`
+	Name        string      `json:"name"`
+	Pattern     *string     `json:"pattern,omitempty"`
+	Required    *bool       `json:"required,omitempty"`
+	Type        string      `json:"type"`
+}
+
 // ListBodyAgentResponse defines model for ListBodyAgentResponse.
 type ListBodyAgentResponse struct {
 	// Items The list of items.
@@ -115,6 +158,76 @@ type ListBodyAgentResponse struct {
 
 	// Total Total number of items matching the query.
 	Total int64 `json:"total"`
+}
+
+// MailListBody defines model for MailListBody.
+type MailListBody struct {
+	// Items The list of messages.
+	Items *[]Message `json:"items"`
+
+	// NextCursor Cursor for the next page of results.
+	NextCursor *string `json:"next_cursor,omitempty"`
+
+	// Partial True when one or more rig providers failed and the list is not authoritative.
+	Partial *bool `json:"partial,omitempty"`
+
+	// PartialErrors Per-provider errors when partial is true.
+	PartialErrors *[]string `json:"partial_errors,omitempty"`
+
+	// Total Total number of messages matching the query.
+	Total int64 `json:"total"`
+}
+
+// MailReplyInputBody defines model for MailReplyInputBody.
+type MailReplyInputBody struct {
+	// Body Reply body.
+	Body *string `json:"body,omitempty"`
+
+	// From Sender name.
+	From *string `json:"from,omitempty"`
+
+	// Subject Reply subject.
+	Subject *string `json:"subject,omitempty"`
+}
+
+// MailSendInputBody defines model for MailSendInputBody.
+type MailSendInputBody struct {
+	// Body Message body.
+	Body *string `json:"body,omitempty"`
+
+	// From Sender name.
+	From *string `json:"from,omitempty"`
+
+	// Rig Rig name.
+	Rig *string `json:"rig,omitempty"`
+
+	// Subject Message subject.
+	Subject string `json:"subject"`
+
+	// To Recipient name.
+	To string `json:"to"`
+}
+
+// Message defines model for Message.
+type Message struct {
+	Body      string    `json:"body"`
+	Cc        *[]string `json:"cc,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	From      string    `json:"from"`
+	Id        string    `json:"id"`
+	Priority  *int64    `json:"priority,omitempty"`
+	Read      bool      `json:"read"`
+	ReplyTo   *string   `json:"reply_to,omitempty"`
+	Rig       *string   `json:"rig,omitempty"`
+	Subject   string    `json:"subject"`
+	ThreadId  *string   `json:"thread_id,omitempty"`
+	To        string    `json:"to"`
+}
+
+// OKResponseBody defines model for OKResponseBody.
+type OKResponseBody struct {
+	// Status Operation result.
+	Status string `json:"status"`
 }
 
 // SessionInfo defines model for SessionInfo.
@@ -343,6 +456,81 @@ type GetV0CityByCityNameAgentsParams struct {
 // GetV0CityByCityNameAgentsParamsRunning defines parameters for GetV0CityByCityNameAgents.
 type GetV0CityByCityNameAgentsParamsRunning string
 
+// GetV0CityByCityNameFormulasParams defines parameters for GetV0CityByCityNameFormulas.
+type GetV0CityByCityNameFormulasParams struct {
+	// ScopeKind Scope kind (city or rig).
+	ScopeKind *string `form:"scope_kind,omitempty" json:"scope_kind,omitempty"`
+
+	// ScopeRef Scope reference.
+	ScopeRef *string `form:"scope_ref,omitempty" json:"scope_ref,omitempty"`
+}
+
+// GetV0CityByCityNameMailParams defines parameters for GetV0CityByCityNameMail.
+type GetV0CityByCityNameMailParams struct {
+	// Index Event sequence number; when provided, blocks until a newer event arrives.
+	Index *string `form:"index,omitempty" json:"index,omitempty"`
+
+	// Wait How long to block waiting for changes (Go duration string, e.g. 30s). Default 30s, max 2m.
+	Wait *string `form:"wait,omitempty" json:"wait,omitempty"`
+
+	// Cursor Pagination cursor from a previous response's next_cursor field.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Limit Maximum number of results to return. 0 = server default.
+	Limit *int64 `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Agent Filter by agent name.
+	Agent *string `form:"agent,omitempty" json:"agent,omitempty"`
+
+	// Status Filter by status (unread, all).
+	Status *string `form:"status,omitempty" json:"status,omitempty"`
+
+	// Rig Filter by rig name.
+	Rig *string `form:"rig,omitempty" json:"rig,omitempty"`
+}
+
+// SendMailParams defines parameters for SendMail.
+type SendMailParams struct {
+	// XGCRequest Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.
+	XGCRequest string `json:"X-GC-Request"`
+
+	// IdempotencyKey Idempotency key for safe retries.
+	IdempotencyKey *string `json:"Idempotency-Key,omitempty"`
+}
+
+// GetV0CityByCityNameMailByIdParams defines parameters for GetV0CityByCityNameMailById.
+type GetV0CityByCityNameMailByIdParams struct {
+	// Rig Rig hint for O(1) lookup.
+	Rig *string `form:"rig,omitempty" json:"rig,omitempty"`
+}
+
+// PostV0CityByCityNameMailByIdArchiveParams defines parameters for PostV0CityByCityNameMailByIdArchive.
+type PostV0CityByCityNameMailByIdArchiveParams struct {
+	// Rig Rig hint.
+	Rig *string `form:"rig,omitempty" json:"rig,omitempty"`
+
+	// XGCRequest Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.
+	XGCRequest string `json:"X-GC-Request"`
+}
+
+// PostV0CityByCityNameMailByIdReadParams defines parameters for PostV0CityByCityNameMailByIdRead.
+type PostV0CityByCityNameMailByIdReadParams struct {
+	// Rig Rig hint.
+	Rig *string `form:"rig,omitempty" json:"rig,omitempty"`
+
+	// XGCRequest Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.
+	XGCRequest string `json:"X-GC-Request"`
+}
+
+// ReplyMailParams defines parameters for ReplyMail.
+type ReplyMailParams struct {
+	// Rig Rig hint.
+	Rig *string `form:"rig,omitempty" json:"rig,omitempty"`
+
+	// XGCRequest Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.
+	XGCRequest string `json:"X-GC-Request"`
+}
+
 // GetV0CityByCityNameStatusParams defines parameters for GetV0CityByCityNameStatus.
 type GetV0CityByCityNameStatusParams struct {
 	// Index Event sequence number; when provided, blocks until a newer event arrives.
@@ -351,6 +539,12 @@ type GetV0CityByCityNameStatusParams struct {
 	// Wait How long to block waiting for changes (Go duration string, e.g. 30s). Default 30s, max 2m.
 	Wait *string `form:"wait,omitempty" json:"wait,omitempty"`
 }
+
+// SendMailJSONRequestBody defines body for SendMail for application/json ContentType.
+type SendMailJSONRequestBody = MailSendInputBody
+
+// ReplyMailJSONRequestBody defines body for ReplyMail for application/json ContentType.
+type ReplyMailJSONRequestBody = MailReplyInputBody
 
 // RequestEditorFn  is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -431,6 +625,31 @@ type ClientInterface interface {
 	// GetV0CityByCityNameAgents request
 	GetV0CityByCityNameAgents(ctx context.Context, cityName string, params *GetV0CityByCityNameAgentsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetV0CityByCityNameFormulas request
+	GetV0CityByCityNameFormulas(ctx context.Context, cityName string, params *GetV0CityByCityNameFormulasParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetV0CityByCityNameMail request
+	GetV0CityByCityNameMail(ctx context.Context, cityName string, params *GetV0CityByCityNameMailParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SendMailWithBody request with any body
+	SendMailWithBody(ctx context.Context, cityName string, params *SendMailParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	SendMail(ctx context.Context, cityName string, params *SendMailParams, body SendMailJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetV0CityByCityNameMailById request
+	GetV0CityByCityNameMailById(ctx context.Context, cityName string, id string, params *GetV0CityByCityNameMailByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostV0CityByCityNameMailByIdArchive request
+	PostV0CityByCityNameMailByIdArchive(ctx context.Context, cityName string, id string, params *PostV0CityByCityNameMailByIdArchiveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostV0CityByCityNameMailByIdRead request
+	PostV0CityByCityNameMailByIdRead(ctx context.Context, cityName string, id string, params *PostV0CityByCityNameMailByIdReadParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReplyMailWithBody request with any body
+	ReplyMailWithBody(ctx context.Context, cityName string, id string, params *ReplyMailParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ReplyMail(ctx context.Context, cityName string, id string, params *ReplyMailParams, body ReplyMailJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetV0CityByCityNameStatus request
 	GetV0CityByCityNameStatus(ctx context.Context, cityName string, params *GetV0CityByCityNameStatusParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
@@ -449,6 +668,114 @@ func (c *Client) GetV0Cities(ctx context.Context, reqEditors ...RequestEditorFn)
 
 func (c *Client) GetV0CityByCityNameAgents(ctx context.Context, cityName string, params *GetV0CityByCityNameAgentsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetV0CityByCityNameAgentsRequest(c.Server, cityName, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetV0CityByCityNameFormulas(ctx context.Context, cityName string, params *GetV0CityByCityNameFormulasParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetV0CityByCityNameFormulasRequest(c.Server, cityName, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetV0CityByCityNameMail(ctx context.Context, cityName string, params *GetV0CityByCityNameMailParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetV0CityByCityNameMailRequest(c.Server, cityName, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SendMailWithBody(ctx context.Context, cityName string, params *SendMailParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSendMailRequestWithBody(c.Server, cityName, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SendMail(ctx context.Context, cityName string, params *SendMailParams, body SendMailJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSendMailRequest(c.Server, cityName, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetV0CityByCityNameMailById(ctx context.Context, cityName string, id string, params *GetV0CityByCityNameMailByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetV0CityByCityNameMailByIdRequest(c.Server, cityName, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostV0CityByCityNameMailByIdArchive(ctx context.Context, cityName string, id string, params *PostV0CityByCityNameMailByIdArchiveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostV0CityByCityNameMailByIdArchiveRequest(c.Server, cityName, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostV0CityByCityNameMailByIdRead(ctx context.Context, cityName string, id string, params *PostV0CityByCityNameMailByIdReadParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostV0CityByCityNameMailByIdReadRequest(c.Server, cityName, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ReplyMailWithBody(ctx context.Context, cityName string, id string, params *ReplyMailParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReplyMailRequestWithBody(c.Server, cityName, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ReplyMail(ctx context.Context, cityName string, id string, params *ReplyMailParams, body ReplyMailJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReplyMailRequest(c.Server, cityName, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -619,6 +946,607 @@ func NewGetV0CityByCityNameAgentsRequest(server string, cityName string, params 
 	return req, nil
 }
 
+// NewGetV0CityByCityNameFormulasRequest generates requests for GetV0CityByCityNameFormulas
+func NewGetV0CityByCityNameFormulasRequest(server string, cityName string, params *GetV0CityByCityNameFormulasParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "cityName", cityName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v0/city/%s/formulas", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.ScopeKind != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope_kind", *params.ScopeKind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.ScopeRef != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope_ref", *params.ScopeRef, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetV0CityByCityNameMailRequest generates requests for GetV0CityByCityNameMail
+func NewGetV0CityByCityNameMailRequest(server string, cityName string, params *GetV0CityByCityNameMailParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "cityName", cityName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v0/city/%s/mail", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Index != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "index", *params.Index, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Wait != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "wait", *params.Wait, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Agent != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "agent", *params.Agent, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Status != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "status", *params.Status, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Rig != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "rig", *params.Rig, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSendMailRequest calls the generic SendMail builder with application/json body
+func NewSendMailRequest(server string, cityName string, params *SendMailParams, body SendMailJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSendMailRequestWithBody(server, cityName, params, "application/json", bodyReader)
+}
+
+// NewSendMailRequestWithBody generates requests for SendMail with any type of body
+func NewSendMailRequestWithBody(server string, cityName string, params *SendMailParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "cityName", cityName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v0/city/%s/mail", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-GC-Request", params.XGCRequest, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-GC-Request", headerParam0)
+
+		if params.IdempotencyKey != nil {
+			var headerParam1 string
+
+			headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam1)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewGetV0CityByCityNameMailByIdRequest generates requests for GetV0CityByCityNameMailById
+func NewGetV0CityByCityNameMailByIdRequest(server string, cityName string, id string, params *GetV0CityByCityNameMailByIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "cityName", cityName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v0/city/%s/mail/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Rig != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "rig", *params.Rig, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostV0CityByCityNameMailByIdArchiveRequest generates requests for PostV0CityByCityNameMailByIdArchive
+func NewPostV0CityByCityNameMailByIdArchiveRequest(server string, cityName string, id string, params *PostV0CityByCityNameMailByIdArchiveParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "cityName", cityName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v0/city/%s/mail/%s/archive", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Rig != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "rig", *params.Rig, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-GC-Request", params.XGCRequest, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-GC-Request", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewPostV0CityByCityNameMailByIdReadRequest generates requests for PostV0CityByCityNameMailByIdRead
+func NewPostV0CityByCityNameMailByIdReadRequest(server string, cityName string, id string, params *PostV0CityByCityNameMailByIdReadParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "cityName", cityName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v0/city/%s/mail/%s/read", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Rig != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "rig", *params.Rig, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-GC-Request", params.XGCRequest, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-GC-Request", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewReplyMailRequest calls the generic ReplyMail builder with application/json body
+func NewReplyMailRequest(server string, cityName string, id string, params *ReplyMailParams, body ReplyMailJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewReplyMailRequestWithBody(server, cityName, id, params, "application/json", bodyReader)
+}
+
+// NewReplyMailRequestWithBody generates requests for ReplyMail with any type of body
+func NewReplyMailRequestWithBody(server string, cityName string, id string, params *ReplyMailParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "cityName", cityName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v0/city/%s/mail/%s/reply", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Rig != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "rig", *params.Rig, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-GC-Request", params.XGCRequest, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-GC-Request", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewGetV0CityByCityNameStatusRequest generates requests for GetV0CityByCityNameStatus
 func NewGetV0CityByCityNameStatusRequest(server string, cityName string, params *GetV0CityByCityNameStatusParams) (*http.Request, error) {
 	var err error
@@ -741,6 +1669,31 @@ type ClientWithResponsesInterface interface {
 	// GetV0CityByCityNameAgentsWithResponse request
 	GetV0CityByCityNameAgentsWithResponse(ctx context.Context, cityName string, params *GetV0CityByCityNameAgentsParams, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameAgentsResponse, error)
 
+	// GetV0CityByCityNameFormulasWithResponse request
+	GetV0CityByCityNameFormulasWithResponse(ctx context.Context, cityName string, params *GetV0CityByCityNameFormulasParams, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameFormulasResponse, error)
+
+	// GetV0CityByCityNameMailWithResponse request
+	GetV0CityByCityNameMailWithResponse(ctx context.Context, cityName string, params *GetV0CityByCityNameMailParams, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameMailResponse, error)
+
+	// SendMailWithBodyWithResponse request with any body
+	SendMailWithBodyWithResponse(ctx context.Context, cityName string, params *SendMailParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SendMailResponse, error)
+
+	SendMailWithResponse(ctx context.Context, cityName string, params *SendMailParams, body SendMailJSONRequestBody, reqEditors ...RequestEditorFn) (*SendMailResponse, error)
+
+	// GetV0CityByCityNameMailByIdWithResponse request
+	GetV0CityByCityNameMailByIdWithResponse(ctx context.Context, cityName string, id string, params *GetV0CityByCityNameMailByIdParams, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameMailByIdResponse, error)
+
+	// PostV0CityByCityNameMailByIdArchiveWithResponse request
+	PostV0CityByCityNameMailByIdArchiveWithResponse(ctx context.Context, cityName string, id string, params *PostV0CityByCityNameMailByIdArchiveParams, reqEditors ...RequestEditorFn) (*PostV0CityByCityNameMailByIdArchiveResponse, error)
+
+	// PostV0CityByCityNameMailByIdReadWithResponse request
+	PostV0CityByCityNameMailByIdReadWithResponse(ctx context.Context, cityName string, id string, params *PostV0CityByCityNameMailByIdReadParams, reqEditors ...RequestEditorFn) (*PostV0CityByCityNameMailByIdReadResponse, error)
+
+	// ReplyMailWithBodyWithResponse request with any body
+	ReplyMailWithBodyWithResponse(ctx context.Context, cityName string, id string, params *ReplyMailParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReplyMailResponse, error)
+
+	ReplyMailWithResponse(ctx context.Context, cityName string, id string, params *ReplyMailParams, body ReplyMailJSONRequestBody, reqEditors ...RequestEditorFn) (*ReplyMailResponse, error)
+
 	// GetV0CityByCityNameStatusWithResponse request
 	GetV0CityByCityNameStatusWithResponse(ctx context.Context, cityName string, params *GetV0CityByCityNameStatusParams, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameStatusResponse, error)
 }
@@ -807,6 +1760,223 @@ func (r GetV0CityByCityNameAgentsResponse) ContentType() string {
 	return ""
 }
 
+type GetV0CityByCityNameFormulasResponse struct {
+	Body                          []byte
+	HTTPResponse                  *http.Response
+	JSON200                       *FormulaListBody
+	ApplicationproblemJSONDefault *ErrorModel
+}
+
+// Status returns HTTPResponse.Status
+func (r GetV0CityByCityNameFormulasResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetV0CityByCityNameFormulasResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetV0CityByCityNameFormulasResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetV0CityByCityNameMailResponse struct {
+	Body                          []byte
+	HTTPResponse                  *http.Response
+	JSON200                       *MailListBody
+	ApplicationproblemJSONDefault *ErrorModel
+}
+
+// Status returns HTTPResponse.Status
+func (r GetV0CityByCityNameMailResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetV0CityByCityNameMailResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetV0CityByCityNameMailResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SendMailResponse struct {
+	Body                          []byte
+	HTTPResponse                  *http.Response
+	JSON201                       *Message
+	ApplicationproblemJSONDefault *ErrorModel
+}
+
+// Status returns HTTPResponse.Status
+func (r SendMailResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SendMailResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SendMailResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetV0CityByCityNameMailByIdResponse struct {
+	Body                          []byte
+	HTTPResponse                  *http.Response
+	JSON200                       *Message
+	ApplicationproblemJSONDefault *ErrorModel
+}
+
+// Status returns HTTPResponse.Status
+func (r GetV0CityByCityNameMailByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetV0CityByCityNameMailByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetV0CityByCityNameMailByIdResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PostV0CityByCityNameMailByIdArchiveResponse struct {
+	Body                          []byte
+	HTTPResponse                  *http.Response
+	JSON200                       *OKResponseBody
+	ApplicationproblemJSONDefault *ErrorModel
+}
+
+// Status returns HTTPResponse.Status
+func (r PostV0CityByCityNameMailByIdArchiveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostV0CityByCityNameMailByIdArchiveResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostV0CityByCityNameMailByIdArchiveResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PostV0CityByCityNameMailByIdReadResponse struct {
+	Body                          []byte
+	HTTPResponse                  *http.Response
+	JSON200                       *OKResponseBody
+	ApplicationproblemJSONDefault *ErrorModel
+}
+
+// Status returns HTTPResponse.Status
+func (r PostV0CityByCityNameMailByIdReadResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostV0CityByCityNameMailByIdReadResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostV0CityByCityNameMailByIdReadResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReplyMailResponse struct {
+	Body                          []byte
+	HTTPResponse                  *http.Response
+	JSON201                       *Message
+	ApplicationproblemJSONDefault *ErrorModel
+}
+
+// Status returns HTTPResponse.Status
+func (r ReplyMailResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReplyMailResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReplyMailResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetV0CityByCityNameStatusResponse struct {
 	Body                          []byte
 	HTTPResponse                  *http.Response
@@ -854,6 +2024,85 @@ func (c *ClientWithResponses) GetV0CityByCityNameAgentsWithResponse(ctx context.
 		return nil, err
 	}
 	return ParseGetV0CityByCityNameAgentsResponse(rsp)
+}
+
+// GetV0CityByCityNameFormulasWithResponse request returning *GetV0CityByCityNameFormulasResponse
+func (c *ClientWithResponses) GetV0CityByCityNameFormulasWithResponse(ctx context.Context, cityName string, params *GetV0CityByCityNameFormulasParams, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameFormulasResponse, error) {
+	rsp, err := c.GetV0CityByCityNameFormulas(ctx, cityName, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetV0CityByCityNameFormulasResponse(rsp)
+}
+
+// GetV0CityByCityNameMailWithResponse request returning *GetV0CityByCityNameMailResponse
+func (c *ClientWithResponses) GetV0CityByCityNameMailWithResponse(ctx context.Context, cityName string, params *GetV0CityByCityNameMailParams, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameMailResponse, error) {
+	rsp, err := c.GetV0CityByCityNameMail(ctx, cityName, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetV0CityByCityNameMailResponse(rsp)
+}
+
+// SendMailWithBodyWithResponse request with arbitrary body returning *SendMailResponse
+func (c *ClientWithResponses) SendMailWithBodyWithResponse(ctx context.Context, cityName string, params *SendMailParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SendMailResponse, error) {
+	rsp, err := c.SendMailWithBody(ctx, cityName, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSendMailResponse(rsp)
+}
+
+func (c *ClientWithResponses) SendMailWithResponse(ctx context.Context, cityName string, params *SendMailParams, body SendMailJSONRequestBody, reqEditors ...RequestEditorFn) (*SendMailResponse, error) {
+	rsp, err := c.SendMail(ctx, cityName, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSendMailResponse(rsp)
+}
+
+// GetV0CityByCityNameMailByIdWithResponse request returning *GetV0CityByCityNameMailByIdResponse
+func (c *ClientWithResponses) GetV0CityByCityNameMailByIdWithResponse(ctx context.Context, cityName string, id string, params *GetV0CityByCityNameMailByIdParams, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameMailByIdResponse, error) {
+	rsp, err := c.GetV0CityByCityNameMailById(ctx, cityName, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetV0CityByCityNameMailByIdResponse(rsp)
+}
+
+// PostV0CityByCityNameMailByIdArchiveWithResponse request returning *PostV0CityByCityNameMailByIdArchiveResponse
+func (c *ClientWithResponses) PostV0CityByCityNameMailByIdArchiveWithResponse(ctx context.Context, cityName string, id string, params *PostV0CityByCityNameMailByIdArchiveParams, reqEditors ...RequestEditorFn) (*PostV0CityByCityNameMailByIdArchiveResponse, error) {
+	rsp, err := c.PostV0CityByCityNameMailByIdArchive(ctx, cityName, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostV0CityByCityNameMailByIdArchiveResponse(rsp)
+}
+
+// PostV0CityByCityNameMailByIdReadWithResponse request returning *PostV0CityByCityNameMailByIdReadResponse
+func (c *ClientWithResponses) PostV0CityByCityNameMailByIdReadWithResponse(ctx context.Context, cityName string, id string, params *PostV0CityByCityNameMailByIdReadParams, reqEditors ...RequestEditorFn) (*PostV0CityByCityNameMailByIdReadResponse, error) {
+	rsp, err := c.PostV0CityByCityNameMailByIdRead(ctx, cityName, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostV0CityByCityNameMailByIdReadResponse(rsp)
+}
+
+// ReplyMailWithBodyWithResponse request with arbitrary body returning *ReplyMailResponse
+func (c *ClientWithResponses) ReplyMailWithBodyWithResponse(ctx context.Context, cityName string, id string, params *ReplyMailParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReplyMailResponse, error) {
+	rsp, err := c.ReplyMailWithBody(ctx, cityName, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReplyMailResponse(rsp)
+}
+
+func (c *ClientWithResponses) ReplyMailWithResponse(ctx context.Context, cityName string, id string, params *ReplyMailParams, body ReplyMailJSONRequestBody, reqEditors ...RequestEditorFn) (*ReplyMailResponse, error) {
+	rsp, err := c.ReplyMail(ctx, cityName, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReplyMailResponse(rsp)
 }
 
 // GetV0CityByCityNameStatusWithResponse request returning *GetV0CityByCityNameStatusResponse
@@ -918,6 +2167,237 @@ func ParseGetV0CityByCityNameAgentsResponse(rsp *http.Response) (*GetV0CityByCit
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetV0CityByCityNameFormulasResponse parses an HTTP response from a GetV0CityByCityNameFormulasWithResponse call
+func ParseGetV0CityByCityNameFormulasResponse(rsp *http.Response) (*GetV0CityByCityNameFormulasResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetV0CityByCityNameFormulasResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest FormulaListBody
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetV0CityByCityNameMailResponse parses an HTTP response from a GetV0CityByCityNameMailWithResponse call
+func ParseGetV0CityByCityNameMailResponse(rsp *http.Response) (*GetV0CityByCityNameMailResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetV0CityByCityNameMailResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest MailListBody
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSendMailResponse parses an HTTP response from a SendMailWithResponse call
+func ParseSendMailResponse(rsp *http.Response) (*SendMailResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SendMailResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Message
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetV0CityByCityNameMailByIdResponse parses an HTTP response from a GetV0CityByCityNameMailByIdWithResponse call
+func ParseGetV0CityByCityNameMailByIdResponse(rsp *http.Response) (*GetV0CityByCityNameMailByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetV0CityByCityNameMailByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Message
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostV0CityByCityNameMailByIdArchiveResponse parses an HTTP response from a PostV0CityByCityNameMailByIdArchiveWithResponse call
+func ParsePostV0CityByCityNameMailByIdArchiveResponse(rsp *http.Response) (*PostV0CityByCityNameMailByIdArchiveResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostV0CityByCityNameMailByIdArchiveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OKResponseBody
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostV0CityByCityNameMailByIdReadResponse parses an HTTP response from a PostV0CityByCityNameMailByIdReadWithResponse call
+func ParsePostV0CityByCityNameMailByIdReadResponse(rsp *http.Response) (*PostV0CityByCityNameMailByIdReadResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostV0CityByCityNameMailByIdReadResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OKResponseBody
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReplyMailResponse parses an HTTP response from a ReplyMailWithResponse call
+func ParseReplyMailResponse(rsp *http.Response) (*ReplyMailResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReplyMailResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Message
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest ErrorModel

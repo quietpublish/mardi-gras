@@ -202,9 +202,192 @@ func derefString(s *string) string {
 	return *s
 }
 
-// --- unsupported operations (Phase 3+) -------------------------------------
+// --- mail + formulas --------------------------------------------------------
 
-func (*GCDriver) Formulas(context.Context) ([]string, error) { return nil, ErrUnsupported }
+// gcRequestToken is the anti-CSRF value sent in the X-GC-Request header on
+// every mutation. The supervisor only checks that the header is present and
+// non-empty (RFC: "csrf: ..." on a missing header).
+const gcRequestToken = "mardi-gras"
+
+// Formulas lists available formula names via GET /v0/city/{city}/formulas.
+func (d *GCDriver) Formulas(ctx context.Context) ([]string, error) {
+	city, err := d.resolveCity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := d.client.GetV0CityByCityNameFormulasWithResponse(ctx, city, nil)
+	if err != nil {
+		return nil, fmt.Errorf("gc formulas: %w", err)
+	}
+	if resp.JSON200 == nil {
+		return nil, fmt.Errorf("gc formulas: %s", gcRespErr(resp.StatusCode(), resp.ApplicationproblemJSONDefault))
+	}
+	var names []string
+	if resp.JSON200.Items != nil {
+		names = make([]string, 0, len(*resp.JSON200.Items))
+		for _, f := range *resp.JSON200.Items {
+			names = append(names, f.Name)
+		}
+	}
+	return names, nil
+}
+
+// MailInbox fetches the mailbox via GET /v0/city/{city}/mail. When unreadOnly
+// is set it passes status=unread. It deliberately omits the index/wait params
+// so the call does not long-poll.
+func (d *GCDriver) MailInbox(ctx context.Context, unreadOnly bool) ([]MailMessage, error) {
+	city, err := d.resolveCity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	params := &gcclient.GetV0CityByCityNameMailParams{}
+	if unreadOnly {
+		status := "unread"
+		params.Status = &status
+	}
+	resp, err := d.client.GetV0CityByCityNameMailWithResponse(ctx, city, params)
+	if err != nil {
+		return nil, fmt.Errorf("gc mail: %w", err)
+	}
+	if resp.JSON200 == nil {
+		return nil, fmt.Errorf("gc mail: %s", gcRespErr(resp.StatusCode(), resp.ApplicationproblemJSONDefault))
+	}
+	var msgs []MailMessage
+	if resp.JSON200.Items != nil {
+		msgs = make([]MailMessage, 0, len(*resp.JSON200.Items))
+		for _, m := range *resp.JSON200.Items {
+			msgs = append(msgs, gcMessageToMail(m))
+		}
+	}
+	return msgs, nil
+}
+
+// MailRead fetches a single message via GET /v0/city/{city}/mail/{id}.
+func (d *GCDriver) MailRead(ctx context.Context, messageID string) (*MailMessage, error) {
+	city, err := d.resolveCity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := d.client.GetV0CityByCityNameMailByIdWithResponse(ctx, city, messageID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("gc mail read: %w", err)
+	}
+	if resp.JSON200 == nil {
+		return nil, fmt.Errorf("gc mail read: %s", gcRespErr(resp.StatusCode(), resp.ApplicationproblemJSONDefault))
+	}
+	m := gcMessageToMail(*resp.JSON200)
+	return &m, nil
+}
+
+// MailReply replies to a message via POST /v0/city/{city}/mail/{id}/reply.
+func (d *GCDriver) MailReply(ctx context.Context, messageID, body string) error {
+	city, err := d.resolveCity(ctx)
+	if err != nil {
+		return err
+	}
+	resp, err := d.client.ReplyMailWithResponse(ctx, city, messageID,
+		&gcclient.ReplyMailParams{XGCRequest: gcRequestToken},
+		gcclient.ReplyMailJSONRequestBody{Body: &body})
+	if err != nil {
+		return fmt.Errorf("gc mail reply: %w", err)
+	}
+	return gcMutationErr("gc mail reply", resp.StatusCode(), resp.ApplicationproblemJSONDefault)
+}
+
+// MailSend sends a new message via POST /v0/city/{city}/mail.
+func (d *GCDriver) MailSend(ctx context.Context, address, subject, body string) error {
+	city, err := d.resolveCity(ctx)
+	if err != nil {
+		return err
+	}
+	resp, err := d.client.SendMailWithResponse(ctx, city,
+		&gcclient.SendMailParams{XGCRequest: gcRequestToken},
+		gcclient.SendMailJSONRequestBody{To: address, Subject: subject, Body: &body})
+	if err != nil {
+		return fmt.Errorf("gc mail send: %w", err)
+	}
+	return gcMutationErr("gc mail send", resp.StatusCode(), resp.ApplicationproblemJSONDefault)
+}
+
+// MailArchive archives a message via POST /v0/city/{city}/mail/{id}/archive.
+func (d *GCDriver) MailArchive(ctx context.Context, messageID string) error {
+	city, err := d.resolveCity(ctx)
+	if err != nil {
+		return err
+	}
+	resp, err := d.client.PostV0CityByCityNameMailByIdArchiveWithResponse(ctx, city, messageID,
+		&gcclient.PostV0CityByCityNameMailByIdArchiveParams{XGCRequest: gcRequestToken})
+	if err != nil {
+		return fmt.Errorf("gc mail archive: %w", err)
+	}
+	return gcMutationErr("gc mail archive", resp.StatusCode(), resp.ApplicationproblemJSONDefault)
+}
+
+// MailMarkRead marks a message read via POST /v0/city/{city}/mail/{id}/read.
+func (d *GCDriver) MailMarkRead(ctx context.Context, messageID string) error {
+	city, err := d.resolveCity(ctx)
+	if err != nil {
+		return err
+	}
+	resp, err := d.client.PostV0CityByCityNameMailByIdReadWithResponse(ctx, city, messageID,
+		&gcclient.PostV0CityByCityNameMailByIdReadParams{XGCRequest: gcRequestToken})
+	if err != nil {
+		return fmt.Errorf("gc mail mark-read: %w", err)
+	}
+	return gcMutationErr("gc mail mark-read", resp.StatusCode(), resp.ApplicationproblemJSONDefault)
+}
+
+// MailMarkAllRead marks every unread message read. Gas City has no bulk
+// endpoint, so it fetches the unread set and marks each one individually.
+func (d *GCDriver) MailMarkAllRead(ctx context.Context) error {
+	msgs, err := d.MailInbox(ctx, true)
+	if err != nil {
+		return err
+	}
+	for _, m := range msgs {
+		if m.Read {
+			continue
+		}
+		if err := d.MailMarkRead(ctx, m.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// gcMessageToMail adapts a Gas City Message to mg's MailMessage. Priority is
+// left empty: Gas City reports it as an integer whose scale mg can't map onto
+// gt's textual priorities without guessing.
+func gcMessageToMail(m gcclient.Message) MailMessage {
+	return MailMessage{
+		ID:       m.Id,
+		From:     m.From,
+		To:       m.To,
+		Subject:  m.Subject,
+		Body:     m.Body,
+		Time:     m.CreatedAt.Format(time.RFC3339),
+		Read:     m.Read,
+		ThreadID: derefString(m.ThreadId),
+	}
+}
+
+// gcMutationErr converts a mutation response into an error: nil on 2xx,
+// otherwise an error carrying the problem+json detail.
+func gcMutationErr(label string, code int, e *gcclient.ErrorModel) error {
+	if code >= 200 && code < 300 {
+		return nil
+	}
+	return fmt.Errorf("%s: %s", label, gcRespErr(code, e))
+}
+
+// --- unsupported operations -------------------------------------------------
+//
+// These either have no Gas City endpoint (Unsling, ConvoyLand/Watch/Unwatch),
+// require semantic mappings that need validation against a live `gc`
+// (Sling needs a required `target`; Nudge/Decommission need session/agent
+// resolution; convoys are modeled as beads), or have no equivalent at all
+// (Vitals/Costs/PatrolScan). See the operation support matrix in
+// docs/internal/gascity-integration-design.md §6.3.
 
 func (*GCDriver) Comments(context.Context, string) ([]Comment, error) { return nil, ErrUnsupported }
 
@@ -243,20 +426,6 @@ func (*GCDriver) ConvoyLand(context.Context, string) error { return ErrUnsupport
 func (*GCDriver) ConvoyWatch(context.Context, string) error { return ErrUnsupported }
 
 func (*GCDriver) ConvoyUnwatch(context.Context, string) error { return ErrUnsupported }
-
-func (*GCDriver) MailInbox(context.Context, bool) ([]MailMessage, error) { return nil, ErrUnsupported }
-
-func (*GCDriver) MailRead(context.Context, string) (*MailMessage, error) { return nil, ErrUnsupported }
-
-func (*GCDriver) MailReply(context.Context, string, string) error { return ErrUnsupported }
-
-func (*GCDriver) MailSend(context.Context, string, string, string) error { return ErrUnsupported }
-
-func (*GCDriver) MailArchive(context.Context, string) error { return ErrUnsupported }
-
-func (*GCDriver) MailMarkRead(context.Context, string) error { return ErrUnsupported }
-
-func (*GCDriver) MailMarkAllRead(context.Context) error { return ErrUnsupported }
 
 func (*GCDriver) MoleculeDAG(context.Context, string) (*DAGInfo, error) { return nil, ErrUnsupported }
 

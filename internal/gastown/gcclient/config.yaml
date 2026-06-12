@@ -11,6 +11,15 @@ generate:
   client: true
 output-options:
   include-operation-ids:
+    # Phase 2 — read path / roster
     - get-v0-cities
     - get-v0-city-by-city-name-agents
     - get-v0-city-by-city-name-status
+    # Phase 3 — mail + formulas
+    - get-v0-city-by-city-name-formulas
+    - get-v0-city-by-city-name-mail
+    - get-v0-city-by-city-name-mail-by-id
+    - reply-mail
+    - send-mail
+    - post-v0-city-by-city-name-mail-by-id-archive
+    - post-v0-city-by-city-name-mail-by-id-read
