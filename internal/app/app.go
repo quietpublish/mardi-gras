@@ -75,6 +75,7 @@ type Model struct {
 	inTmux        bool
 	activeAgents  map[string]string   // issueID -> tmux window name
 	gtEnv         gastown.Env         // Gas Town environment, read once at startup
+	driver        gastown.Driver      // Orchestrator seam; GTDriver today (gt CLI)
 	townStatus    *gastown.TownStatus // Latest gt status, nil when unavailable
 	gasTown       views.GasTown       // Gas Town control surface panel
 	showGasTown   bool                // Whether the Gas Town panel replaces detail
@@ -294,6 +295,7 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 		inTmux:         agent.InTmux() && agent.TmuxAvailable(),
 		activeAgents:   make(map[string]string),
 		gtEnv:          gtEnv,
+		driver:         gastown.NewGTDriver(),
 		gtPollInFlight: gtEnv.Available, // Init() launches the first poll; gate subsequent ones
 		changedIDs:     make(map[string]bool),
 		prevIssueMap:   prevMap,
@@ -312,7 +314,7 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 func (m Model) Init() tea.Cmd {
 	var agentPoll tea.Cmd
 	if m.gtEnv.Available {
-		agentPoll = pollGTStatus
+		agentPoll = m.pollGTStatus
 	} else if m.inTmux {
 		agentPoll = pollTmuxAgentState
 	}
@@ -383,11 +385,11 @@ func (m *Model) activateGasTown() tea.Cmd {
 	m.gasTown.SetStatus(m.townStatus, m.gtEnv)
 
 	cmds := []tea.Cmd{
-		fetchConvoyList,
-		fetchMailInbox,
-		fetchCosts,
+		m.fetchConvoyList,
+		m.fetchMailInbox,
+		m.fetchCosts,
 		fetchActivity,
-		fetchVitals,
+		m.fetchVitals,
 		m.gatedPollAgentState(),
 	}
 	if !m.gasTownTicking {
@@ -471,19 +473,21 @@ type multiSlingResultMsg struct {
 // the active mg runtime is codex so MG_AGENT_RUNTIME=codex propagates into
 // Gas Town. Other runtimes keep gt's default agent selection (the v0.19.0
 // contract is unchanged for claude/cursor users).
-func slingWithRuntime(id string, runtime agent.Runtime) error {
+func slingWithRuntime(driver gastown.Driver, id string, runtime agent.Runtime) error {
+	req := gastown.SlingRequest{IssueIDs: []string{id}}
 	if runtime == agent.RuntimeCodex {
-		return gastown.SlingWithAgent(id, "codex")
+		req.Agent = "codex"
 	}
-	return gastown.Sling(id)
+	return driver.Sling(context.Background(), req)
 }
 
 // slingMultipleWithRuntime is the bulk variant of slingWithRuntime.
-func slingMultipleWithRuntime(ids []string, runtime agent.Runtime) error {
+func slingMultipleWithRuntime(driver gastown.Driver, ids []string, runtime agent.Runtime) error {
+	req := gastown.SlingRequest{IssueIDs: ids}
 	if runtime == agent.RuntimeCodex {
-		return gastown.SlingMultipleWithAgent(ids, "codex")
+		req.Agent = "codex"
 	}
-	return gastown.SlingMultiple(ids)
+	return driver.Sling(context.Background(), req)
 }
 
 type nudgeResultMsg struct {
@@ -668,8 +672,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		priority := components.ParsePriority(result.Priority)
 		if result.CrewMember != "" {
 			crew := result.CrewMember
+			driver := m.driver
 			return m, func() tea.Msg {
-				_, err := gastown.Assign(crew, title, result.Type, result.Priority, "", true)
+				_, err := driver.Assign(context.Background(), crew, title, result.Type, result.Priority, "", true)
 				action := fmt.Sprintf("assigned to %s", crew)
 				return mutateResultMsg{issueID: title, action: action, err: err}
 			}
@@ -711,19 +716,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			formula := m.palette.SelectedName()
+			driver := m.driver
 			if m.formulaMulti != nil {
 				ids := m.formulaMulti
 				m.formulaMulti = nil
 				m.formulaTarget = ""
 				return m, func() tea.Msg {
-					err := gastown.SlingMultipleWithFormula(ids, formula)
+					err := driver.Sling(context.Background(), gastown.SlingRequest{IssueIDs: ids, Formula: formula})
 					return multiSlingResultMsg{count: len(ids), formula: formula, err: err}
 				}
 			}
 			issueID := m.formulaTarget
 			m.formulaTarget = ""
 			return m, func() tea.Msg {
-				err := gastown.SlingWithFormula(issueID, formula)
+				err := driver.Sling(context.Background(), gastown.SlingRequest{IssueIDs: []string{issueID}, Formula: formula})
 				return slingResultMsg{issueID: issueID, formula: formula, err: err}
 			}
 		}
@@ -806,8 +812,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.nudging = false
 				target := m.nudgeTarget
 				message := m.nudgeInput.Value()
+				driver := m.driver
 				return m, func() tea.Msg {
-					err := gastown.Nudge(target, message)
+					err := driver.Nudge(context.Background(), target, message)
 					return nudgeResultMsg{target: target, message: message, err: err}
 				}
 			}
@@ -919,8 +926,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if body == "" {
 					return m, nil
 				}
+				driver := m.driver
 				return m, func() tea.Msg {
-					err := gastown.MailReply(msgID, body)
+					err := driver.MailReply(context.Background(), msgID, body)
 					return mailReplyResultMsg{messageID: msgID, err: err}
 				}
 			}
@@ -967,8 +975,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if body == "" {
 					return m, nil
 				}
+				driver := m.driver
 				return m, func() tea.Msg {
-					err := gastown.MailSend(address, subject, body)
+					err := driver.MailSend(context.Background(), address, subject, body)
 					return mailSendResultMsg{address: address, subject: subject, err: err}
 				}
 			}
@@ -999,14 +1008,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if name == "" {
 					return m, nil
 				}
+				driver := m.driver
 				if epicID != "" {
 					return m, func() tea.Msg {
-						_, err := gastown.ConvoyCreateFromEpic(name, epicID)
+						_, err := driver.ConvoyCreateFromEpic(context.Background(), name, epicID)
 						return convoyCreateResultMsg{name: name, err: err}
 					}
 				}
 				return m, func() tea.Msg {
-					_, err := gastown.ConvoyCreate(name, ids)
+					_, err := driver.ConvoyCreate(context.Background(), name, ids)
 					return convoyCreateResultMsg{name: name, err: err}
 				}
 			}
@@ -1337,16 +1347,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil || len(msg.formulas) == 0 {
 			var slingCmd tea.Cmd
 			runtime := m.agentRuntime
+			driver := m.driver
 			if m.formulaMulti != nil {
 				ids := m.formulaMulti
 				slingCmd = func() tea.Msg {
-					err := slingMultipleWithRuntime(ids, runtime)
+					err := slingMultipleWithRuntime(driver, ids, runtime)
 					return multiSlingResultMsg{count: len(ids), err: err}
 				}
 			} else {
 				issueID := m.formulaTarget
 				slingCmd = func() tea.Msg {
-					err := slingWithRuntime(issueID, runtime)
+					err := slingWithRuntime(driver, issueID, runtime)
 					return slingResultMsg{issueID: issueID, err: err}
 				}
 			}
@@ -1420,19 +1431,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.toastResult(msg.err,
 			"Convoy create failed",
 			fmt.Sprintf("Convoy %q created", msg.name),
-			fetchConvoyList)
+			m.fetchConvoyList)
 
 	case convoyLandResultMsg:
 		return m.toastResult(msg.err,
 			"Convoy land failed",
 			fmt.Sprintf("Convoy %s landed", msg.convoyID),
-			fetchConvoyList, m.gatedPollAgentState())
+			m.fetchConvoyList, m.gatedPollAgentState())
 
 	case convoyCloseResultMsg:
 		return m.toastResult(msg.err,
 			"Convoy close failed",
 			fmt.Sprintf("Convoy %s closed", msg.convoyID),
-			fetchConvoyList)
+			m.fetchConvoyList)
 
 	case mailInboxMsg:
 		if msg.err == nil {
@@ -1441,13 +1452,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case mailReplyResultMsg:
-		return m.toastResult(msg.err, "Reply failed", "Reply sent", fetchMailInbox)
+		return m.toastResult(msg.err, "Reply failed", "Reply sent", m.fetchMailInbox)
 
 	case mailArchiveResultMsg:
 		return m.toastResult(msg.err,
 			"Archive failed",
 			fmt.Sprintf("Archived %s", msg.messageID),
-			fetchMailInbox)
+			m.fetchMailInbox)
 
 	case mailSendResultMsg:
 		display := msg.subject
@@ -1457,16 +1468,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.toastResult(msg.err,
 			"Send failed",
 			fmt.Sprintf("Sent to %s: %s", msg.address, display),
-			fetchMailInbox)
+			m.fetchMailInbox)
 
 	case mailMarkReadResultMsg:
 		if msg.err == nil {
-			return m, fetchMailInbox
+			return m, m.fetchMailInbox
 		}
 		return m, nil
 
 	case mailMarkAllReadResultMsg:
-		return m.toastResult(msg.err, "Mark all read failed", "All messages marked read", fetchMailInbox)
+		return m.toastResult(msg.err, "Mark all read failed", "All messages marked read", m.fetchMailInbox)
 
 	case convoyWatchResultMsg:
 		return m.toastResult(msg.err,
@@ -1508,7 +1519,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds := []tea.Cmd{cmd}
 		if m.detail.Issue != nil && m.detail.MoleculeIssueID != "" {
 			issueID := m.detail.Issue.ID
-			cmds = append(cmds, fetchMoleculeDAG(issueID))
+			cmds = append(cmds, m.fetchMoleculeDAG(issueID))
 		}
 		return m, tea.Batch(cmds...)
 
@@ -1968,8 +1979,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			m.parade.ClearSelection()
 			runtime := m.agentRuntime
+			driver := m.driver
 			return m, func() tea.Msg {
-				err := slingMultipleWithRuntime(ids, runtime)
+				err := slingMultipleWithRuntime(driver, ids, runtime)
 				return multiSlingResultMsg{count: len(ids), err: err}
 			}
 		}
@@ -1986,8 +1998,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.gtEnv.Available {
 			issueID := issue.ID
 			runtime := m.agentRuntime
+			driver := m.driver
 			return m, func() tea.Msg {
-				err := slingWithRuntime(issueID, runtime)
+				err := slingWithRuntime(driver, issueID, runtime)
 				return slingResultMsg{issueID: issueID, err: err}
 			}
 		}
@@ -2020,8 +2033,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		issueID := issue.ID
 		if m.gtEnv.Available {
+			driver := m.driver
 			return m, func() tea.Msg {
-				err := gastown.Unsling(issueID)
+				err := driver.Unsling(context.Background(), issueID)
 				return unslingResultMsg{issueID: issueID, err: err}
 			}
 		}
@@ -2046,8 +2060,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.parade.ClearSelection()
 			m.formulaMulti = ids
 			m.formulaTarget = ""
+			driver := m.driver
 			return m, func() tea.Msg {
-				formulas, err := gastown.ListFormulas()
+				formulas, err := driver.Formulas(context.Background())
 				return formulaListMsg{formulas: formulas, err: err}
 			}
 		}
@@ -2058,8 +2073,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.formulaTarget = issue.ID
 		m.formulaMulti = nil
+		driver := m.driver
 		return m, func() tea.Msg {
-			formulas, err := gastown.ListFormulas()
+			formulas, err := driver.Formulas(context.Background())
 			return formulaListMsg{formulas: formulas, err: err}
 		}
 
@@ -2248,8 +2264,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if m.detail.MoleculeDAG != nil {
 				stepID := m.detail.MoleculeDAG.ActiveStepID()
 				if stepID != "" {
+					driver := m.driver
 					return m, func() tea.Msg {
-						result, err := gastown.MoleculeStepDone(stepID)
+						result, err := driver.MoleculeStepDone(context.Background(), stepID)
 						return moleculeStepDoneMsg{result: result, err: err}
 					}
 				}
@@ -2361,8 +2378,9 @@ func (m Model) cascadeCloseIssue() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	issueID := issue.ID
+	driver := m.driver
 	return m, func() tea.Msg {
-		err := gastown.CascadeClose(issueID)
+		err := driver.CascadeClose(context.Background(), issueID)
 		return mutateResultMsg{issueID: issueID, action: "cascade closed", err: err}
 	}
 }
@@ -2759,22 +2777,26 @@ func (m Model) handleGasTownAction(msg views.GasTownActionMsg) (tea.Model, tea.C
 		if address == "" {
 			address = msg.Agent.Name
 		}
+		agentName := msg.Agent.Name
+		driver := m.driver
 		return m, func() tea.Msg {
-			err := gastown.Decommission(address)
-			return decommissionResultMsg{address: msg.Agent.Name, err: err}
+			err := driver.Decommission(context.Background(), address)
+			return decommissionResultMsg{address: agentName, err: err}
 		}
 
 	case views.ActionConvoyLand:
 		convoyID := msg.ConvoyID
+		driver := m.driver
 		return m, func() tea.Msg {
-			err := gastown.ConvoyLand(convoyID)
+			err := driver.ConvoyLand(context.Background(), convoyID)
 			return convoyLandResultMsg{convoyID: convoyID, err: err}
 		}
 
 	case views.ActionConvoyClose:
 		convoyID := msg.ConvoyID
+		driver := m.driver
 		return m, func() tea.Msg {
-			err := gastown.ConvoyClose(convoyID)
+			err := driver.ConvoyClose(context.Background(), convoyID)
 			return convoyCloseResultMsg{convoyID: convoyID, err: err}
 		}
 
@@ -2790,35 +2812,40 @@ func (m Model) handleGasTownAction(msg views.GasTownActionMsg) (tea.Model, tea.C
 
 	case views.ActionMailArchive:
 		msgID := msg.Mail.ID
+		driver := m.driver
 		return m, func() tea.Msg {
-			err := gastown.MailArchive(msgID)
+			err := driver.MailArchive(context.Background(), msgID)
 			return mailArchiveResultMsg{messageID: msgID, err: err}
 		}
 
 	case views.ActionMailRead:
 		msgID := msg.Mail.ID
+		driver := m.driver
 		return m, func() tea.Msg {
-			err := gastown.MailMarkRead(msgID)
+			err := driver.MailMarkRead(context.Background(), msgID)
 			return mailMarkReadResultMsg{messageID: msgID, err: err}
 		}
 
 	case views.ActionMailMarkAllRead:
+		driver := m.driver
 		return m, func() tea.Msg {
-			err := gastown.MailMarkAllRead()
+			err := driver.MailMarkAllRead(context.Background())
 			return mailMarkAllReadResultMsg{err: err}
 		}
 
 	case views.ActionConvoyWatch:
 		convoyID := msg.ConvoyID
+		driver := m.driver
 		return m, func() tea.Msg {
-			err := gastown.ConvoyWatch(convoyID)
+			err := driver.ConvoyWatch(context.Background(), convoyID)
 			return convoyWatchResultMsg{convoyID: convoyID, err: err}
 		}
 
 	case views.ActionConvoyUnwatch:
 		convoyID := msg.ConvoyID
+		driver := m.driver
 		return m, func() tea.Msg {
-			err := gastown.ConvoyUnwatch(convoyID)
+			err := driver.ConvoyUnwatch(context.Background(), convoyID)
 			return convoyUnwatchResultMsg{convoyID: convoyID, err: err}
 		}
 
@@ -2901,12 +2928,7 @@ func (m Model) handleRecoveryResult(msg recoveryResultMsg) (tea.Model, tea.Cmd) 
 	m.toast = toast
 
 	// Refresh Gas Town status after recovery
-	refreshCmd := func() tea.Msg {
-		status, err := gastown.FetchStatus()
-		return townStatusMsg{status: status, err: err}
-	}
-
-	return m, tea.Batch(cmd, refreshCmd)
+	return m, tea.Batch(cmd, m.pollGTStatus)
 }
 
 // diffIssues compares new issues against the previous snapshot and returns the count of changes.
@@ -2977,7 +2999,7 @@ func (m *Model) maybeFetchMolecule() tea.Cmd {
 	if m.detail.MoleculeIssueID == issue.ID && m.detail.MoleculeDAG != nil {
 		return nil
 	}
-	return fetchMoleculeDAG(issue.ID)
+	return m.fetchMoleculeDAG(issue.ID)
 }
 
 // maybeFetchComments returns a Cmd to fetch comments for the selected issue.
@@ -2990,7 +3012,7 @@ func (m *Model) maybeFetchComments() tea.Cmd {
 	if m.detail.CommentsIssueID == issue.ID {
 		return nil
 	}
-	return fetchComments(issue.ID)
+	return m.fetchComments(issue.ID)
 }
 
 // maybeFetchIssueDetail returns a Cmd to fetch rich detail for the selected issue.
@@ -3319,7 +3341,7 @@ func (m *Model) gatedPollAgentState() tea.Cmd {
 		var cmds []tea.Cmd
 		if !m.gtPollInFlight {
 			m.gtPollInFlight = true
-			cmds = append(cmds, pollGTStatus)
+			cmds = append(cmds, m.pollGTStatus)
 		}
 		if cmd := m.gatedPollPatrolScan(); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -3373,17 +3395,17 @@ func (m *Model) gatedPollPatrolScan() tea.Cmd {
 		return nil
 	}
 	m.patrolScanInFlight = true
-	return pollPatrolScan
+	return m.pollPatrolScan
 }
 
-func pollPatrolScan() tea.Msg {
-	scan, err := gastown.FetchPatrolScan()
+func (m Model) pollPatrolScan() tea.Msg {
+	scan, err := m.driver.PatrolScan(context.Background())
 	return patrolScanMsg{scan: scan, err: err}
 }
 
-// pollGTStatus fetches Gas Town status via gt status --json.
-func pollGTStatus() tea.Msg {
-	status, err := gastown.FetchStatus()
+// pollGTStatus fetches Gas Town status via the active driver.
+func (m Model) pollGTStatus() tea.Msg {
+	status, err := m.driver.Status(context.Background())
 	return townStatusMsg{status: status, err: err}
 }
 
@@ -3396,22 +3418,23 @@ func pollTmuxAgentState() tea.Msg {
 	return agentStatusMsg{activeAgents: agents}
 }
 
-// fetchConvoyList returns a Cmd that fetches convoy details via gt convoy list.
-func fetchConvoyList() tea.Msg {
-	convoys, err := gastown.ConvoyList()
+// fetchConvoyList returns a Cmd that fetches convoy details via the active driver.
+func (m Model) fetchConvoyList() tea.Msg {
+	convoys, err := m.driver.ConvoyList(context.Background())
 	return convoyListMsg{convoys: convoys, err: err}
 }
 
-// fetchMailInbox returns a Cmd that fetches mail messages via gt mail inbox.
-func fetchMailInbox() tea.Msg {
-	msgs, err := gastown.MailInbox(false)
+// fetchMailInbox returns a Cmd that fetches mail messages via the active driver.
+func (m Model) fetchMailInbox() tea.Msg {
+	msgs, err := m.driver.MailInbox(context.Background(), false)
 	return mailInboxMsg{messages: msgs, err: err}
 }
 
 // fetchComments returns a Cmd that fetches comments for an issue.
-func fetchComments(issueID string) tea.Cmd {
+func (m Model) fetchComments(issueID string) tea.Cmd {
+	driver := m.driver
 	return func() tea.Msg {
-		comments, err := gastown.FetchComments(issueID)
+		comments, err := driver.Comments(context.Background(), issueID)
 		return commentsMsg{issueID: issueID, comments: comments, err: err}
 	}
 }
@@ -3424,8 +3447,8 @@ func fetchIssueDetail(issueID string) tea.Cmd {
 	}
 }
 
-func fetchCosts() tea.Msg {
-	costs, err := gastown.FetchCosts()
+func (m Model) fetchCosts() tea.Msg {
+	costs, err := m.driver.Costs(context.Background())
 	return costsMsg{costs: costs, err: err}
 }
 
@@ -3435,19 +3458,20 @@ func fetchActivity() tea.Msg {
 	return activityMsg{events: events, err: err}
 }
 
-func fetchVitals() tea.Msg {
-	vitals, err := gastown.FetchVitals()
+func (m Model) fetchVitals() tea.Msg {
+	vitals, err := m.driver.Vitals(context.Background())
 	return vitalsMsg{vitals: vitals, err: err}
 }
 
 // fetchMoleculeDAG returns a Cmd that fetches molecule DAG and progress for an issue.
-func fetchMoleculeDAG(issueID string) tea.Cmd {
+func (m Model) fetchMoleculeDAG(issueID string) tea.Cmd {
+	driver := m.driver
 	return func() tea.Msg {
-		dag, dagErr := gastown.MoleculeDAG(issueID)
+		dag, dagErr := driver.MoleculeDAG(context.Background(), issueID)
 		if dagErr != nil {
 			return moleculeDAGMsg{issueID: issueID, err: dagErr}
 		}
-		progress, _ := gastown.MoleculeProgressFetch(issueID)
+		progress, _ := driver.MoleculeProgress(context.Background(), issueID)
 		return moleculeDAGMsg{issueID: issueID, dag: dag, progress: progress}
 	}
 }
