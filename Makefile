@@ -4,7 +4,7 @@ GO := go
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -ldflags "-s -w -X main.version=$(VERSION)"
 
-.PHONY: build run run-sample test clean dev dev-gt dev-gc screenshot screenshots-gc tidy fmt lint gc-client
+.PHONY: build run run-sample test clean dev dev-gt dev-gc screenshot screenshots-gc demo-gif tidy fmt lint gc-client
 
 # GCDIR is the generated Gas City client package.
 GCDIR := internal/gastown/gcclient
@@ -46,6 +46,11 @@ screenshot: build
 # supervisor (no `gc` install needed). Requires vhs (brew install vhs ffmpeg ttyd).
 screenshots-gc:
 	./testdata/screenshots-gc.sh
+
+# demo-gif regenerates the animated README hero GIF (docs/screenshots/demo.gif)
+# via vhs + the fake supervisor. Requires vhs (brew install vhs ffmpeg ttyd).
+demo-gif:
+	./testdata/demo-gif.sh
 
 tidy:
 	$(GO) mod tidy

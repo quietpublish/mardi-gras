@@ -15,8 +15,8 @@ Mardi Gras is a terminal UI for [Beads](https://github.com/steveyegge/beads) tha
 It's fast, visual, and joyful.
 One binary. No config. Just `mg`.
 
-<!-- Screenshot: run `make screenshot` and resize to ~120x38 for best results -->
-![Mardi Gras TUI](docs/screenshots/mardi-gras.png)
+<!-- Demo GIF: regenerate with `make demo-gif` (drives the fake Gas City supervisor via testdata/vhs/demo.tape) -->
+![Mardi Gras TUI](docs/screenshots/demo.gif)
 
 Think of your project as a parade route:
 
