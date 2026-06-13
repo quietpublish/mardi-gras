@@ -2,6 +2,11 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## Unreleased
+
+### Changed
+- **Branded loading splash** — the bare `Loading...` shown before the first frame is now a branded splash (⚜ MARDI GRAS + an animated gold spinner via `bubbles/spinner` + "lining up the parade…"). Honors `--no-animations` (renders a static frame).
+
 ## v0.25.0 (2026-06-13)
 
 Completes the Gas City backend: agent dispatch, convoys, and activation without Gas Town installed. With this, mg drives Gas City over the Supervisor API for the full control surface (roster, mail, formulas, nudge, decommission, sling, convoys) — opt in with `MG_GC_API`; Gas Town remains the default.

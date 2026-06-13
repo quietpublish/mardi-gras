@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -69,6 +70,7 @@ type Model struct {
 	showHelp      bool
 	help          components.Help
 	ready         bool
+	spinner       spinner.Model // branded loading spinner (shown until ready)
 	agentAvail    bool
 	agentRuntime  agent.Runtime
 	projectDir    string
@@ -308,6 +310,7 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 		sourceMode:     source.Mode,
 		metadataSchema: metaSchema,
 		startedAt:      time.Now(),
+		spinner:        newLoadingSpinner(),
 		oscGuard:       guard,
 		noAnimations:   noAnimations,
 		codexSessions:  make(map[string]*codexSession),
@@ -329,7 +332,7 @@ func (m Model) Init() tea.Cmd {
 		agentPoll,
 	}
 	if !m.noAnimations {
-		cmds = append(cmds, headerShimmerCmd())
+		cmds = append(cmds, headerShimmerCmd(), m.spinner.Tick)
 	}
 	if m.sourceMode == data.SourceCLI {
 		cmds = append(cmds, fetchCurrentIssue, fetchDoctorDiagnostics, fetchBeadsContext)
@@ -1746,6 +1749,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.confetti.Tick()
 		}
 		return m, nil
+
+	case spinner.TickMsg:
+		if m.ready {
+			return m, nil // loading splash is gone; stop spinning
+		}
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 
 	case gasTownTickMsg:
 		m.gasTown.Tick()
@@ -3576,10 +3587,27 @@ func altView(s string) tea.View {
 	return v
 }
 
+// newLoadingSpinner returns the gold spinner shown on the branded loading splash.
+func newLoadingSpinner() spinner.Model {
+	return spinner.New(
+		spinner.WithSpinner(spinner.Dot),
+		spinner.WithStyle(lipgloss.NewStyle().Foreground(ui.Gold)),
+	)
+}
+
+// loadingView is the branded splash shown until the first window size arrives,
+// replacing a bare "Loading...". The spinner animates while mg boots.
+func (m Model) loadingView() string {
+	wordmark := lipgloss.NewStyle().Bold(true).Foreground(ui.Gold).Render("⚜  MARDI GRAS")
+	tag := lipgloss.NewStyle().Faint(true).Italic(true).Foreground(ui.BrightPurple).
+		Render("lining up the parade…")
+	return "\n\n  " + wordmark + "\n  " + m.spinner.View() + " " + tag + "\n"
+}
+
 // View implements tea.Model.
 func (m Model) View() tea.View {
 	if !m.ready {
-		return altView("Loading...")
+		return altView(m.loadingView())
 	}
 
 	header := m.header.View()
