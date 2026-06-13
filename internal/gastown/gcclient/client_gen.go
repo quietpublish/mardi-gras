@@ -90,6 +90,26 @@ type AsyncAcceptedBody struct {
 	Status string `json:"status"`
 }
 
+// Bead defines model for Bead.
+type Bead struct {
+	Assignee     *string            `json:"assignee,omitempty"`
+	CreatedAt    time.Time          `json:"created_at"`
+	Dependencies *[]Dep             `json:"dependencies,omitempty"`
+	Description  *string            `json:"description,omitempty"`
+	Ephemeral    *bool              `json:"ephemeral,omitempty"`
+	From         *string            `json:"from,omitempty"`
+	Id           string             `json:"id"`
+	IssueType    string             `json:"issue_type"`
+	Labels       *[]string          `json:"labels,omitempty"`
+	Metadata     *map[string]string `json:"metadata,omitempty"`
+	Needs        *[]string          `json:"needs,omitempty"`
+	Parent       *string            `json:"parent,omitempty"`
+	Priority     *int64             `json:"priority,omitempty"`
+	Ref          *string            `json:"ref,omitempty"`
+	Status       string             `json:"status"`
+	Title        string             `json:"title"`
+}
+
 // CityInfo defines model for CityInfo.
 type CityInfo struct {
 	Error           *string   `json:"error,omitempty"`
@@ -98,6 +118,42 @@ type CityInfo struct {
 	PhasesCompleted *[]string `json:"phases_completed,omitempty"`
 	Running         bool      `json:"running"`
 	Status          *string   `json:"status,omitempty"`
+}
+
+// ConvoyCreateInputBody defines model for ConvoyCreateInputBody.
+type ConvoyCreateInputBody struct {
+	// Items Bead IDs to include.
+	Items *[]string `json:"items,omitempty"`
+
+	// Rig Rig name.
+	Rig *string `json:"rig,omitempty"`
+
+	// Title Convoy title.
+	Title string `json:"title"`
+}
+
+// ConvoyGetResponse defines model for ConvoyGetResponse.
+type ConvoyGetResponse struct {
+	// Children Direct child beads (non-workflow case).
+	Children *[]Bead         `json:"children,omitempty"`
+	Convoy   *Bead           `json:"convoy,omitempty"`
+	Progress *ConvoyProgress `json:"progress,omitempty"`
+}
+
+// ConvoyProgress defines model for ConvoyProgress.
+type ConvoyProgress struct {
+	// Closed Closed child bead count.
+	Closed int64 `json:"closed"`
+
+	// Total Total child bead count.
+	Total int64 `json:"total"`
+}
+
+// Dep defines model for Dep.
+type Dep struct {
+	DependsOnId string `json:"depends_on_id"`
+	IssueId     string `json:"issue_id"`
+	Type        string `json:"type"`
 }
 
 // ErrorDetail defines model for ErrorDetail.
@@ -179,6 +235,24 @@ type FormulaVarDefResponse struct {
 type ListBodyAgentResponse struct {
 	// Items The list of items.
 	Items *[]AgentResponse `json:"items"`
+
+	// NextCursor Cursor for the next page of results.
+	NextCursor *string `json:"next_cursor,omitempty"`
+
+	// Partial True when one or more backends failed and the list is incomplete.
+	Partial *bool `json:"partial,omitempty"`
+
+	// PartialErrors Human-readable errors from backends that failed during aggregation.
+	PartialErrors *[]string `json:"partial_errors,omitempty"`
+
+	// Total Total number of items matching the query.
+	Total int64 `json:"total"`
+}
+
+// ListBodyBead defines model for ListBodyBead.
+type ListBodyBead struct {
+	// Items The list of items.
+	Items *[]Bead `json:"items"`
 
 	// NextCursor Cursor for the next page of results.
 	NextCursor *string `json:"next_cursor,omitempty"`
@@ -336,6 +410,52 @@ type SessionSubmitInputBody struct {
 
 	// Message Message text to submit.
 	Message string `json:"message"`
+}
+
+// SlingInputBody defines model for SlingInputBody.
+type SlingInputBody struct {
+	// AttachedBeadId Bead ID to attach a formula to.
+	AttachedBeadId *string `json:"attached_bead_id,omitempty"`
+
+	// Bead Bead ID to sling.
+	Bead *string `json:"bead,omitempty"`
+
+	// Force Bypass cross-rig guards; for direct bead routes, also bypass missing-bead validation. Formula-backed graph routes may replace existing live workflow roots but still require the source bead to exist.
+	Force *bool `json:"force,omitempty"`
+
+	// Formula Formula name for workflow launch.
+	Formula *string `json:"formula,omitempty"`
+
+	// Rig Rig name.
+	Rig *string `json:"rig,omitempty"`
+
+	// ScopeKind Scope kind (city or rig).
+	ScopeKind *string `json:"scope_kind,omitempty"`
+
+	// ScopeRef Scope reference.
+	ScopeRef *string `json:"scope_ref,omitempty"`
+
+	// Target Target agent or pool.
+	Target string `json:"target"`
+
+	// Title Workflow title.
+	Title *string `json:"title,omitempty"`
+
+	// Vars Formula variables.
+	Vars *map[string]string `json:"vars,omitempty"`
+}
+
+// SlingResponse defines model for SlingResponse.
+type SlingResponse struct {
+	AttachedBeadId *string   `json:"attached_bead_id,omitempty"`
+	Bead           *string   `json:"bead,omitempty"`
+	Formula        *string   `json:"formula,omitempty"`
+	Mode           *string   `json:"mode,omitempty"`
+	RootBeadId     *string   `json:"root_bead_id,omitempty"`
+	Status         string    `json:"status"`
+	Target         string    `json:"target"`
+	Warnings       *[]string `json:"warnings,omitempty"`
+	WorkflowId     *string   `json:"workflow_id,omitempty"`
 }
 
 // StatusAgentCounts defines model for StatusAgentCounts.
@@ -566,6 +686,33 @@ type GetV0CityByCityNameAgentsParams struct {
 // GetV0CityByCityNameAgentsParamsRunning defines parameters for GetV0CityByCityNameAgents.
 type GetV0CityByCityNameAgentsParamsRunning string
 
+// PostV0CityByCityNameConvoyByIdCloseParams defines parameters for PostV0CityByCityNameConvoyByIdClose.
+type PostV0CityByCityNameConvoyByIdCloseParams struct {
+	// XGCRequest Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.
+	XGCRequest string `json:"X-GC-Request"`
+}
+
+// GetV0CityByCityNameConvoysParams defines parameters for GetV0CityByCityNameConvoys.
+type GetV0CityByCityNameConvoysParams struct {
+	// Index Event sequence number; when provided, blocks until a newer event arrives.
+	Index *string `form:"index,omitempty" json:"index,omitempty"`
+
+	// Wait How long to block waiting for changes (Go duration string, e.g. 30s). Default 30s, max 2m.
+	Wait *string `form:"wait,omitempty" json:"wait,omitempty"`
+
+	// Cursor Pagination cursor from a previous response's next_cursor field.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Limit Maximum number of results to return. 0 = server default.
+	Limit *int64 `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// CreateConvoyParams defines parameters for CreateConvoy.
+type CreateConvoyParams struct {
+	// XGCRequest Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.
+	XGCRequest string `json:"X-GC-Request"`
+}
+
 // GetV0CityByCityNameFormulasParams defines parameters for GetV0CityByCityNameFormulas.
 type GetV0CityByCityNameFormulasParams struct {
 	// ScopeKind Scope kind (city or rig).
@@ -671,6 +818,12 @@ type GetV0CityByCityNameSessionsParams struct {
 	Peek *bool `form:"peek,omitempty" json:"peek,omitempty"`
 }
 
+// PostV0CityByCityNameSlingParams defines parameters for PostV0CityByCityNameSling.
+type PostV0CityByCityNameSlingParams struct {
+	// XGCRequest Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.
+	XGCRequest string `json:"X-GC-Request"`
+}
+
 // GetV0CityByCityNameStatusParams defines parameters for GetV0CityByCityNameStatus.
 type GetV0CityByCityNameStatusParams struct {
 	// Index Event sequence number; when provided, blocks until a newer event arrives.
@@ -680,6 +833,9 @@ type GetV0CityByCityNameStatusParams struct {
 	Wait *string `form:"wait,omitempty" json:"wait,omitempty"`
 }
 
+// CreateConvoyJSONRequestBody defines body for CreateConvoy for application/json ContentType.
+type CreateConvoyJSONRequestBody = ConvoyCreateInputBody
+
 // SendMailJSONRequestBody defines body for SendMail for application/json ContentType.
 type SendMailJSONRequestBody = MailSendInputBody
 
@@ -688,6 +844,9 @@ type ReplyMailJSONRequestBody = MailReplyInputBody
 
 // SubmitSessionJSONRequestBody defines body for SubmitSession for application/json ContentType.
 type SubmitSessionJSONRequestBody = SessionSubmitInputBody
+
+// PostV0CityByCityNameSlingJSONRequestBody defines body for PostV0CityByCityNameSling for application/json ContentType.
+type PostV0CityByCityNameSlingJSONRequestBody = SlingInputBody
 
 // RequestEditorFn  is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -768,6 +927,20 @@ type ClientInterface interface {
 	// GetV0CityByCityNameAgents request
 	GetV0CityByCityNameAgents(ctx context.Context, cityName string, params *GetV0CityByCityNameAgentsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetV0CityByCityNameConvoyById request
+	GetV0CityByCityNameConvoyById(ctx context.Context, cityName string, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostV0CityByCityNameConvoyByIdClose request
+	PostV0CityByCityNameConvoyByIdClose(ctx context.Context, cityName string, id string, params *PostV0CityByCityNameConvoyByIdCloseParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetV0CityByCityNameConvoys request
+	GetV0CityByCityNameConvoys(ctx context.Context, cityName string, params *GetV0CityByCityNameConvoysParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateConvoyWithBody request with any body
+	CreateConvoyWithBody(ctx context.Context, cityName string, params *CreateConvoyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CreateConvoy(ctx context.Context, cityName string, params *CreateConvoyParams, body CreateConvoyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetV0CityByCityNameFormulas request
 	GetV0CityByCityNameFormulas(ctx context.Context, cityName string, params *GetV0CityByCityNameFormulasParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -804,6 +977,11 @@ type ClientInterface interface {
 	// GetV0CityByCityNameSessions request
 	GetV0CityByCityNameSessions(ctx context.Context, cityName string, params *GetV0CityByCityNameSessionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PostV0CityByCityNameSlingWithBody request with any body
+	PostV0CityByCityNameSlingWithBody(ctx context.Context, cityName string, params *PostV0CityByCityNameSlingParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostV0CityByCityNameSling(ctx context.Context, cityName string, params *PostV0CityByCityNameSlingParams, body PostV0CityByCityNameSlingJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetV0CityByCityNameStatus request
 	GetV0CityByCityNameStatus(ctx context.Context, cityName string, params *GetV0CityByCityNameStatusParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
@@ -822,6 +1000,66 @@ func (c *Client) GetV0Cities(ctx context.Context, reqEditors ...RequestEditorFn)
 
 func (c *Client) GetV0CityByCityNameAgents(ctx context.Context, cityName string, params *GetV0CityByCityNameAgentsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetV0CityByCityNameAgentsRequest(c.Server, cityName, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetV0CityByCityNameConvoyById(ctx context.Context, cityName string, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetV0CityByCityNameConvoyByIdRequest(c.Server, cityName, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostV0CityByCityNameConvoyByIdClose(ctx context.Context, cityName string, id string, params *PostV0CityByCityNameConvoyByIdCloseParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostV0CityByCityNameConvoyByIdCloseRequest(c.Server, cityName, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetV0CityByCityNameConvoys(ctx context.Context, cityName string, params *GetV0CityByCityNameConvoysParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetV0CityByCityNameConvoysRequest(c.Server, cityName, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateConvoyWithBody(ctx context.Context, cityName string, params *CreateConvoyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateConvoyRequestWithBody(c.Server, cityName, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateConvoy(ctx context.Context, cityName string, params *CreateConvoyParams, body CreateConvoyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateConvoyRequest(c.Server, cityName, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -988,6 +1226,30 @@ func (c *Client) GetV0CityByCityNameSessions(ctx context.Context, cityName strin
 	return c.Client.Do(req)
 }
 
+func (c *Client) PostV0CityByCityNameSlingWithBody(ctx context.Context, cityName string, params *PostV0CityByCityNameSlingParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostV0CityByCityNameSlingRequestWithBody(c.Server, cityName, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostV0CityByCityNameSling(ctx context.Context, cityName string, params *PostV0CityByCityNameSlingParams, body PostV0CityByCityNameSlingJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostV0CityByCityNameSlingRequest(c.Server, cityName, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetV0CityByCityNameStatus(ctx context.Context, cityName string, params *GetV0CityByCityNameStatusParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetV0CityByCityNameStatusRequest(c.Server, cityName, params)
 	if err != nil {
@@ -1143,6 +1405,258 @@ func NewGetV0CityByCityNameAgentsRequest(server string, cityName string, params 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetV0CityByCityNameConvoyByIdRequest generates requests for GetV0CityByCityNameConvoyById
+func NewGetV0CityByCityNameConvoyByIdRequest(server string, cityName string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "cityName", cityName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v0/city/%s/convoy/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostV0CityByCityNameConvoyByIdCloseRequest generates requests for PostV0CityByCityNameConvoyByIdClose
+func NewPostV0CityByCityNameConvoyByIdCloseRequest(server string, cityName string, id string, params *PostV0CityByCityNameConvoyByIdCloseParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "cityName", cityName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v0/city/%s/convoy/%s/close", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-GC-Request", params.XGCRequest, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-GC-Request", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGetV0CityByCityNameConvoysRequest generates requests for GetV0CityByCityNameConvoys
+func NewGetV0CityByCityNameConvoysRequest(server string, cityName string, params *GetV0CityByCityNameConvoysParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "cityName", cityName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v0/city/%s/convoys", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Index != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "index", *params.Index, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Wait != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "wait", *params.Wait, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateConvoyRequest calls the generic CreateConvoy builder with application/json body
+func NewCreateConvoyRequest(server string, cityName string, params *CreateConvoyParams, body CreateConvoyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateConvoyRequestWithBody(server, cityName, params, "application/json", bodyReader)
+}
+
+// NewCreateConvoyRequestWithBody generates requests for CreateConvoy with any type of body
+func NewCreateConvoyRequestWithBody(server string, cityName string, params *CreateConvoyParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "cityName", cityName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v0/city/%s/convoys", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-GC-Request", params.XGCRequest, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-GC-Request", headerParam0)
+
 	}
 
 	return req, nil
@@ -1979,6 +2493,66 @@ func NewGetV0CityByCityNameSessionsRequest(server string, cityName string, param
 	return req, nil
 }
 
+// NewPostV0CityByCityNameSlingRequest calls the generic PostV0CityByCityNameSling builder with application/json body
+func NewPostV0CityByCityNameSlingRequest(server string, cityName string, params *PostV0CityByCityNameSlingParams, body PostV0CityByCityNameSlingJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostV0CityByCityNameSlingRequestWithBody(server, cityName, params, "application/json", bodyReader)
+}
+
+// NewPostV0CityByCityNameSlingRequestWithBody generates requests for PostV0CityByCityNameSling with any type of body
+func NewPostV0CityByCityNameSlingRequestWithBody(server string, cityName string, params *PostV0CityByCityNameSlingParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "cityName", cityName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v0/city/%s/sling", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-GC-Request", params.XGCRequest, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-GC-Request", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewGetV0CityByCityNameStatusRequest generates requests for GetV0CityByCityNameStatus
 func NewGetV0CityByCityNameStatusRequest(server string, cityName string, params *GetV0CityByCityNameStatusParams) (*http.Request, error) {
 	var err error
@@ -2101,6 +2675,20 @@ type ClientWithResponsesInterface interface {
 	// GetV0CityByCityNameAgentsWithResponse request
 	GetV0CityByCityNameAgentsWithResponse(ctx context.Context, cityName string, params *GetV0CityByCityNameAgentsParams, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameAgentsResponse, error)
 
+	// GetV0CityByCityNameConvoyByIdWithResponse request
+	GetV0CityByCityNameConvoyByIdWithResponse(ctx context.Context, cityName string, id string, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameConvoyByIdResponse, error)
+
+	// PostV0CityByCityNameConvoyByIdCloseWithResponse request
+	PostV0CityByCityNameConvoyByIdCloseWithResponse(ctx context.Context, cityName string, id string, params *PostV0CityByCityNameConvoyByIdCloseParams, reqEditors ...RequestEditorFn) (*PostV0CityByCityNameConvoyByIdCloseResponse, error)
+
+	// GetV0CityByCityNameConvoysWithResponse request
+	GetV0CityByCityNameConvoysWithResponse(ctx context.Context, cityName string, params *GetV0CityByCityNameConvoysParams, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameConvoysResponse, error)
+
+	// CreateConvoyWithBodyWithResponse request with any body
+	CreateConvoyWithBodyWithResponse(ctx context.Context, cityName string, params *CreateConvoyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateConvoyResponse, error)
+
+	CreateConvoyWithResponse(ctx context.Context, cityName string, params *CreateConvoyParams, body CreateConvoyJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateConvoyResponse, error)
+
 	// GetV0CityByCityNameFormulasWithResponse request
 	GetV0CityByCityNameFormulasWithResponse(ctx context.Context, cityName string, params *GetV0CityByCityNameFormulasParams, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameFormulasResponse, error)
 
@@ -2136,6 +2724,11 @@ type ClientWithResponsesInterface interface {
 
 	// GetV0CityByCityNameSessionsWithResponse request
 	GetV0CityByCityNameSessionsWithResponse(ctx context.Context, cityName string, params *GetV0CityByCityNameSessionsParams, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameSessionsResponse, error)
+
+	// PostV0CityByCityNameSlingWithBodyWithResponse request with any body
+	PostV0CityByCityNameSlingWithBodyWithResponse(ctx context.Context, cityName string, params *PostV0CityByCityNameSlingParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostV0CityByCityNameSlingResponse, error)
+
+	PostV0CityByCityNameSlingWithResponse(ctx context.Context, cityName string, params *PostV0CityByCityNameSlingParams, body PostV0CityByCityNameSlingJSONRequestBody, reqEditors ...RequestEditorFn) (*PostV0CityByCityNameSlingResponse, error)
 
 	// GetV0CityByCityNameStatusWithResponse request
 	GetV0CityByCityNameStatusWithResponse(ctx context.Context, cityName string, params *GetV0CityByCityNameStatusParams, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameStatusResponse, error)
@@ -2197,6 +2790,130 @@ func (r GetV0CityByCityNameAgentsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetV0CityByCityNameAgentsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetV0CityByCityNameConvoyByIdResponse struct {
+	Body                          []byte
+	HTTPResponse                  *http.Response
+	JSON200                       *ConvoyGetResponse
+	ApplicationproblemJSONDefault *ErrorModel
+}
+
+// Status returns HTTPResponse.Status
+func (r GetV0CityByCityNameConvoyByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetV0CityByCityNameConvoyByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetV0CityByCityNameConvoyByIdResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PostV0CityByCityNameConvoyByIdCloseResponse struct {
+	Body                          []byte
+	HTTPResponse                  *http.Response
+	JSON200                       *OKResponseBody
+	ApplicationproblemJSONDefault *ErrorModel
+}
+
+// Status returns HTTPResponse.Status
+func (r PostV0CityByCityNameConvoyByIdCloseResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostV0CityByCityNameConvoyByIdCloseResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostV0CityByCityNameConvoyByIdCloseResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetV0CityByCityNameConvoysResponse struct {
+	Body                          []byte
+	HTTPResponse                  *http.Response
+	JSON200                       *ListBodyBead
+	ApplicationproblemJSONDefault *ErrorModel
+}
+
+// Status returns HTTPResponse.Status
+func (r GetV0CityByCityNameConvoysResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetV0CityByCityNameConvoysResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetV0CityByCityNameConvoysResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateConvoyResponse struct {
+	Body                          []byte
+	HTTPResponse                  *http.Response
+	JSON201                       *Bead
+	ApplicationproblemJSONDefault *ErrorModel
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateConvoyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateConvoyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateConvoyResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -2513,6 +3230,37 @@ func (r GetV0CityByCityNameSessionsResponse) ContentType() string {
 	return ""
 }
 
+type PostV0CityByCityNameSlingResponse struct {
+	Body                          []byte
+	HTTPResponse                  *http.Response
+	JSON200                       *SlingResponse
+	ApplicationproblemJSONDefault *ErrorModel
+}
+
+// Status returns HTTPResponse.Status
+func (r PostV0CityByCityNameSlingResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostV0CityByCityNameSlingResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostV0CityByCityNameSlingResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetV0CityByCityNameStatusResponse struct {
 	Body                          []byte
 	HTTPResponse                  *http.Response
@@ -2560,6 +3308,50 @@ func (c *ClientWithResponses) GetV0CityByCityNameAgentsWithResponse(ctx context.
 		return nil, err
 	}
 	return ParseGetV0CityByCityNameAgentsResponse(rsp)
+}
+
+// GetV0CityByCityNameConvoyByIdWithResponse request returning *GetV0CityByCityNameConvoyByIdResponse
+func (c *ClientWithResponses) GetV0CityByCityNameConvoyByIdWithResponse(ctx context.Context, cityName string, id string, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameConvoyByIdResponse, error) {
+	rsp, err := c.GetV0CityByCityNameConvoyById(ctx, cityName, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetV0CityByCityNameConvoyByIdResponse(rsp)
+}
+
+// PostV0CityByCityNameConvoyByIdCloseWithResponse request returning *PostV0CityByCityNameConvoyByIdCloseResponse
+func (c *ClientWithResponses) PostV0CityByCityNameConvoyByIdCloseWithResponse(ctx context.Context, cityName string, id string, params *PostV0CityByCityNameConvoyByIdCloseParams, reqEditors ...RequestEditorFn) (*PostV0CityByCityNameConvoyByIdCloseResponse, error) {
+	rsp, err := c.PostV0CityByCityNameConvoyByIdClose(ctx, cityName, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostV0CityByCityNameConvoyByIdCloseResponse(rsp)
+}
+
+// GetV0CityByCityNameConvoysWithResponse request returning *GetV0CityByCityNameConvoysResponse
+func (c *ClientWithResponses) GetV0CityByCityNameConvoysWithResponse(ctx context.Context, cityName string, params *GetV0CityByCityNameConvoysParams, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameConvoysResponse, error) {
+	rsp, err := c.GetV0CityByCityNameConvoys(ctx, cityName, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetV0CityByCityNameConvoysResponse(rsp)
+}
+
+// CreateConvoyWithBodyWithResponse request with arbitrary body returning *CreateConvoyResponse
+func (c *ClientWithResponses) CreateConvoyWithBodyWithResponse(ctx context.Context, cityName string, params *CreateConvoyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateConvoyResponse, error) {
+	rsp, err := c.CreateConvoyWithBody(ctx, cityName, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateConvoyResponse(rsp)
+}
+
+func (c *ClientWithResponses) CreateConvoyWithResponse(ctx context.Context, cityName string, params *CreateConvoyParams, body CreateConvoyJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateConvoyResponse, error) {
+	rsp, err := c.CreateConvoy(ctx, cityName, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateConvoyResponse(rsp)
 }
 
 // GetV0CityByCityNameFormulasWithResponse request returning *GetV0CityByCityNameFormulasResponse
@@ -2676,6 +3468,23 @@ func (c *ClientWithResponses) GetV0CityByCityNameSessionsWithResponse(ctx contex
 	return ParseGetV0CityByCityNameSessionsResponse(rsp)
 }
 
+// PostV0CityByCityNameSlingWithBodyWithResponse request with arbitrary body returning *PostV0CityByCityNameSlingResponse
+func (c *ClientWithResponses) PostV0CityByCityNameSlingWithBodyWithResponse(ctx context.Context, cityName string, params *PostV0CityByCityNameSlingParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostV0CityByCityNameSlingResponse, error) {
+	rsp, err := c.PostV0CityByCityNameSlingWithBody(ctx, cityName, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostV0CityByCityNameSlingResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostV0CityByCityNameSlingWithResponse(ctx context.Context, cityName string, params *PostV0CityByCityNameSlingParams, body PostV0CityByCityNameSlingJSONRequestBody, reqEditors ...RequestEditorFn) (*PostV0CityByCityNameSlingResponse, error) {
+	rsp, err := c.PostV0CityByCityNameSling(ctx, cityName, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostV0CityByCityNameSlingResponse(rsp)
+}
+
 // GetV0CityByCityNameStatusWithResponse request returning *GetV0CityByCityNameStatusResponse
 func (c *ClientWithResponses) GetV0CityByCityNameStatusWithResponse(ctx context.Context, cityName string, params *GetV0CityByCityNameStatusParams, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameStatusResponse, error) {
 	rsp, err := c.GetV0CityByCityNameStatus(ctx, cityName, params, reqEditors...)
@@ -2738,6 +3547,138 @@ func ParseGetV0CityByCityNameAgentsResponse(rsp *http.Response) (*GetV0CityByCit
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetV0CityByCityNameConvoyByIdResponse parses an HTTP response from a GetV0CityByCityNameConvoyByIdWithResponse call
+func ParseGetV0CityByCityNameConvoyByIdResponse(rsp *http.Response) (*GetV0CityByCityNameConvoyByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetV0CityByCityNameConvoyByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ConvoyGetResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostV0CityByCityNameConvoyByIdCloseResponse parses an HTTP response from a PostV0CityByCityNameConvoyByIdCloseWithResponse call
+func ParsePostV0CityByCityNameConvoyByIdCloseResponse(rsp *http.Response) (*PostV0CityByCityNameConvoyByIdCloseResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostV0CityByCityNameConvoyByIdCloseResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OKResponseBody
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetV0CityByCityNameConvoysResponse parses an HTTP response from a GetV0CityByCityNameConvoysWithResponse call
+func ParseGetV0CityByCityNameConvoysResponse(rsp *http.Response) (*GetV0CityByCityNameConvoysResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetV0CityByCityNameConvoysResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ListBodyBead
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateConvoyResponse parses an HTTP response from a CreateConvoyWithResponse call
+func ParseCreateConvoyResponse(rsp *http.Response) (*CreateConvoyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateConvoyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Bead
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest ErrorModel
@@ -3064,6 +4005,39 @@ func ParseGetV0CityByCityNameSessionsResponse(rsp *http.Response) (*GetV0CityByC
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest ListBodySessionResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostV0CityByCityNameSlingResponse parses an HTTP response from a PostV0CityByCityNameSlingWithResponse call
+func ParsePostV0CityByCityNameSlingResponse(rsp *http.Response) (*PostV0CityByCityNameSlingResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostV0CityByCityNameSlingResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SlingResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

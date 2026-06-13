@@ -2,6 +2,7 @@ package gastown
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -141,9 +142,6 @@ func TestGCDriverStatusServerError(t *testing.T) {
 func TestGCDriverUnsupportedOps(t *testing.T) {
 	d, _ := NewGCDriver("http://127.0.0.1:8080", "")
 	ctx := context.Background()
-	if err := d.Sling(ctx, SlingRequest{IssueIDs: []string{"x"}}); !errors.Is(err, ErrUnsupported) {
-		t.Errorf("Sling err = %v, want ErrUnsupported", err)
-	}
 	if _, err := d.Vitals(ctx); !errors.Is(err, ErrUnsupported) {
 		t.Errorf("Vitals err = %v, want ErrUnsupported", err)
 	}
@@ -152,6 +150,17 @@ func TestGCDriverUnsupportedOps(t *testing.T) {
 	}
 	if err := d.CascadeClose(ctx, "x"); !errors.Is(err, ErrUnsupported) {
 		t.Errorf("CascadeClose err = %v, want ErrUnsupported", err)
+	}
+	if err := d.ConvoyLand(ctx, "x"); !errors.Is(err, ErrUnsupported) {
+		t.Errorf("ConvoyLand err = %v, want ErrUnsupported", err)
+	}
+}
+
+func TestGCDriverSlingRequiresTarget(t *testing.T) {
+	d, _ := NewGCDriver("http://127.0.0.1:8080", "")
+	err := d.Sling(context.Background(), SlingRequest{IssueIDs: []string{"x"}})
+	if err == nil || !strings.Contains(err.Error(), "target") {
+		t.Errorf("Sling without target err = %v, want a 'target required' error", err)
 	}
 }
 
@@ -468,6 +477,108 @@ func TestGCSessionMatches(t *testing.T) {
 	}
 	if gcSessionMatches(sess, "") {
 		t.Error("gcSessionMatches should not match empty target")
+	}
+}
+
+func TestGCDriverConvoyListAndStatus(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v0/city/mardi_gras/convoys", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[{"id":"cv-1","title":"Release batch","status":"open","issue_type":"convoy"}],"total":1}`))
+	})
+	mux.HandleFunc("/v0/city/mardi_gras/convoy/cv-1", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"convoy":{"id":"cv-1","title":"Release batch","status":"open","issue_type":"convoy"},` +
+			`"children":[{"id":"b-1","title":"task A","status":"closed","issue_type":"task","assignee":"obsidian"},` +
+			`{"id":"b-2","title":"task B","status":"open","issue_type":"task"}],"progress":{"total":2,"closed":1}}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	d, _ := NewGCDriver(srv.URL, "mardi_gras")
+	ctx := context.Background()
+
+	list, err := d.ConvoyList(ctx)
+	if err != nil {
+		t.Fatalf("ConvoyList: %v", err)
+	}
+	if len(list) != 1 || list[0].ID != "cv-1" || list[0].Title != "Release batch" || list[0].Status != "open" {
+		t.Errorf("ConvoyList = %+v", list)
+	}
+
+	cd, err := d.ConvoyStatus(ctx, "cv-1")
+	if err != nil {
+		t.Fatalf("ConvoyStatus: %v", err)
+	}
+	if cd.Total != 2 || cd.Completed != 1 || cd.ProgressPct != 50 {
+		t.Errorf("progress = total %d completed %d pct %v", cd.Total, cd.Completed, cd.ProgressPct)
+	}
+	if len(cd.Tracked) != 2 || cd.Tracked[0].ID != "b-1" || cd.Tracked[0].Worker != "obsidian" || cd.Tracked[0].Status != "closed" {
+		t.Errorf("tracked = %+v", cd.Tracked)
+	}
+}
+
+func TestGCDriverConvoyCreateClose(t *testing.T) {
+	var csrf string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v0/city/mardi_gras/convoys", func(w http.ResponseWriter, r *http.Request) {
+		csrf = r.Header.Get("X-GC-Request")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"cv-new","title":"batch","status":"open","issue_type":"convoy"}`))
+	})
+	mux.HandleFunc("/v0/city/mardi_gras/convoy/cv-new/close", func(w http.ResponseWriter, r *http.Request) {
+		csrf = r.Header.Get("X-GC-Request")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	d, _ := NewGCDriver(srv.URL, "mardi_gras")
+	ctx := context.Background()
+
+	id, err := d.ConvoyCreate(ctx, "batch", []string{"b-1", "b-2"})
+	if err != nil {
+		t.Fatalf("ConvoyCreate: %v", err)
+	}
+	if id != "cv-new" {
+		t.Errorf("ConvoyCreate id = %q, want cv-new", id)
+	}
+	if csrf == "" {
+		t.Error("X-GC-Request not sent on convoy create")
+	}
+	csrf = ""
+	if err := d.ConvoyClose(ctx, "cv-new"); err != nil {
+		t.Fatalf("ConvoyClose: %v", err)
+	}
+	if csrf == "" {
+		t.Error("X-GC-Request not sent on convoy close")
+	}
+}
+
+func TestGCDriverSling(t *testing.T) {
+	var csrf, gotTarget, gotBead string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		csrf = r.Header.Get("X-GC-Request")
+		var body struct {
+			Target string `json:"target"`
+			Bead   string `json:"bead"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		gotTarget, gotBead = body.Target, body.Bead
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(srv.Close)
+	d, _ := NewGCDriver(srv.URL, "mardi_gras")
+	err := d.Sling(context.Background(), SlingRequest{IssueIDs: []string{"b-7"}, Target: "mayor", Formula: "shiny"})
+	if err != nil {
+		t.Fatalf("Sling: %v", err)
+	}
+	if gotTarget != "mayor" || gotBead != "b-7" {
+		t.Errorf("sling body target=%q bead=%q, want mayor/b-7", gotTarget, gotBead)
+	}
+	if csrf == "" {
+		t.Error("X-GC-Request not sent on sling")
 	}
 }
 

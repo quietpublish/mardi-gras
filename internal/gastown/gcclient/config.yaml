@@ -27,3 +27,10 @@ output-options:
     - get-v0-city-by-city-name-sessions
     - submit-session
     - post-v0-city-by-city-name-session-by-id-kill
+    # Convoys (modeled as beads)
+    - get-v0-city-by-city-name-convoys
+    - get-v0-city-by-city-name-convoy-by-id
+    - create-convoy
+    - post-v0-city-by-city-name-convoy-by-id-close
+    # Sling
+    - post-v0-city-by-city-name-sling

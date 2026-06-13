@@ -2,6 +2,11 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## Unreleased
+
+### Added
+- **Gas City convoys + sling** — closes the remaining Gas City gaps. Convoys (`ctrl+g` panel) list/create/close over the Supervisor API, where Gas City models a convoy as a bead. Agent dispatch (`a`) works too: because Gas City requires an explicit target agent (unlike gt's auto-pick), `a` on the Gas City backend prompts for a target before slinging. `convoy land`/`watch`/`unwatch` have no Gas City endpoint and stay unavailable there. Validated against a live `gc` v1.2.1 supervisor.
+
 ## v0.24.0 (2026-06-12)
 
 The Gas City release. Mardi Gras can now drive [Gas City](https://github.com/gastownhall/gascity) (`gc`) — Gas Town's pack-based successor — through its Supervisor HTTP API, alongside the existing Gas Town CLI backend. It's opt-in via `MG_GC_API`; without it, behavior is unchanged. (This release also carries the codex MCP approval routing prepared as v0.23.0, which was never tagged — see below.)

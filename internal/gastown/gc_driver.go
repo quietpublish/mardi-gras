@@ -471,6 +471,149 @@ func gcSessionMatches(s gcclient.SessionResponse, want string) bool {
 	return false
 }
 
+// --- sling -----------------------------------------------------------------
+
+// Sling dispatches each issue via POST /v0/city/{city}/sling. Gas City requires
+// an explicit Target agent/pool (unlike gt, which auto-picks), so the caller
+// must set SlingRequest.Target — mg prompts for it. gt's Agent runtime-override
+// has no Gas City analogue and is ignored.
+func (d *GCDriver) Sling(ctx context.Context, req SlingRequest) error {
+	if strings.TrimSpace(req.Target) == "" {
+		return fmt.Errorf("gc sling: a target agent is required")
+	}
+	city, err := d.resolveCity(ctx)
+	if err != nil {
+		return err
+	}
+	for _, id := range req.IssueIDs {
+		bead := id
+		body := gcclient.PostV0CityByCityNameSlingJSONRequestBody{Target: req.Target, Bead: &bead}
+		if req.Formula != "" {
+			body.Formula = &req.Formula
+		}
+		if req.Rig != "" {
+			body.Rig = &req.Rig
+		}
+		if req.Force {
+			force := true
+			body.Force = &force
+		}
+		resp, err := d.client.PostV0CityByCityNameSlingWithResponse(ctx, city,
+			&gcclient.PostV0CityByCityNameSlingParams{XGCRequest: gcRequestToken}, body)
+		if err != nil {
+			return fmt.Errorf("gc sling %s: %w", id, err)
+		}
+		if e := gcMutationErr("gc sling "+id, resp.StatusCode(), resp.ApplicationproblemJSONDefault); e != nil {
+			return e
+		}
+	}
+	return nil
+}
+
+// --- convoys (Gas City models a convoy as a bead) --------------------------
+
+// ConvoyList returns the open convoys via GET /v0/city/{city}/convoys. The list
+// carries only the convoy beads (id/title/status); per-convoy progress and
+// tracked issues come from ConvoyStatus.
+func (d *GCDriver) ConvoyList(ctx context.Context) ([]ConvoyDetail, error) {
+	city, err := d.resolveCity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := d.client.GetV0CityByCityNameConvoysWithResponse(ctx, city, nil)
+	if err != nil {
+		return nil, fmt.Errorf("gc convoys: %w", err)
+	}
+	if resp.JSON200 == nil {
+		return nil, fmt.Errorf("gc convoys: %s", gcRespErr(resp.StatusCode(), resp.ApplicationproblemJSONDefault))
+	}
+	var out []ConvoyDetail
+	if resp.JSON200.Items != nil {
+		out = make([]ConvoyDetail, 0, len(*resp.JSON200.Items))
+		for _, b := range *resp.JSON200.Items {
+			out = append(out, ConvoyDetail{ID: b.Id, Title: b.Title, Status: b.Status})
+		}
+	}
+	return out, nil
+}
+
+// ConvoyStatus returns a convoy's detail via GET /v0/city/{city}/convoy/{id},
+// folding the child beads into Tracked and the progress counts into Total/
+// Completed/ProgressPct.
+func (d *GCDriver) ConvoyStatus(ctx context.Context, convoyID string) (*ConvoyDetail, error) {
+	city, err := d.resolveCity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := d.client.GetV0CityByCityNameConvoyByIdWithResponse(ctx, city, convoyID)
+	if err != nil {
+		return nil, fmt.Errorf("gc convoy: %w", err)
+	}
+	if resp.JSON200 == nil {
+		return nil, fmt.Errorf("gc convoy: %s", gcRespErr(resp.StatusCode(), resp.ApplicationproblemJSONDefault))
+	}
+	cg := resp.JSON200
+	cd := &ConvoyDetail{}
+	if cg.Convoy != nil {
+		cd.ID, cd.Title, cd.Status = cg.Convoy.Id, cg.Convoy.Title, cg.Convoy.Status
+	}
+	if cg.Progress != nil {
+		cd.Total = int(cg.Progress.Total)
+		cd.Completed = int(cg.Progress.Closed)
+		if cd.Total > 0 {
+			cd.ProgressPct = float64(cd.Completed) / float64(cd.Total) * 100
+		}
+	}
+	if cg.Children != nil {
+		for _, c := range *cg.Children {
+			cd.Tracked = append(cd.Tracked, TrackedIssueInfo{
+				ID:        c.Id,
+				Title:     c.Title,
+				Status:    c.Status,
+				IssueType: c.IssueType,
+				Worker:    derefString(c.Assignee),
+			})
+		}
+	}
+	return cd, nil
+}
+
+// ConvoyCreate creates a convoy (a bead) tracking the given issues via
+// POST /v0/city/{city}/convoys, returning the new convoy's bead id.
+func (d *GCDriver) ConvoyCreate(ctx context.Context, name string, issueIDs []string) (string, error) {
+	city, err := d.resolveCity(ctx)
+	if err != nil {
+		return "", err
+	}
+	body := gcclient.CreateConvoyJSONRequestBody{Title: name}
+	if len(issueIDs) > 0 {
+		body.Items = &issueIDs
+	}
+	resp, err := d.client.CreateConvoyWithResponse(ctx, city,
+		&gcclient.CreateConvoyParams{XGCRequest: gcRequestToken}, body)
+	if err != nil {
+		return "", fmt.Errorf("gc convoy create: %w", err)
+	}
+	if resp.JSON201 == nil {
+		return "", fmt.Errorf("gc convoy create: %s", gcRespErr(resp.StatusCode(), resp.ApplicationproblemJSONDefault))
+	}
+	return resp.JSON201.Id, nil
+}
+
+// ConvoyClose closes a convoy via POST /v0/city/{city}/convoy/{id}/close.
+func (d *GCDriver) ConvoyClose(ctx context.Context, convoyID string) error {
+	city, err := d.resolveCity(ctx)
+	if err != nil {
+		return err
+	}
+	resp, err := d.client.PostV0CityByCityNameConvoyByIdCloseWithResponse(ctx, city, convoyID,
+		&gcclient.PostV0CityByCityNameConvoyByIdCloseParams{XGCRequest: gcRequestToken})
+	if err != nil {
+		return fmt.Errorf("gc convoy close: %w", err)
+	}
+	return gcMutationErr("gc convoy close", resp.StatusCode(), resp.ApplicationproblemJSONDefault)
+}
+
 // --- unsupported operations -------------------------------------------------
 //
 // These either have no Gas City endpoint (Unsling, ConvoyLand/Watch/Unwatch),
@@ -482,8 +625,6 @@ func gcSessionMatches(s gcclient.SessionResponse, want string) bool {
 
 func (*GCDriver) Comments(context.Context, string) ([]Comment, error) { return nil, ErrUnsupported }
 
-func (*GCDriver) Sling(context.Context, SlingRequest) error { return ErrUnsupported }
-
 func (*GCDriver) Unsling(context.Context, string) error { return ErrUnsupported }
 
 func (*GCDriver) CascadeClose(context.Context, string) error { return ErrUnsupported }
@@ -492,21 +633,13 @@ func (*GCDriver) Assign(context.Context, string, string, string, string, string,
 	return "", ErrUnsupported
 }
 
-func (*GCDriver) ConvoyList(context.Context) ([]ConvoyDetail, error) { return nil, ErrUnsupported }
-
-func (*GCDriver) ConvoyStatus(context.Context, string) (*ConvoyDetail, error) {
-	return nil, ErrUnsupported
-}
-
-func (*GCDriver) ConvoyCreate(context.Context, string, []string) (string, error) {
-	return "", ErrUnsupported
-}
+// ConvoyCreateFromEpic, ConvoyLand, ConvoyWatch, and ConvoyUnwatch have no Gas
+// City endpoint (land is a CLI-only composite; watch/unwatch and --from-epic are
+// gt concepts), so they stay ErrUnsupported.
 
 func (*GCDriver) ConvoyCreateFromEpic(context.Context, string, string) (string, error) {
 	return "", ErrUnsupported
 }
-
-func (*GCDriver) ConvoyClose(context.Context, string) error { return ErrUnsupported }
 
 func (*GCDriver) ConvoyLand(context.Context, string) error { return ErrUnsupported }
 

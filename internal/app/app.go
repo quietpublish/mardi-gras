@@ -117,6 +117,12 @@ type Model struct {
 	nudgeInput  textinput.Model
 	nudgeTarget string
 
+	// Sling target prompt (Gas City dispatch needs an explicit target agent)
+	slingTargeting     bool
+	slingTargetInput   textinput.Model
+	slingTargetIDs     []string
+	slingTargetFormula string
+
 	// Quick-action input state (comment, note, assign, label, link)
 	qaMode  string // "comment", "note", "assign", "label", "link"
 	qaInput textinput.Model
@@ -490,6 +496,21 @@ func slingMultipleWithRuntime(driver gastown.Driver, ids []string, runtime agent
 	return driver.Sling(context.Background(), req)
 }
 
+// openSlingTarget opens the target-agent prompt for a Gas City sling. Gas City
+// requires an explicit target (unlike gt's auto-pick), so dispatch on the `gc`
+// backend routes through here to collect one before slinging.
+func (m Model) openSlingTarget(ids []string, formula string) (tea.Model, tea.Cmd) {
+	m.slingTargeting = true
+	m.slingTargetIDs = ids
+	m.slingTargetFormula = formula
+	m.slingTargetInput = textinput.New()
+	m.slingTargetInput.Prompt = ui.InputPrompt.Render("sling to> ")
+	m.slingTargetInput.Placeholder = "target agent or pool (e.g. mayor)"
+	m.slingTargetInput.SetWidth(50)
+	m.slingTargetInput.Focus()
+	return m, textinput.Blink
+}
+
 type nudgeResultMsg struct {
 	target  string
 	message string
@@ -721,6 +742,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				ids := m.formulaMulti
 				m.formulaMulti = nil
 				m.formulaTarget = ""
+				// Gas City needs a target agent — prompt, carrying the formula.
+				if driver.Backend() == "gascity" {
+					return m.openSlingTarget(ids, formula)
+				}
 				return m, func() tea.Msg {
 					err := driver.Sling(context.Background(), gastown.SlingRequest{IssueIDs: ids, Formula: formula})
 					return multiSlingResultMsg{count: len(ids), formula: formula, err: err}
@@ -728,6 +753,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			issueID := m.formulaTarget
 			m.formulaTarget = ""
+			if driver.Backend() == "gascity" {
+				return m.openSlingTarget([]string{issueID}, formula)
+			}
 			return m, func() tea.Msg {
 				err := driver.Sling(context.Background(), gastown.SlingRequest{IssueIDs: []string{issueID}, Formula: formula})
 				return slingResultMsg{issueID: issueID, formula: formula, err: err}
@@ -821,6 +849,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.nudgeInput, cmd = m.nudgeInput.Update(msg)
+		return m, cmd
+	}
+
+	if m.slingTargeting {
+		if km, ok := msg.(tea.KeyPressMsg); ok {
+			switch km.String() {
+			case "ctrl+c":
+				return m, tea.Quit
+			case "esc":
+				m.slingTargeting = false
+				m.slingTargetIDs = nil
+				m.slingTargetFormula = ""
+				return m, nil
+			case "enter":
+				target := strings.TrimSpace(m.slingTargetInput.Value())
+				if target == "" {
+					return m, nil // a target is required
+				}
+				m.slingTargeting = false
+				ids := m.slingTargetIDs
+				formula := m.slingTargetFormula
+				m.slingTargetIDs = nil
+				m.slingTargetFormula = ""
+				driver := m.driver
+				return m, func() tea.Msg {
+					err := driver.Sling(context.Background(), gastown.SlingRequest{
+						IssueIDs: ids, Target: target, Formula: formula,
+					})
+					if len(ids) == 1 {
+						return slingResultMsg{issueID: ids[0], formula: formula, err: err}
+					}
+					return multiSlingResultMsg{count: len(ids), formula: formula, err: err}
+				}
+			}
+		}
+		var cmd tea.Cmd
+		m.slingTargetInput, cmd = m.slingTargetInput.Update(msg)
 		return m, cmd
 	}
 
@@ -1971,6 +2036,25 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.createAndSwitchBranch()
 
 	case "a":
+		// Gas City dispatch needs an explicit target agent — prompt for it
+		// (single or multi), then sling through the target prompt.
+		if m.driver.Backend() == "gascity" {
+			var ids []string
+			if selected := m.parade.SelectedIssues(); len(selected) > 0 {
+				ids = make([]string, len(selected))
+				for i, iss := range selected {
+					ids[i] = iss.ID
+				}
+				m.parade.ClearSelection()
+			} else if issue := m.parade.SelectedIssue; issue != nil {
+				ids = []string{issue.ID}
+			}
+			if len(ids) == 0 {
+				return m, nil
+			}
+			return m.openSlingTarget(ids, "")
+		}
+
 		// Multi-sling with Gas Town
 		if selected := m.parade.SelectedIssues(); len(selected) > 0 && m.gtEnv.Available {
 			ids := make([]string, len(selected))
@@ -3524,6 +3608,8 @@ func (m Model) View() tea.View {
 		bottomBar = components.BulkFooter(m.width, m.parade.SelectionCount(), m.gtEnv.Available)
 	case m.nudging:
 		bottomBar = inputBarStyle.Render(m.nudgeInput.View())
+	case m.slingTargeting:
+		bottomBar = inputBarStyle.Render(m.slingTargetInput.View())
 	case m.qaMode != "":
 		bottomBar = inputBarStyle.Render(m.qaInput.View())
 	case m.mailComposing:

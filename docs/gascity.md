@@ -2,7 +2,7 @@
 
 [Gas City](https://github.com/gastownhall/gascity) (`gc`) is a pack-based rewrite of Gas Town that exposes a typed **Supervisor HTTP API** instead of a CLI. Mardi Gras can drive Gas City through that API as an alternative to Gas Town.
 
-> **Status: opt-in.** Today the Gas City backend powers the live agent roster, mail, formula listing, nudge, and decommission. Agent dispatch (sling) and convoys are **not yet** wired to Gas City — use [Gas Town](gastown.md) for those. See [What works today](#what-works-today) for the exact matrix.
+> **Status: opt-in.** The Gas City backend powers the agent roster, mail, formulas, nudge, decommission, agent dispatch (sling), and convoys. A few gt-only operations (`convoy land`/`watch`/`unwatch`, vitals/costs/patrol) have no Gas City equivalent. See [What works today](#what-works-today) for the exact matrix.
 
 ## How it works
 
@@ -34,8 +34,8 @@ The supervisor binds a **dynamically assigned** TCP port (not a fixed one), logg
 | Mail — inbox, read, reply, send, archive, mark-read | ✅ | mutations send the required `X-GC-Request` header |
 | Formula listing | ✅ | scoped to the city |
 | Nudge (`n`) / decommission (`K`) | ✅ | resolves the roster agent to a live session, then submits a message / kills the session |
-| Agent dispatch (sling, `a`) | ⛔ not yet | Gas City requires an explicit target agent; needs a target-picker flow |
-| Convoys | ⛔ not yet | modeled as beads in Gas City; adapter pending |
+| Agent dispatch (sling, `a`) | ✅ | Gas City requires an explicit target agent (unlike gt's auto-pick), so `a` prompts for a target before slinging |
+| Convoys — list / create (`C`) / close | ✅ | Gas City models a convoy as a bead; `land`/`watch`/`unwatch` have no Gas City endpoint |
 | Vitals / costs / patrol | — | no Gas City equivalent; these panels stay empty |
 
 Operations not yet supported on Gas City surface as no-ops or empty sections rather than errors. For anything in the ⛔ rows, run mg against Gas Town (`gt`) instead.
