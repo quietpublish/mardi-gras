@@ -12,6 +12,8 @@ Mardi Gras talks to an orchestrator through a single `Driver` seam (`internal/ga
 
 Gas City is **opt-in via the `MG_GC_API` environment variable** — without it, mg uses the Gas Town driver. You need a running Gas City supervisor (`gc start` against an initialized city).
 
+The control surface activates whenever an orchestrator is reachable — Gas Town (`gt` on PATH) **or** a configured Gas City supervisor — so `MG_GC_API` lights up the panel, roster, and actions even on a box with **no `gt` installed at all**.
+
 ```bash
 # Discover the supervisor automatically (recommended).
 # Reads the live API address from ~/.gc/supervisor.log.

@@ -302,7 +302,7 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 		activeAgents:   make(map[string]string),
 		gtEnv:          gtEnv,
 		driver:         gastown.SelectDriver(),
-		gtPollInFlight: gtEnv.Available, // Init() launches the first poll; gate subsequent ones
+		gtPollInFlight: gtEnv.Available || gastown.GCEnabled(), // Init() launches the first poll; gate subsequent ones
 		changedIDs:     make(map[string]bool),
 		prevIssueMap:   prevMap,
 		sourceMode:     source.Mode,
@@ -319,7 +319,7 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 // are lost. We call poll functions directly and pre-set gtPollInFlight in New().
 func (m Model) Init() tea.Cmd {
 	var agentPoll tea.Cmd
-	if m.gtEnv.Available {
+	if m.orchestratorAvailable() {
 		agentPoll = m.pollGTStatus
 	} else if m.inTmux {
 		agentPoll = pollTmuxAgentState
@@ -380,9 +380,18 @@ func (m Model) startPollImmediate() tea.Cmd {
 	return data.WatchFile(m.watchPath, m.lastFileMod)
 }
 
+// orchestratorAvailable reports whether mg has a reachable orchestrator — Gas
+// Town (`gt` on PATH) or the Gas City HTTP driver (selected when MG_GC_API is
+// set). It gates the agent control surface. Because it's true whenever
+// gtEnv.Available is true, existing Gas Town behavior is unchanged; it only
+// additionally lights up the panel on a pure-Gas-City box with no `gt`.
+func (m Model) orchestratorAvailable() bool {
+	return m.gtEnv.Available || m.driver.Backend() == "gascity"
+}
+
 // activateGasTown shows the Gas Town panel and schedules its data refreshes.
 func (m *Model) activateGasTown() tea.Cmd {
-	if !m.gtEnv.Available {
+	if !m.orchestratorAvailable() {
 		return nil
 	}
 
@@ -1961,7 +1970,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case "ctrl+g":
-		if !m.gtEnv.Available {
+		if !m.orchestratorAvailable() {
 			return m, nil
 		}
 		m.showGasTown = !m.showGasTown
@@ -1975,7 +1984,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "p":
-		if !m.gtEnv.Available {
+		if !m.orchestratorAvailable() {
 			return m, nil
 		}
 		m.showProblems = !m.showProblems
@@ -2132,7 +2141,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "s":
-		if !m.gtEnv.Available {
+		if !m.orchestratorAvailable() {
 			return m, nil
 		}
 		// Multi-select: collect IDs for formula picking
@@ -2165,7 +2174,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "n":
 		issue := m.parade.SelectedIssue
-		if issue == nil || !m.gtEnv.Available {
+		if issue == nil || !m.orchestratorAvailable() {
 			return m, nil
 		}
 		agentName, active := m.activeAgents[issue.ID]
@@ -2234,7 +2243,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case "C":
-		if !m.gtEnv.Available {
+		if !m.orchestratorAvailable() {
 			return m, nil
 		}
 		var ids []string
@@ -2656,7 +2665,7 @@ func (m Model) buildPaletteCommands() []components.PaletteCommand {
 		}
 	}
 
-	if m.gtEnv.Available {
+	if m.orchestratorAvailable() {
 		cmds = append(cmds,
 			components.PaletteCommand{Name: "Toggle Gas Town", Desc: "Show/hide Gas Town panel", Key: "^g", Action: components.ActionToggleGasTown},
 			components.PaletteCommand{Name: "Sling with formula", Desc: "Pick formula and sling to polecat", Key: "s", Action: components.ActionSlingFormula},
@@ -2738,7 +2747,7 @@ func (m Model) executePaletteAction(action components.PaletteAction) (tea.Model,
 		m.createForm = components.NewCreateFormWithGT(m.width, m.height)
 		return m, m.createForm.Init()
 	case components.ActionToggleGasTown:
-		if !m.gtEnv.Available {
+		if !m.orchestratorAvailable() {
 			return m, nil
 		}
 		m.showGasTown = !m.showGasTown
@@ -3154,7 +3163,7 @@ func (m *Model) layout() {
 		Groups:           m.groups,
 		AgentCount:       len(m.activeAgents),
 		TownStatus:       m.townStatus,
-		GasTownAvailable: m.gtEnv.Available,
+		GasTownAvailable: m.orchestratorAvailable(),
 		ProblemCount:     len(m.allProblems()),
 		BeadOffset:       m.beadOffset,
 		CurrentIssueID:   m.currentIssueID,
@@ -3234,7 +3243,7 @@ func (m *Model) rebuildParade() {
 		Groups:           groups,
 		AgentCount:       len(m.activeAgents),
 		TownStatus:       m.townStatus,
-		GasTownAvailable: m.gtEnv.Available,
+		GasTownAvailable: m.orchestratorAvailable(),
 		ProblemCount:     len(m.allProblems()),
 		BeadOffset:       m.beadOffset,
 		CurrentIssueID:   m.currentIssueID,
@@ -3364,7 +3373,7 @@ func (m *Model) propagateAgentState() {
 	m.detail.TownStatus = m.townStatus
 	m.header.AgentCount = len(m.activeAgents)
 	m.header.TownStatus = m.townStatus
-	m.header.GasTownAvailable = m.gtEnv.Available
+	m.header.GasTownAvailable = m.orchestratorAvailable()
 
 	// Build orphaned issue ID set from dead rigs
 	m.parade.OrphanedIDs = buildOrphanedIDs(m.townStatus)
@@ -3421,7 +3430,7 @@ func buildZombieIDs(status *gastown.TownStatus, orphanedIDs map[string]bool) map
 // It uses a single-flight gate to prevent overlapping gt status polls (gt status --json
 // takes ~9s, and this is called from 3 watcher handlers + 8 user-action handlers).
 func (m *Model) gatedPollAgentState() tea.Cmd {
-	if m.gtEnv.Available {
+	if m.orchestratorAvailable() {
 		var cmds []tea.Cmd
 		if !m.gtPollInFlight {
 			m.gtPollInFlight = true
@@ -3472,7 +3481,7 @@ const patrolScanTTL = 60 * time.Second
 // gatedPollPatrolScan returns a Cmd to fetch patrol scan data if gt is available,
 // a scan isn't already in flight, and the TTL has elapsed.
 func (m *Model) gatedPollPatrolScan() tea.Cmd {
-	if !m.gtEnv.Available || m.patrolScanInFlight {
+	if !m.driver.Supports(gastown.FeaturePatrol) || m.patrolScanInFlight {
 		return nil
 	}
 	if !m.lastPatrolScan.IsZero() && time.Since(m.lastPatrolScan) < patrolScanTTL {
@@ -3585,9 +3594,9 @@ func (m Model) View() tea.View {
 			rightPanel = m.codexTranscript.View()
 		case m.showDoctor:
 			rightPanel = m.doctor.View()
-		case m.showProblems && m.gtEnv.Available:
+		case m.showProblems && m.orchestratorAvailable():
 			rightPanel = m.problems.View()
-		case m.showGasTown && m.gtEnv.Available:
+		case m.showGasTown && m.orchestratorAvailable():
 			rightPanel = m.gasTown.View()
 		default:
 			rightPanel = m.detail.View()
@@ -3605,7 +3614,7 @@ func (m Model) View() tea.View {
 	case m.toast.Active():
 		bottomBar = m.toast.View(m.width)
 	case m.parade.SelectionCount() > 0:
-		bottomBar = components.BulkFooter(m.width, m.parade.SelectionCount(), m.gtEnv.Available)
+		bottomBar = components.BulkFooter(m.width, m.parade.SelectionCount(), m.orchestratorAvailable())
 	case m.nudging:
 		bottomBar = inputBarStyle.Render(m.nudgeInput.View())
 	case m.slingTargeting:
@@ -3623,7 +3632,7 @@ func (m Model) View() tea.View {
 	case m.filtering || m.filterInput.Value() != "":
 		bottomBar = inputBarStyle.Render(m.filterInput.View())
 	default:
-		footer := components.NewFooter(m.width, m.activPane == PaneDetail, m.gtEnv.Available)
+		footer := components.NewFooter(m.width, m.activPane == PaneDetail, m.orchestratorAvailable())
 		footer.SourcePath = m.watchPath
 		footer.LastRefresh = m.lastFileMod
 		footer.PathExplicit = m.pathExplicit

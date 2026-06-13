@@ -321,3 +321,25 @@ func TestBuildZombieIDsNoZombies(t *testing.T) {
 		t.Errorf("healthy agents should yield nil zombies, got %v", got)
 	}
 }
+
+func TestOrchestratorAvailable(t *testing.T) {
+	gc, err := gastown.NewGCDriver("http://127.0.0.1:8080", "")
+	if err != nil {
+		t.Fatalf("NewGCDriver: %v", err)
+	}
+	cases := []struct {
+		name string
+		m    Model
+		want bool
+	}{
+		{"gt on PATH", Model{gtEnv: gastown.Env{Available: true}, driver: gastown.NewGTDriver()}, true},
+		{"no orchestrator", Model{gtEnv: gastown.Env{Available: false}, driver: gastown.NewGTDriver()}, false},
+		{"gas city only (no gt)", Model{gtEnv: gastown.Env{Available: false}, driver: gc}, true},
+		{"both gt and gc", Model{gtEnv: gastown.Env{Available: true}, driver: gc}, true},
+	}
+	for _, c := range cases {
+		if got := c.m.orchestratorAvailable(); got != c.want {
+			t.Errorf("%s: orchestratorAvailable() = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
