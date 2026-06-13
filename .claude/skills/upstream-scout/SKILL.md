@@ -11,8 +11,10 @@ Research recent upstream changes in Beads and/or Gas Town. Produce a research do
 ## Scope
 
 - `$ARGUMENTS` controls which repos to check: `beads`, `gastown`, or `both` (default)
-- Beads repo: `steveyegge/beads`
-- Gas Town repo: `steveyegge/gastown`
+- Beads repo: `gastownhall/beads`
+- Gas Town repo: `gastownhall/gastown`
+
+> Note: both repos moved org from `steveyegge/*` → `gastownhall/*` (observed 2026-06-13). GitHub still 301-redirects the old `steveyegge/*` paths, so older commands keep working, but `gastownhall/*` is canonical.
 
 ## Step 1: Gather upstream state
 
@@ -21,19 +23,19 @@ For each repo in scope:
 ### Recent commits on main
 
 ```bash
-gh api 'repos/steveyegge/<repo>/commits?per_page=30' --jq '.[] | "\(.sha[0:7]) \(.commit.committer.date[:10]) \(.commit.message | split("\n")[0])"'
+gh api 'repos/gastownhall/<repo>/commits?per_page=30' --jq '.[] | "\(.sha[0:7]) \(.commit.committer.date[:10]) \(.commit.message | split("\n")[0])"'
 ```
 
 ### Recent releases
 
 ```bash
-gh release list --repo steveyegge/<repo> --limit 5
+gh release list --repo gastownhall/<repo> --limit 5
 ```
 
 ### Open PRs with significant changes
 
 ```bash
-gh pr list --repo steveyegge/<repo> --state open --limit 10
+gh pr list --repo gastownhall/<repo> --state open --limit 10
 ```
 
 ## Step 2: Check our current compatibility baseline
