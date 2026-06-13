@@ -967,3 +967,22 @@ func TestSetRichDetailNoIssueIsNoOp(t *testing.T) {
 	}()
 	d.SetRichDetail("mg-001", &data.Issue{ID: "mg-001", Notes: "x"})
 }
+
+// TestFocusChangesBorder verifies the detail pane's border (the divider + focus
+// cue) renders differently when focused vs not — gold when focused, dim when not.
+func TestFocusChangesBorder(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "mg-001", Title: "Focus test", Status: data.StatusOpen, Priority: data.PriorityMedium, IssueType: data.TypeTask},
+	}
+	d := NewDetail(60, 20, issues)
+	d.SetIssue(&issues[0])
+
+	d.Focused = false
+	unfocused := d.View()
+	d.Focused = true
+	focused := d.View()
+
+	if unfocused == focused {
+		t.Fatal("detail View() should differ between focused and unfocused (border cue)")
+	}
+}

@@ -134,6 +134,14 @@ func (d *Detail) SetSize(width, height int) {
 
 // View renders the detail panel.
 func (d *Detail) View() string {
+	// The left border doubles as the pane divider and the focus cue: it
+	// brightens to gold when the detail pane holds focus (keys scroll it),
+	// and stays a dim purple rule when the parade is focused.
+	border := ui.DetailBorder
+	if d.Focused {
+		border = border.BorderForeground(ui.Gold)
+	}
+
 	if d.Issue == nil {
 		empty := lipgloss.NewStyle().
 			Width(d.Width).
@@ -141,14 +149,14 @@ func (d *Detail) View() string {
 			Foreground(ui.Muted).
 			Align(lipgloss.Center, lipgloss.Center).
 			Render("No issue selected")
-		return ui.DetailBorder.Height(d.Height).Render(empty)
+		return border.Height(d.Height).Render(empty)
 	}
 
 	content := d.Viewport.View()
-	return ui.DetailBorder.Height(d.Height).Render(content)
+	return border.Height(d.Height).Render(content)
 }
 
-// renderMarkdown renders markdown text using glamour with dark theme.
+// renderMarkdown renders markdown text using glamour with mg's brand theme.
 func (d *Detail) renderMarkdown(text string) string {
 	if text == "" {
 		return ""
@@ -161,7 +169,7 @@ func (d *Detail) renderMarkdown(text string) string {
 
 	if d.mdRenderer == nil {
 		r, err := glamour.NewTermRenderer(
-			glamour.WithAutoStyle(),
+			glamour.WithStyles(ui.MardiGrasGlamourStyle()),
 			glamour.WithWordWrap(contentWidth),
 		)
 		if err != nil {
