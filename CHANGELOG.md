@@ -2,7 +2,9 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
-## Unreleased
+## v0.25.0 (2026-06-13)
+
+Completes the Gas City backend: agent dispatch, convoys, and activation without Gas Town installed. With this, mg drives Gas City over the Supervisor API for the full control surface (roster, mail, formulas, nudge, decommission, sling, convoys) — opt in with `MG_GC_API`; Gas Town remains the default.
 
 ### Added
 - **Gas City works without Gas Town installed** — the agent control surface (panel, roster polling, sling/nudge/decommission/convoys/mail, header/footer indicators) now activates when a Gas City supervisor is configured (`MG_GC_API`) even if `gt` is not on PATH. Previously every orchestration feature was gated on the `gt` binary; it's now gated on "an orchestrator is reachable" (`gt` **or** the Gas City driver). No change for Gas Town users. Patrol scan stays Gas Town-only (no Gas City equivalent).
