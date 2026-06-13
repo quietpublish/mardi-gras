@@ -2,9 +2,9 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
-## Unreleased
+## v0.24.0 (2026-06-12)
 
-Gas City integration. Mardi Gras can now drive [Gas City](https://github.com/gastownhall/gascity) (`gc`) — Gas Town's pack-based successor — through its Supervisor HTTP API, alongside the existing Gas Town CLI backend. It's opt-in via `MG_GC_API`; without it, behavior is unchanged.
+The Gas City release. Mardi Gras can now drive [Gas City](https://github.com/gastownhall/gascity) (`gc`) — Gas Town's pack-based successor — through its Supervisor HTTP API, alongside the existing Gas Town CLI backend. It's opt-in via `MG_GC_API`; without it, behavior is unchanged. (This release also carries the codex MCP approval routing prepared as v0.23.0, which was never tagged — see below.)
 
 ### Added
 - **`Driver` interface seam** ([#57](https://github.com/quietpublish/mardi-gras/pull/57)) — the orchestrator is abstracted behind a `gastown.Driver` interface. `GTDriver` wraps the existing `gt` CLI 1:1 (no behavior change); the app routes every orchestrator call through a single driver selected at startup. This is the abstraction that makes a second backend possible.
