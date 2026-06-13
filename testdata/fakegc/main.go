@@ -16,6 +16,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const city = "bourbon"
@@ -96,6 +97,7 @@ var responses = map[string]string{
 
 func main() {
 	addr := flag.String("addr", ":8088", "listen address")
+	delay := flag.Duration("delay", 0, "artificial latency on the agents (status) endpoint, e.g. 6s — exercises the loading spinner")
 	flag.Parse()
 
 	mux := http.NewServeMux()
@@ -103,8 +105,15 @@ func main() {
 	// Canned GETs.
 	for path, body := range responses {
 		body := body
+		path := path
 		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 			logReq(r)
+			// The agents endpoint backs the panel's status poll; delaying it
+			// (via -delay) keeps the loading spinner on screen long enough to
+			// record, mimicking gt/gc's seconds-long real-world latency.
+			if *delay > 0 && strings.HasSuffix(path, "/agents") {
+				time.Sleep(*delay)
+			}
 			writeJSON(w, http.StatusOK, body)
 		})
 	}

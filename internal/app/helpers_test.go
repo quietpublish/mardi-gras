@@ -343,3 +343,23 @@ func TestOrchestratorAvailable(t *testing.T) {
 		}
 	}
 }
+
+func TestGasTownLoading(t *testing.T) {
+	gt := gastown.NewGTDriver()
+	avail := gastown.Env{Available: true}
+	cases := []struct {
+		name string
+		m    Model
+		want bool
+	}{
+		{"panel open, status nil, gt available", Model{showGasTown: true, gtEnv: avail, driver: gt}, true},
+		{"panel closed", Model{showGasTown: false, gtEnv: avail, driver: gt}, false},
+		{"status already loaded", Model{showGasTown: true, gtEnv: avail, driver: gt, townStatus: &gastown.TownStatus{}}, false},
+		{"no orchestrator", Model{showGasTown: true, gtEnv: gastown.Env{Available: false}, driver: gt}, false},
+	}
+	for _, c := range cases {
+		if got := c.m.gasTownLoading(); got != c.want {
+			t.Errorf("%s: gasTownLoading() = %v, want %v", c.name, got, c.want)
+		}
+	}
+}

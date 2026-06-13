@@ -89,6 +89,12 @@ type GasTown struct {
 	tickCount      int                  // incremented every tick for animations
 	workStartTimes map[string]time.Time // agent name -> when they started working
 
+	// loadingFrame holds the current spinner glyph while the orchestrator
+	// status is being fetched (empty when not loading). The app feeds it a
+	// fresh frame each spinner tick; renderContent shows the animated loading
+	// line whenever it is set.
+	loadingFrame string
+
 	// Activity sparkline data (computed from events)
 	agentHistograms map[string][]int // agent name -> bucketed event counts
 	agentEventCount map[string]int   // agent name -> total event count
@@ -152,6 +158,12 @@ func (g *GasTown) Tick() {
 // TickCount returns the current tick for external use.
 func (g *GasTown) TickCount() int {
 	return g.tickCount
+}
+
+// SetLoadingFrame sets the spinner glyph shown on the loading line while the
+// orchestrator status is being fetched. Pass "" when not loading.
+func (g *GasTown) SetLoadingFrame(frame string) {
+	g.loadingFrame = frame
 }
 
 // SetConvoyDetails updates the convoy detail list from gt convoy list --json.
@@ -564,6 +576,16 @@ func (g *GasTown) renderContent() string {
 	contentWidth := max(g.width-3, 20) // border (1) + padding (1) + right margin (1)
 
 	if g.status == nil {
+		// While a fetch is in flight the app feeds us a spinner frame; show an
+		// animated loading line so the slow `gt`/`gc` status poll (seconds to
+		// tens of seconds) doesn't read as frozen.
+		if g.loadingFrame != "" {
+			spin := lipgloss.NewStyle().Foreground(ui.Gold).Render(g.loadingFrame)
+			return lipgloss.NewStyle().
+				Width(contentWidth).
+				Foreground(ui.Muted).
+				Render(spin + " Loading Gas Town status…")
+		}
 		msg := ui.SymTown + " Gas Town not available"
 		if g.env.Available {
 			msg = ui.SymTown + " Loading Gas Town status..."

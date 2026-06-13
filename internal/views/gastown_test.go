@@ -56,6 +56,33 @@ func TestGasTownViewNoStatus(t *testing.T) {
 	}
 }
 
+func TestGasTownViewLoadingFrameAnimates(t *testing.T) {
+	g := NewGasTown(80, 24)
+	// With a spinner frame set and no status yet, the loading line shows the
+	// glyph + the "Loading" message (not the static "not available" text).
+	g.SetLoadingFrame("⠋")
+	view := g.View()
+	if !strings.Contains(view, "⠋") {
+		t.Fatalf("loading view should show the spinner frame, got: %s", view)
+	}
+	if !strings.Contains(view, "Loading Gas Town status") {
+		t.Fatalf("loading view should show loading text, got: %s", view)
+	}
+	if strings.Contains(view, "not available") {
+		t.Fatalf("loading view should not show 'not available', got: %s", view)
+	}
+}
+
+func TestGasTownViewLoadingFrameClearedFallsBack(t *testing.T) {
+	g := NewGasTown(80, 24)
+	g.SetLoadingFrame("⠋")
+	g.SetLoadingFrame("") // no longer loading
+	view := g.View()
+	if !strings.Contains(view, "not available") {
+		t.Fatalf("cleared frame + nil status should fall back to 'not available', got: %s", view)
+	}
+}
+
 func TestGasTownViewEmptyAgents(t *testing.T) {
 	g := NewGasTown(80, 24)
 	status := &gastown.TownStatus{Agents: []gastown.AgentRuntime{}}

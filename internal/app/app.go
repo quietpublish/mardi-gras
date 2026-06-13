@@ -392,6 +392,12 @@ func (m Model) orchestratorAvailable() bool {
 	return m.gtEnv.Available || m.driver.Backend() == "gascity"
 }
 
+// gasTownLoading reports whether the Gas Town panel is open and still waiting
+// on its first status fetch — the window during which the loading spinner runs.
+func (m Model) gasTownLoading() bool {
+	return m.showGasTown && m.townStatus == nil && m.orchestratorAvailable()
+}
+
 // activateGasTown shows the Gas Town panel and schedules its data refreshes.
 func (m *Model) activateGasTown() tea.Cmd {
 	if !m.orchestratorAvailable() {
@@ -413,6 +419,12 @@ func (m *Model) activateGasTown() tea.Cmd {
 	if !m.gasTownTicking {
 		cmds = append(cmds, gasTownTickCmd())
 		m.gasTownTicking = true
+	}
+	// Restart the spinner loop so the loading line animates during the slow
+	// status fetch. Safe to kick unconditionally: the spinner's tag mechanism
+	// drops duplicate ticks, so this never produces a double-speed spinner.
+	if m.townStatus == nil {
+		cmds = append(cmds, m.spinner.Tick)
 	}
 	return tea.Batch(cmds...)
 }
@@ -1751,8 +1763,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case spinner.TickMsg:
-		if m.ready {
-			return m, nil // loading splash is gone; stop spinning
+		// Spin during the boot splash, and again whenever the Gas Town panel is
+		// waiting on a status fetch. Otherwise let the loop die.
+		if m.ready && !m.gasTownLoading() {
+			return m, nil
 		}
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -3625,6 +3639,11 @@ func (m Model) View() tea.View {
 		case m.showProblems && m.orchestratorAvailable():
 			rightPanel = m.problems.View()
 		case m.showGasTown && m.orchestratorAvailable():
+			if m.gasTownLoading() {
+				m.gasTown.SetLoadingFrame(m.spinner.View())
+			} else {
+				m.gasTown.SetLoadingFrame("")
+			}
 			rightPanel = m.gasTown.View()
 		default:
 			rightPanel = m.detail.View()
