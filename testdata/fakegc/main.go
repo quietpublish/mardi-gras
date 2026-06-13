@@ -82,6 +82,16 @@ var responses = map[string]string{
 		],
 		"progress":{"total":5,"closed":2}
 	}`,
+
+	"/v0/city/bourbon/convoy/cv-cleanup": `{
+		"convoy":{"id":"cv-cleanup","title":"Tech-debt cleanup","status":"open","issue_type":"convoy","priority":3},
+		"children":[
+			{"id":"mg-d01","title":"Drop dead code paths","status":"closed","issue_type":"task","assignee":"bacchus"},
+			{"id":"mg-d02","title":"Tighten lint config","status":"open","issue_type":"task"},
+			{"id":"mg-d03","title":"Backfill table-driven tests","status":"open","issue_type":"task","assignee":"rex"}
+		],
+		"progress":{"total":3,"closed":1}
+	}`,
 }
 
 func main() {

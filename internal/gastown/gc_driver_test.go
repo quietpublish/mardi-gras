@@ -504,6 +504,10 @@ func TestGCDriverConvoyListAndStatus(t *testing.T) {
 	if len(list) != 1 || list[0].ID != "cv-1" || list[0].Title != "Release batch" || list[0].Status != "open" {
 		t.Errorf("ConvoyList = %+v", list)
 	}
+	// ConvoyList enriches each convoy with progress from its detail.
+	if list[0].Total != 2 || list[0].Completed != 1 {
+		t.Errorf("ConvoyList progress = %d/%d, want 1/2", list[0].Completed, list[0].Total)
+	}
 
 	cd, err := d.ConvoyStatus(ctx, "cv-1")
 	if err != nil {

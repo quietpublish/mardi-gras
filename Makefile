@@ -4,7 +4,7 @@ GO := go
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -ldflags "-s -w -X main.version=$(VERSION)"
 
-.PHONY: build run run-sample test clean dev dev-gt dev-gc screenshot tidy fmt lint gc-client
+.PHONY: build run run-sample test clean dev dev-gt dev-gc screenshot screenshots-gc tidy fmt lint gc-client
 
 # GCDIR is the generated Gas City client package.
 GCDIR := internal/gastown/gcclient
@@ -41,6 +41,11 @@ screenshot: build
 	@echo "Launching mg with screenshot dataset..."
 	@echo "Tip: resize terminal to ~120x38 for best results"
 	./$(BINARY) --path testdata/screenshot.jsonl
+
+# screenshots-gc regenerates the Gas City screenshots via vhs + the fake
+# supervisor (no `gc` install needed). Requires vhs (brew install vhs ffmpeg ttyd).
+screenshots-gc:
+	./testdata/screenshots-gc.sh
 
 tidy:
 	$(GO) mod tidy

@@ -513,8 +513,9 @@ func (d *GCDriver) Sling(ctx context.Context, req SlingRequest) error {
 // --- convoys (Gas City models a convoy as a bead) --------------------------
 
 // ConvoyList returns the open convoys via GET /v0/city/{city}/convoys. The list
-// carries only the convoy beads (id/title/status); per-convoy progress and
-// tracked issues come from ConvoyStatus.
+// endpoint carries only the convoy beads (no progress), so each convoy's detail
+// is fetched to fill progress/tracked — mirroring gt's rich `convoy list`. A
+// convoy whose detail fetch fails degrades to its shallow bead (id/title/status).
 func (d *GCDriver) ConvoyList(ctx context.Context) ([]ConvoyDetail, error) {
 	city, err := d.resolveCity(ctx)
 	if err != nil {
@@ -531,20 +532,28 @@ func (d *GCDriver) ConvoyList(ctx context.Context) ([]ConvoyDetail, error) {
 	if resp.JSON200.Items != nil {
 		out = make([]ConvoyDetail, 0, len(*resp.JSON200.Items))
 		for _, b := range *resp.JSON200.Items {
-			out = append(out, ConvoyDetail{ID: b.Id, Title: b.Title, Status: b.Status})
+			if cd, derr := d.convoyDetail(ctx, city, b.Id); derr == nil {
+				out = append(out, *cd)
+			} else {
+				out = append(out, ConvoyDetail{ID: b.Id, Title: b.Title, Status: b.Status})
+			}
 		}
 	}
 	return out, nil
 }
 
-// ConvoyStatus returns a convoy's detail via GET /v0/city/{city}/convoy/{id},
-// folding the child beads into Tracked and the progress counts into Total/
-// Completed/ProgressPct.
+// ConvoyStatus returns a convoy's detail via GET /v0/city/{city}/convoy/{id}.
 func (d *GCDriver) ConvoyStatus(ctx context.Context, convoyID string) (*ConvoyDetail, error) {
 	city, err := d.resolveCity(ctx)
 	if err != nil {
 		return nil, err
 	}
+	return d.convoyDetail(ctx, city, convoyID)
+}
+
+// convoyDetail fetches one convoy and folds its child beads into Tracked and the
+// progress counts into Total/Completed/ProgressPct.
+func (d *GCDriver) convoyDetail(ctx context.Context, city, convoyID string) (*ConvoyDetail, error) {
 	resp, err := d.client.GetV0CityByCityNameConvoyByIdWithResponse(ctx, city, convoyID)
 	if err != nil {
 		return nil, fmt.Errorf("gc convoy: %w", err)
