@@ -4,7 +4,7 @@ GO := go
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -ldflags "-s -w -X main.version=$(VERSION)"
 
-.PHONY: build run run-sample test clean dev dev-gt screenshot tidy fmt lint gc-client
+.PHONY: build run run-sample test clean dev dev-gt dev-gc screenshot tidy fmt lint gc-client
 
 # GCDIR is the generated Gas City client package.
 GCDIR := internal/gastown/gcclient
@@ -30,6 +30,12 @@ dev: build
 
 dev-gt: build
 	PATH="$(CURDIR)/testdata:$(PATH)" ./$(BINARY) --path testdata/sample.jsonl
+
+# dev-gc runs mg against a fake Gas City supervisor (testdata/fakegc) — the
+# HTTP analogue of dev-gt. Press ctrl+g for the Gas City panel. Good for
+# demos and screenshots without a real `gc` install.
+dev-gc: build
+	./testdata/dev-gc.sh
 
 screenshot: build
 	@echo "Launching mg with screenshot dataset..."
