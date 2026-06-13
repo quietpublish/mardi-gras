@@ -103,6 +103,9 @@ mg --version
 
 # Enable debug logging (creates mg-debug.log in cwd)
 MG_DEBUG=1 mg
+
+# Drive Gas City instead of Gas Town (opt-in; auto-discovers the supervisor)
+MG_GC_API=auto mg
 ```
 
 Mardi Gras auto-detects your data source — no daemon, no config file. It supports two modes:
@@ -143,6 +146,12 @@ See the [agent integration guide](docs/agents.md) for runtime detection, tmux di
 When [Gas Town](https://github.com/steveyegge/gastown) (`gt`) is on your PATH, Mardi Gras lights up with a full agent control surface: agent roster, convoys, mail, cost dashboards, and problem detection. Press `ctrl+g` to open the dashboard. Create issues and assign them to crew members in one step via the create form (`N`).
 
 See the [Gas Town integration guide](docs/gastown.md) for the full feature set including sling, nudge, assign, convoys, and operational intelligence.
+
+## Gas City Integration
+
+Mardi Gras also speaks to [Gas City](https://github.com/gastownhall/gascity) (`gc`) — Gas Town's pack-based successor — through its Supervisor HTTP API. This is **opt-in and read-focused today**: set `MG_GC_API=auto` to point mg at a running supervisor and the agent roster, mail, and formulas come over HTTP instead of the `gt` CLI. Agent dispatch, nudge, decommission, and convoys aren't wired to Gas City yet — use Gas Town for those.
+
+See the [Gas City integration guide](docs/gascity.md) for setup, the full capability matrix, and how to regenerate the API client.
 
 ## tmux Integration
 

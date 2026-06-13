@@ -2,6 +2,21 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## Unreleased
+
+Gas City integration. Mardi Gras can now drive [Gas City](https://github.com/gastownhall/gascity) (`gc`) — Gas Town's pack-based successor — through its Supervisor HTTP API, alongside the existing Gas Town CLI backend. It's opt-in via `MG_GC_API`; without it, behavior is unchanged.
+
+### Added
+- **`Driver` interface seam** ([#57](https://github.com/quietpublish/mardi-gras/pull/57)) — the orchestrator is abstracted behind a `gastown.Driver` interface. `GTDriver` wraps the existing `gt` CLI 1:1 (no behavior change); the app routes every orchestrator call through a single driver selected at startup. This is the abstraction that makes a second backend possible.
+- **Gas City read path** ([#60](https://github.com/quietpublish/mardi-gras/pull/60)) — `GCDriver` speaks the Gas City Supervisor HTTP API via an `oapi-codegen`-generated client (pinned to the gascity v1.2.1 spec). Opt in with `MG_GC_API` — a base URL, or `auto` to discover the supervisor's port — and optionally `MG_GC_CITY` to pin a city. Brings the live agent roster over HTTP instead of the CLI.
+- **Gas City mail + formulas** ([#59](https://github.com/quietpublish/mardi-gras/pull/59)) — mail inbox/read/reply/send/archive/mark-read and formula listing over the Supervisor API, with the required `X-GC-Request` anti-CSRF header on every mutation. New `make gc-client` target regenerates the client.
+
+### Fixed
+- **Gas City API discovery + formula scope** ([#61](https://github.com/quietpublish/mardi-gras/pull/61)) — found by validating `GCDriver` against a live `gc` v1.2.1 supervisor. The Supervisor API binds a *dynamically assigned* port (not a fixed one) and its control socket isn't HTTP, so `MG_GC_API=auto` now reads the live address from `~/.gc/supervisor.log`. The formula listing also now sends the required `scope_kind`/`scope_ref` parameters.
+
+### Notes
+- Gas City support is opt-in and **read-focused** today: agent dispatch (sling), nudge, decommission, and convoys are not yet wired to Gas City — use Gas Town for those. Vitals/costs/patrol have no Gas City equivalent. See [docs/gascity.md](docs/gascity.md) for the full capability matrix.
+
 ## v0.22.0 (2026-05-17)
 
 The replies release. Codex MCP sessions are no longer one-shot — press `r` in the transcript overlay to continue the conversation against the same `threadId` without spawning a fresh subprocess.

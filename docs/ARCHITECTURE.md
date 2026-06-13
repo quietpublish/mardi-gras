@@ -48,7 +48,12 @@ internal/
     tmux.go               tmux window integration (launch, discover, kill)
 
   gastown/
-    detect.go             Environment detection (GT_ROLE, GT_RIG, gt on PATH)
+    driver.go             Driver interface (the orchestrator seam) + Feature/ErrUnsupported/SlingRequest
+    gt_driver.go          GTDriver: Gas Town impl, delegates to the gt CLI wrappers below
+    gc.go                 Gas City driver selection + MG_GC_API base-URL discovery
+    gc_driver.go          GCDriver: Gas City impl over the Supervisor HTTP API
+    gcclient/             Generated (oapi-codegen) Gas City Supervisor API client
+    detect.go             Environment detection (GT_ROLE, GT_RIG, gt/gc on PATH)
     exec.go               Timeout helpers for gt commands (short/medium/long tiers)
     status.go             gt status --json parsing, TownStatus/AgentRuntime types
     sling.go              Issue dispatch: sling, unsling, multi-sling, nudge
@@ -363,7 +368,16 @@ On `FileChangedMsg`, the app reloads issues, rebuilds parade groups, diffs again
 
 ## Gas Town Integration
 
-The `internal/gastown` package handles all Gas Town interaction. Core files (status, sling, convoy, mail, molecule, problems, recovery, detect) have no internal dependencies — only stdlib and `encoding/json`. Analytics files (velocity, predict, scorecard, recommend) import `internal/data` for issue types.
+The `internal/gastown` package handles all orchestrator interaction. Core files (status, sling, convoy, mail, molecule, problems, recovery, detect) have no internal dependencies — only stdlib and `encoding/json`. Analytics files (velocity, predict, scorecard, recommend) import `internal/data` for issue types.
+
+### Driver seam (driver.go, gt_driver.go, gc.go, gc_driver.go)
+
+The orchestrator is abstracted behind a `Driver` interface so the rest of the app never calls a specific backend directly. `app.Model` holds one `gastown.Driver`, chosen at startup by `SelectDriver()`:
+
+- **`GTDriver`** (default) — wraps the existing `gt` CLI helpers 1:1; behavior is unchanged from before the seam existed.
+- **`GCDriver`** — speaks the [Gas City](gascity.md) Supervisor HTTP API via the generated `gcclient` package; selected only when `MG_GC_API` is set. Operations with no Gas City mapping (and gt-only features like vitals/costs/patrol) return `ErrUnsupported`, which callers treat as "feature absent", not an error.
+
+Pure analytics, recovery helpers, local event-log reads, and the tmux handoff stay as free functions — they're driver-agnostic and not on the interface.
 
 ### Environment Detection (detect.go)
 

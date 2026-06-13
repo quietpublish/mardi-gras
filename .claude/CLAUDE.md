@@ -10,6 +10,7 @@ make test         # go test ./...
 make lint         # golangci-lint run ./...
 make fmt          # go fmt ./...
 make dev          # Build and run with testdata/sample.jsonl
+make gc-client    # Regenerate the Gas City API client (internal/gastown/gcclient) from the pinned spec
 ```
 
 Always run `make test` after changes. Run `make lint` before committing.
@@ -24,7 +25,7 @@ Always run `make test` after changes. Run `make lint` before committing.
 | `internal/components` | Header, footer, help overlay, command palette, toast notifications, issue create form, float utility |
 | `internal/ui` | Theme colors, styles, symbols, HOP badges — no logic. Includes `RoleColor()`, `AgentStateColor()`, DAG connector symbols |
 | `internal/data` | JSONL loading, issue types, filtering, focus mode, file watcher, mutations (`bd` CLI), cross-rig deps, HOP types |
-| `internal/gastown` | Gas Town integration (see below). Core files have no internal deps; analytics files import `internal/data` |
+| `internal/gastown` | Orchestrator integration behind a `Driver` seam (see below): `GTDriver` (gt CLI, default) + `GCDriver` (Gas City HTTP API, opt-in). Core files have no internal deps; analytics files import `internal/data`. `gcclient/` is the generated Gas City client |
 | `internal/agent` | Claude Code launch, tmux window dispatch |
 | `internal/tmux` | `mg --status` widget for tmux status bar |
 
@@ -50,7 +51,11 @@ Do NOT use `bd edit` — it opens `$EDITOR` and blocks agents.
 
 ## Gas Town Integration
 
-Mardi Gras integrates with [Gas Town](https://github.com/steveyegge/gastown) (`gt`) for multi-agent orchestration. The `internal/gastown` package (18 files, no internal deps) handles:
+Mardi Gras integrates with [Gas Town](https://github.com/steveyegge/gastown) (`gt`) for multi-agent orchestration.
+
+**Driver seam**: the orchestrator lives behind a `gastown.Driver` interface (`driver.go`). The app holds one driver, picked at startup by `SelectDriver()`: `GTDriver` (default) wraps the `gt` CLI wrappers below 1:1; `GCDriver` (`gc_driver.go`) speaks the [Gas City](https://github.com/gastownhall/gascity) Supervisor HTTP API via the generated `gcclient` package and is selected only when `MG_GC_API` is set (`MG_GC_API=auto` discovers the supervisor port from `~/.gc/supervisor.log`; `MG_GC_CITY` pins the city). Ops a backend can't do return `ErrUnsupported` — callers hide the feature. **Add new orchestrator operations to the `Driver` interface, not as bare `gastown.Foo()` calls in `app.go`.** See `docs/gascity.md` for the Gas City capability matrix. The gt-specific pieces below are the `GTDriver` implementation:
+
+The `internal/gastown` package handles:
 
 - **Environment detection** (`detect.go`): Reads `GT_ROLE`, `GT_RIG`, `GT_SCOPE`, `GT_POLECAT`, `GT_CREW` env vars and checks if `gt` is on PATH. Features activate progressively: Beads-only → gt available → inside Gas Town.
 - **Status parsing** (`status.go`): Parses `gt status --json` output. The raw JSON nests agents under `rigs[].agents`; `normalizeStatus()` flattens them into a single `Agents` slice for the UI. If `AgentRuntime.State` is empty, default to "idle". Gas Town v0.9.0+ always provides State.
