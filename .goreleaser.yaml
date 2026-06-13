@@ -27,17 +27,27 @@ archives:
 checksum:
   name_template: 'checksums.txt'
 
-brews:
+# Homebrew cask (replaces the deprecated `brews` formula key; removal lands in
+# GoReleaser v2.16). Casks ship the pre-built binary directly. mg's binaries are
+# unsigned, so the post-install hook strips the macOS quarantine xattr to avoid
+# a Gatekeeper block.
+homebrew_casks:
   - repository:
       owner: matt-wright86
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: "https://github.com/quietpublish/mardi-gras"
     description: "Terminal UI for Beads issue tracking — your issues deserve a parade"
-    license: "MIT"
-    install: |
-      bin.install "mg"
-      man1.install "mg.1"
+    binaries:
+      - mg
+    manpages:
+      - mg.1
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/mg"]
+          end
 
 changelog:
   sort: asc
