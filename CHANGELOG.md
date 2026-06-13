@@ -2,10 +2,24 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
-## Unreleased
+## v0.26.0 (2026-06-13)
+
+A UI-polish release. The detail panel and the Gas Town panel get brand-cohesive refinements, the slow orchestrator poll no longer reads as frozen, and the README gains an animated demo backed by a reproducible screenshot pipeline.
+
+### Added
+- **Mardi Gras markdown theme in the detail panel** ([#73](https://github.com/quietpublish/mardi-gras/pull/73)) — issue description / design / notes / acceptance-criteria now render through a custom [glamour](https://github.com/charmbracelet/glamour) theme matched to the brand palette (gold-on-purple H1 banner, bright-purple subheadings, gold emphasis and links, green inline code) instead of the generic dark theme. Code-block highlighting and spacing are inherited from the dark base.
+- **Pane focus indicator** ([#73](https://github.com/quietpublish/mardi-gras/pull/73)) — the detail pane's left border doubles as the pane divider and a focus cue: a dim-purple rule normally, brightening to gold when the detail pane holds focus (`Tab`), so it's obvious which pane the scroll/nav keys drive.
+- **Convoy progress in the Gas City convoy list** ([#71](https://github.com/quietpublish/mardi-gras/pull/71)) — the Gas City (`MG_GC_API`) convoy list now shows per-convoy progress (closed/total), matching the Gas Town panel.
 
 ### Changed
-- **Branded loading splash** — the bare `Loading...` shown before the first frame is now a branded splash (⚜ MARDI GRAS + an animated gold spinner via `bubbles/spinner` + "lining up the parade…"). Honors `--no-animations` (renders a static frame).
+- **Branded loading splash** ([#72](https://github.com/quietpublish/mardi-gras/pull/72)) — the bare `Loading...` shown before the first frame is now a branded splash (⚜ MARDI GRAS + an animated gold spinner via `bubbles/spinner` + "lining up the parade…"). Honors `--no-animations` (renders a static frame).
+- **Animated Gas Town loading line** ([#74](https://github.com/quietpublish/mardi-gras/pull/74)) — `gt status --json` (and the Gas City status poll) can take seconds to tens of seconds; the panel's loading line now animates the gold spinner instead of a static message that reads as frozen. Driven by "the panel is open and waiting on a fetch", so it covers both the Gas Town and Gas City backends (the latter previously fell through to "not available" during its first fetch).
+
+### Docs
+- **Animated README hero GIF** ([#75](https://github.com/quietpublish/mardi-gras/pull/75)) — the static hero screenshot is replaced with an animated demo (browse the parade → focus the themed detail pane → open the Gas Town roster), captured against a fake Gas City supervisor so it needs no live `gt`/`gc`. Regenerate with `make demo-gif`.
+
+### Internal
+- **Fake Gas City supervisor + deterministic screenshot pipeline** ([#70](https://github.com/quietpublish/mardi-gras/pull/70)) — a canned Supervisor API stub (`testdata/fakegc`) plus `vhs` tapes and `make` targets (`make screenshots-gc`, `make demo-gif`) for repeatable, reviewable captures. The supervisor's `-delay` flag exercises the loading spinner.
 
 ## v0.25.0 (2026-06-13)
 
