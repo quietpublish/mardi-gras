@@ -2,7 +2,7 @@
 
 [Gas City](https://github.com/gastownhall/gascity) (`gc`) is a pack-based rewrite of Gas Town that exposes a typed **Supervisor HTTP API** instead of a CLI. Mardi Gras can drive Gas City through that API as an alternative to Gas Town.
 
-> **Status: opt-in and read-focused.** Today the Gas City backend powers the live agent roster, mail, and formula listing. Agent dispatch (sling), nudge, decommission, and convoys are **not yet** wired to Gas City — use [Gas Town](gastown.md) for full orchestration. See [What works today](#what-works-today) for the exact matrix.
+> **Status: opt-in.** Today the Gas City backend powers the live agent roster, mail, formula listing, nudge, and decommission. Agent dispatch (sling) and convoys are **not yet** wired to Gas City — use [Gas Town](gastown.md) for those. See [What works today](#what-works-today) for the exact matrix.
 
 ## How it works
 
@@ -33,8 +33,8 @@ The supervisor binds a **dynamically assigned** TCP port (not a fixed one), logg
 | Live agent roster (`ctrl+g`) | ✅ | `GET /v0/city/{city}/agents`; role inferred from the agent pool |
 | Mail — inbox, read, reply, send, archive, mark-read | ✅ | mutations send the required `X-GC-Request` header |
 | Formula listing | ✅ | scoped to the city |
+| Nudge (`n`) / decommission (`K`) | ✅ | resolves the roster agent to a live session, then submits a message / kills the session |
 | Agent dispatch (sling, `a`) | ⛔ not yet | Gas City requires an explicit target agent; needs a target-picker flow |
-| Nudge / decommission | ⛔ not yet | map to session submit/kill; needs roster→session resolution |
 | Convoys | ⛔ not yet | modeled as beads in Gas City; adapter pending |
 | Vitals / costs / patrol | — | no Gas City equivalent; these panels stay empty |
 

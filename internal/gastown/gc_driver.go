@@ -384,13 +384,100 @@ func gcMutationErr(label string, code int, e *gcclient.ErrorModel) error {
 	return fmt.Errorf("%s: %s", label, gcRespErr(code, e))
 }
 
+// --- sessions: nudge + decommission ----------------------------------------
+//
+// Both operate on a session id, but mg passes a gt-style agent name/address
+// (from the roster). resolveSessionID maps that name to a live session via
+// GET /v0/city/{city}/sessions, then Nudge submits a message and Decommission
+// kills the session.
+
+// Nudge delivers a message to the agent's running session via
+// POST /v0/city/{city}/session/{id}/submit.
+func (d *GCDriver) Nudge(ctx context.Context, target, message string) error {
+	city, err := d.resolveCity(ctx)
+	if err != nil {
+		return err
+	}
+	sid, err := d.resolveSessionID(ctx, city, target)
+	if err != nil {
+		return err
+	}
+	resp, err := d.client.SubmitSessionWithResponse(ctx, city, sid,
+		&gcclient.SubmitSessionParams{XGCRequest: gcRequestToken},
+		gcclient.SubmitSessionJSONRequestBody{Message: message})
+	if err != nil {
+		return fmt.Errorf("gc nudge: %w", err)
+	}
+	return gcMutationErr("gc nudge", resp.StatusCode(), resp.ApplicationproblemJSONDefault)
+}
+
+// Decommission terminates the agent's session via
+// POST /v0/city/{city}/session/{id}/kill (the gt "polecat kill" analogue).
+func (d *GCDriver) Decommission(ctx context.Context, address string) error {
+	city, err := d.resolveCity(ctx)
+	if err != nil {
+		return err
+	}
+	sid, err := d.resolveSessionID(ctx, city, address)
+	if err != nil {
+		return err
+	}
+	resp, err := d.client.PostV0CityByCityNameSessionByIdKillWithResponse(ctx, city, sid,
+		&gcclient.PostV0CityByCityNameSessionByIdKillParams{XGCRequest: gcRequestToken})
+	if err != nil {
+		return fmt.Errorf("gc decommission: %w", err)
+	}
+	return gcMutationErr("gc decommission", resp.StatusCode(), resp.ApplicationproblemJSONDefault)
+}
+
+// resolveSessionID maps a gt-style agent name/address to a session id by
+// matching it (case-insensitively) against a session's name/title/alias/
+// display-name. A running match wins over a non-running one.
+func (d *GCDriver) resolveSessionID(ctx context.Context, city, target string) (string, error) {
+	resp, err := d.client.GetV0CityByCityNameSessionsWithResponse(ctx, city, nil)
+	if err != nil {
+		return "", fmt.Errorf("gc sessions: %w", err)
+	}
+	if resp.JSON200 == nil || resp.JSON200.Items == nil {
+		return "", fmt.Errorf("gc sessions: %s", gcRespErr(resp.StatusCode(), resp.ApplicationproblemJSONDefault))
+	}
+	want := strings.ToLower(strings.TrimSpace(target))
+	var fallback string
+	for _, s := range *resp.JSON200.Items {
+		if !gcSessionMatches(s, want) {
+			continue
+		}
+		if s.Running {
+			return s.Id, nil
+		}
+		if fallback == "" {
+			fallback = s.Id
+		}
+	}
+	if fallback != "" {
+		return fallback, nil
+	}
+	return "", fmt.Errorf("gc: no session for agent %q", target)
+}
+
+// gcSessionMatches reports whether a session identifies the given (lowercased)
+// agent name across the fields a roster name could correspond to.
+func gcSessionMatches(s gcclient.SessionResponse, want string) bool {
+	for _, f := range []string{s.SessionName, s.Title, derefString(s.Alias), derefString(s.DisplayName)} {
+		if strings.ToLower(strings.TrimSpace(f)) == want && want != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // --- unsupported operations -------------------------------------------------
 //
 // These either have no Gas City endpoint (Unsling, ConvoyLand/Watch/Unwatch),
 // require semantic mappings that need validation against a live `gc`
-// (Sling needs a required `target`; Nudge/Decommission need session/agent
-// resolution; convoys are modeled as beads), or have no equivalent at all
-// (Vitals/Costs/PatrolScan). See the operation support matrix in
+// (Sling needs a required `target` mg's flow doesn't supply; convoys are
+// modeled as beads), or have no equivalent at all (Vitals/Costs/PatrolScan).
+// See the operation support matrix in
 // docs/internal/gascity-integration-design.md §6.3.
 
 func (*GCDriver) Comments(context.Context, string) ([]Comment, error) { return nil, ErrUnsupported }
@@ -398,10 +485,6 @@ func (*GCDriver) Comments(context.Context, string) ([]Comment, error) { return n
 func (*GCDriver) Sling(context.Context, SlingRequest) error { return ErrUnsupported }
 
 func (*GCDriver) Unsling(context.Context, string) error { return ErrUnsupported }
-
-func (*GCDriver) Nudge(context.Context, string, string) error { return ErrUnsupported }
-
-func (*GCDriver) Decommission(context.Context, string) error { return ErrUnsupported }
 
 func (*GCDriver) CascadeClose(context.Context, string) error { return ErrUnsupported }
 

@@ -23,3 +23,7 @@ output-options:
     - send-mail
     - post-v0-city-by-city-name-mail-by-id-archive
     - post-v0-city-by-city-name-mail-by-id-read
+    # Nudge + decommission — resolve agent -> session, then submit/kill
+    - get-v0-city-by-city-name-sessions
+    - submit-session
+    - post-v0-city-by-city-name-session-by-id-kill

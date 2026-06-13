@@ -149,7 +149,7 @@ See the [Gas Town integration guide](docs/gastown.md) for the full feature set i
 
 ## Gas City Integration
 
-Mardi Gras also speaks to [Gas City](https://github.com/gastownhall/gascity) (`gc`) — Gas Town's pack-based successor — through its Supervisor HTTP API. This is **opt-in and read-focused today**: set `MG_GC_API=auto` to point mg at a running supervisor and the agent roster, mail, and formulas come over HTTP instead of the `gt` CLI. Agent dispatch, nudge, decommission, and convoys aren't wired to Gas City yet — use Gas Town for those.
+Mardi Gras also speaks to [Gas City](https://github.com/gastownhall/gascity) (`gc`) — Gas Town's pack-based successor — through its Supervisor HTTP API. This is **opt-in**: set `MG_GC_API=auto` to point mg at a running supervisor and the agent roster, mail, formulas, nudge, and decommission come over HTTP instead of the `gt` CLI. Agent dispatch (sling) and convoys aren't wired to Gas City yet — use Gas Town for those.
 
 See the [Gas City integration guide](docs/gascity.md) for setup, the full capability matrix, and how to regenerate the API client.
 

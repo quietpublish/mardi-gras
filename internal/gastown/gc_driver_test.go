@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/matt-wright86/mardi-gras/internal/gastown/gcclient"
 )
 
 const (
@@ -148,8 +150,8 @@ func TestGCDriverUnsupportedOps(t *testing.T) {
 	if err := d.Unsling(ctx, "x"); !errors.Is(err, ErrUnsupported) {
 		t.Errorf("Unsling err = %v, want ErrUnsupported", err)
 	}
-	if err := d.Nudge(ctx, "t", "m"); !errors.Is(err, ErrUnsupported) {
-		t.Errorf("Nudge err = %v, want ErrUnsupported", err)
+	if err := d.CascadeClose(ctx, "x"); !errors.Is(err, ErrUnsupported) {
+		t.Errorf("CascadeClose err = %v, want ErrUnsupported", err)
 	}
 }
 
@@ -383,6 +385,89 @@ func TestGCDriverMutationServerError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "csrf") {
 		t.Errorf("error = %v, want it to surface the problem detail", err)
+	}
+}
+
+// gcSessionServer answers the sessions list + submit/kill for a pinned city,
+// recording the X-GC-Request header and the session id each mutation hit.
+func gcSessionServer(t *testing.T, lastCSRF, hitID *string) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v0/city/mardi_gras/sessions", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// obsidian is running (id va-9); quartz is a stopped duplicate name.
+		_, _ = w.Write([]byte(`{"items":[` +
+			`{"id":"va-stale","session_name":"obsidian","title":"obsidian","state":"closed","provider":"claude","template":"t","created_at":"2026-06-12T10:00:00Z","attached":false,"running":false},` +
+			`{"id":"va-9","session_name":"obsidian","title":"obsidian","state":"active","provider":"claude","template":"t","created_at":"2026-06-12T10:00:00Z","attached":true,"running":true}` +
+			`],"total":2}`))
+	})
+	record := func(w http.ResponseWriter, r *http.Request, id string) {
+		*lastCSRF = r.Header.Get("X-GC-Request")
+		*hitID = id
+		w.WriteHeader(http.StatusAccepted)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"accepted"}`))
+	}
+	mux.HandleFunc("/v0/city/mardi_gras/session/va-9/submit", func(w http.ResponseWriter, r *http.Request) { record(w, r, "va-9") })
+	mux.HandleFunc("/v0/city/mardi_gras/session/va-9/kill", func(w http.ResponseWriter, r *http.Request) { record(w, r, "va-9") })
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestGCDriverNudge(t *testing.T) {
+	var csrf, hit string
+	srv := gcSessionServer(t, &csrf, &hit)
+	d, _ := NewGCDriver(srv.URL, "mardi_gras")
+	if err := d.Nudge(context.Background(), "obsidian", "wake up"); err != nil {
+		t.Fatalf("Nudge: %v", err)
+	}
+	if hit != "va-9" { // resolved to the running session, not the stale one
+		t.Errorf("submitted to session %q, want va-9 (the running match)", hit)
+	}
+	if csrf == "" {
+		t.Error("X-GC-Request not sent on nudge")
+	}
+}
+
+func TestGCDriverDecommission(t *testing.T) {
+	var csrf, hit string
+	srv := gcSessionServer(t, &csrf, &hit)
+	d, _ := NewGCDriver(srv.URL, "mardi_gras")
+	if err := d.Decommission(context.Background(), "obsidian"); err != nil {
+		t.Fatalf("Decommission: %v", err)
+	}
+	if hit != "va-9" {
+		t.Errorf("killed session %q, want va-9", hit)
+	}
+	if csrf == "" {
+		t.Error("X-GC-Request not sent on decommission")
+	}
+}
+
+func TestGCDriverNudgeNoSession(t *testing.T) {
+	var csrf, hit string
+	srv := gcSessionServer(t, &csrf, &hit)
+	d, _ := NewGCDriver(srv.URL, "mardi_gras")
+	err := d.Nudge(context.Background(), "ghost", "hi")
+	if err == nil || !strings.Contains(err.Error(), "no session") {
+		t.Errorf("Nudge(unknown) err = %v, want a 'no session' error", err)
+	}
+}
+
+func TestGCSessionMatches(t *testing.T) {
+	s := func(v string) *string { return &v }
+	sess := gcclient.SessionResponse{SessionName: "mayor", Title: "Mayor Agent", Alias: s("hizzoner")}
+	for _, want := range []string{"mayor", "MAYOR", "Mayor Agent", "hizzoner"} {
+		if !gcSessionMatches(sess, strings.ToLower(want)) {
+			t.Errorf("gcSessionMatches should match %q", want)
+		}
+	}
+	if gcSessionMatches(sess, "deacon") {
+		t.Error("gcSessionMatches should not match unrelated name")
+	}
+	if gcSessionMatches(sess, "") {
+		t.Error("gcSessionMatches should not match empty target")
 	}
 }
 
