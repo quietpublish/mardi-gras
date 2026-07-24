@@ -1,92 +1,235 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 )
 
-// Pre-built styles for the Mardi Gras theme.
+// Pre-built styles for the Mardi Gras theme. Assigned by rebuildStyles (via
+// SetTheme) so a theme switch rebakes them from the active palette.
 var (
 	// Header
+	HeaderStyle  lipgloss.Style
+	HeaderCounts lipgloss.Style
+
+	// Bead string decorations
+	BeadStylePurple lipgloss.Style
+	BeadStyleGold   lipgloss.Style
+	BeadStyleGreen  lipgloss.Style
+
+	// Section headers in parade list (used for title text color within borders)
+	SectionRolling lipgloss.Style
+	SectionLinedUp lipgloss.Style
+	SectionStalled lipgloss.Style
+	SectionPassed  lipgloss.Style
+
+	// Pre-rendered status indicators
+	StatusRollingStr string
+	StatusLinedUpStr string
+	StatusStalledStr string
+	StatusPassedStr  string
+
+	// Issue items in the list
+	ItemNormal     lipgloss.Style
+	ItemSelected   lipgloss.Style
+	ItemCursor     lipgloss.Style
+	ItemSelectedBg lipgloss.Style
+
+	// Detail panel (right side)
+	DetailBorder  lipgloss.Style
+	DetailTitle   lipgloss.Style
+	DetailLabel   lipgloss.Style
+	DetailValue   lipgloss.Style
+	DetailSection lipgloss.Style
+
+	// Priority badge
+	BadgePriority lipgloss.Style
+
+	// Pre-rendered priority badges
+	BadgeP0 string
+	BadgeP1 string
+	BadgeP2 string
+	BadgeP3 string
+	BadgeP4 string
+
+	// Type badge
+	BadgeType lipgloss.Style
+
+	// Footer
+	FooterStyle lipgloss.Style
+	FooterKey   lipgloss.Style
+	FooterDesc  lipgloss.Style
+
+	// Dependency display
+	DepBlocked     lipgloss.Style
+	DepBlocks      lipgloss.Style
+	DepMissing     lipgloss.Style
+	DepResolved    lipgloss.Style
+	DepNonBlocking lipgloss.Style
+
+	// Due date badges
+	OverdueBadge  lipgloss.Style
+	DueSoonBadge  lipgloss.Style
+	DeferredStyle lipgloss.Style
+
+	// Rich dependency styles
+	DepRelated    lipgloss.Style
+	DepDuplicates lipgloss.Style
+	DepSupersedes lipgloss.Style
+
+	AgentBadge  lipgloss.Style
+	ConvoyBadge lipgloss.Style
+	GasTownTag  lipgloss.Style
+
+	// Gas Town panel
+	GasTownBorder        lipgloss.Style
+	GasTownTitle         lipgloss.Style
+	GasTownLabel         lipgloss.Style
+	GasTownValue         lipgloss.Style
+	GasTownAgentSelected lipgloss.Style
+	GasTownHint          lipgloss.Style
+
+	FooterSource lipgloss.Style
+
+	// Molecule step styles
+	MolStepDone    lipgloss.Style
+	MolStepActive  lipgloss.Style
+	MolStepReady   lipgloss.Style
+	MolStepBlocked lipgloss.Style
+	MolTierLabel   lipgloss.Style
+	MolDAGFlow     lipgloss.Style
+	MolCritical    lipgloss.Style
+
+	// Metadata fields
+	MetaFieldName    lipgloss.Style
+	MetaFieldNameDim lipgloss.Style
+	MetaFieldType    lipgloss.Style
+	MetaFieldValue   lipgloss.Style
+	MetaRequired     lipgloss.Style
+
+	// Filter Input
+	InputPrompt lipgloss.Style
+	InputText   lipgloss.Style
+	InputCursor lipgloss.Style
+
+	// Help Overlay
+	HelpOverlayBg lipgloss.Style
+	HelpTitle     lipgloss.Style
+	HelpSubtitle  lipgloss.Style
+	HelpSection   lipgloss.Style
+	HelpKey       lipgloss.Style
+	HelpDesc      lipgloss.Style
+	HelpHint      lipgloss.Style
+
+	// Toast notifications
+	ToastInfo    lipgloss.Style
+	ToastSuccess lipgloss.Style
+	ToastWarn    lipgloss.Style
+	ToastError   lipgloss.Style
+
+	matchStyle lipgloss.Style
+
+	// overlayBgSeq re-asserts the overlay background after inner SGR resets;
+	// rebuilt with the palette for OverlayBox.
+	overlayBgSeq string
+)
+
+// OverlayBox renders content inside the shared overlay box (help, command
+// palette, dialogs). Inner spans end with an SGR reset that would otherwise
+// punch terminal-default holes in the box background — invisible on dark
+// terminals, visible stripes on light ones — so the box background is
+// re-asserted after every reset before wrapping in HelpOverlayBg.
+func OverlayBox(content string, width int) string {
+	for _, reset := range []string{"\x1b[0m", "\x1b[m"} {
+		content = strings.ReplaceAll(content, reset, reset+overlayBgSeq)
+	}
+	return HelpOverlayBg.Width(width).Render(content)
+}
+
+// rebuildStyles bakes the active palette into the exported styles. Called by
+// SetTheme after the palette vars are assigned.
+func rebuildStyles() {
+	// Header
 	HeaderStyle = lipgloss.NewStyle().
-			Bold(true).
-			Background(DimPurple).
-			Padding(0, 1)
+		Bold(true).
+		Background(DimPurple).
+		Padding(0, 1)
 
 	HeaderCounts = lipgloss.NewStyle().
-			Foreground(Light)
+		Foreground(Light)
 
 	// Bead string decorations
 	BeadStylePurple = lipgloss.NewStyle().Foreground(Purple)
-	BeadStyleGold   = lipgloss.NewStyle().Foreground(Gold)
-	BeadStyleGreen  = lipgloss.NewStyle().Foreground(Green)
+	BeadStyleGold = lipgloss.NewStyle().Foreground(Gold)
+	BeadStyleGreen = lipgloss.NewStyle().Foreground(Green)
 
-	// Section headers in parade list (used for title text color within borders)
+	// Section headers in parade list
 	SectionRolling = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(StatusRolling)
+		Bold(true).
+		Foreground(StatusRolling)
 
 	SectionLinedUp = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(StatusLinedUp)
+		Bold(true).
+		Foreground(StatusLinedUp)
 
 	SectionStalled = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(StatusStalled)
+		Bold(true).
+		Foreground(StatusStalled)
 
 	SectionPassed = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(StatusPassed)
+		Bold(true).
+		Foreground(StatusPassed)
 
 	// Pre-rendered status indicators
 	StatusRollingStr = lipgloss.NewStyle().Foreground(StatusRolling).Render(SymRolling)
 	StatusLinedUpStr = lipgloss.NewStyle().Foreground(StatusLinedUp).Render(SymLinedUp)
 	StatusStalledStr = lipgloss.NewStyle().Foreground(StatusStalled).Render(SymStalled)
-	StatusPassedStr  = lipgloss.NewStyle().Foreground(StatusPassed).Render(SymPassed)
+	StatusPassedStr = lipgloss.NewStyle().Foreground(StatusPassed).Render(SymPassed)
 
 	// Issue items in the list
 	ItemNormal = lipgloss.NewStyle().
-			PaddingLeft(3)
+		PaddingLeft(3)
 
 	ItemSelected = lipgloss.NewStyle().
-			PaddingLeft(1).
-			Bold(true).
-			Foreground(White)
+		PaddingLeft(1).
+		Bold(true).
+		Foreground(White)
 
 	ItemCursor = lipgloss.NewStyle().
-			Foreground(BrightGold).
-			Bold(true)
+		Foreground(BrightGold).
+		Bold(true)
 
 	ItemSelectedBg = lipgloss.NewStyle().
-			Background(DimPurple)
+		Background(DimPurple)
 
 	// Detail panel (right side)
 	DetailBorder = lipgloss.NewStyle().
-			BorderLeft(true).
-			BorderStyle(lipgloss.NormalBorder()).
-			BorderForeground(DimPurple).
-			PaddingLeft(1)
+		BorderLeft(true).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(DimPurple).
+		PaddingLeft(1)
 
 	DetailTitle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(White)
+		Bold(true).
+		Foreground(White)
 
 	DetailLabel = lipgloss.NewStyle().
-			Foreground(Muted).
-			Width(12)
+		Foreground(Muted).
+		Width(12)
 
 	DetailValue = lipgloss.NewStyle().
-			Foreground(Light)
+		Foreground(Light)
 
 	DetailSection = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(BrightGold).
-			MarginTop(1)
+		Bold(true).
+		Foreground(BrightGold).
+		MarginTop(1)
 
 	// Priority badge
 	BadgePriority = lipgloss.NewStyle().
-			Bold(true)
+		Bold(true)
 
 	// Pre-rendered priority badges
 	BadgeP0 = BadgePriority.Foreground(PrioP0).Render("P0")
@@ -97,201 +240,206 @@ var (
 
 	// Type badge
 	BadgeType = lipgloss.NewStyle().
-			Italic(true)
+		Italic(true)
 
 	// Footer
 	FooterStyle = lipgloss.NewStyle().
-			Foreground(Light).
-			Background(DimPurple).
-			Padding(0, 1)
+		Foreground(Light).
+		Background(DimPurple).
+		Padding(0, 1)
 
 	FooterKey = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(BrightGold)
+		Bold(true).
+		Foreground(BrightGold)
 
 	FooterDesc = lipgloss.NewStyle().
-			Foreground(Light)
+		Foreground(Light)
 
 	// Dependency display
 	DepBlocked = lipgloss.NewStyle().
-			Foreground(StatusStalled)
+		Foreground(StatusStalled)
 
 	DepBlocks = lipgloss.NewStyle().
-			Foreground(StatusLinedUp)
+		Foreground(StatusLinedUp)
 
 	DepMissing = lipgloss.NewStyle().
-			Foreground(StatusStalled).
-			Bold(true)
+		Foreground(StatusStalled).
+		Bold(true)
 
 	DepResolved = lipgloss.NewStyle().
-			Foreground(StatusPassed)
+		Foreground(StatusPassed)
 
 	DepNonBlocking = lipgloss.NewStyle().
-			Foreground(Muted)
+		Foreground(Muted)
 
 	// Due date badges
 	OverdueBadge = lipgloss.NewStyle().
-			Foreground(StatusStalled).
-			Bold(true)
+		Foreground(StatusStalled).
+		Bold(true)
 
 	DueSoonBadge = lipgloss.NewStyle().
-			Foreground(PrioP1) // orange
+		Foreground(PrioP1) // orange
 
 	DeferredStyle = lipgloss.NewStyle().
-			Foreground(Dim)
+		Foreground(Dim)
 
 	// Rich dependency styles
 	DepRelated = lipgloss.NewStyle().
-			Foreground(BrightPurple)
+		Foreground(BrightPurple)
 
 	DepDuplicates = lipgloss.NewStyle().
-			Foreground(Muted).
-			Italic(true)
+		Foreground(Muted).
+		Italic(true)
 
 	DepSupersedes = lipgloss.NewStyle().
-			Foreground(BrightGold)
+		Foreground(BrightGold)
 
-	AgentBadge  = lipgloss.NewStyle().Foreground(StatusAgent).Bold(true)
+	AgentBadge = lipgloss.NewStyle().Foreground(StatusAgent).Bold(true)
 	ConvoyBadge = lipgloss.NewStyle().Foreground(StatusConvoy).Bold(true)
-	GasTownTag  = lipgloss.NewStyle().Foreground(BrightPurple).Italic(true)
+	GasTownTag = lipgloss.NewStyle().Foreground(BrightPurple).Italic(true)
 
 	// Gas Town panel
 	GasTownBorder = lipgloss.NewStyle().
-			BorderLeft(true).
-			BorderStyle(lipgloss.NormalBorder()).
-			BorderForeground(BrightGold).
-			PaddingLeft(1)
+		BorderLeft(true).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(BrightGold).
+		PaddingLeft(1)
 
 	GasTownTitle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(BrightGold).
-			MarginTop(1)
+		Bold(true).
+		Foreground(BrightGold).
+		MarginTop(1)
 
 	GasTownLabel = lipgloss.NewStyle().
-			Foreground(Muted)
+		Foreground(Muted)
 
 	GasTownValue = lipgloss.NewStyle().
-			Foreground(Light)
+		Foreground(Light)
 
 	GasTownAgentSelected = lipgloss.NewStyle().
-				Background(DimPurple)
+		Background(DimPurple)
 
 	GasTownHint = lipgloss.NewStyle().
-			Foreground(Dim).
-			MarginTop(1)
+		Foreground(Dim).
+		MarginTop(1)
 
 	FooterSource = lipgloss.NewStyle().
-			Foreground(Muted)
+		Foreground(Muted)
 
 	// Molecule step styles
 	MolStepDone = lipgloss.NewStyle().
-			Foreground(BrightGreen)
+		Foreground(BrightGreen)
 
 	MolStepActive = lipgloss.NewStyle().
-			Foreground(BrightGold).
-			Bold(true)
+		Foreground(BrightGold).
+		Bold(true)
 
 	MolStepReady = lipgloss.NewStyle().
-			Foreground(Light)
+		Foreground(Light)
 
 	MolStepBlocked = lipgloss.NewStyle().
-			Foreground(StatusStalled)
+		Foreground(StatusStalled)
 
 	MolTierLabel = lipgloss.NewStyle().
-			Foreground(Dim).
-			Italic(true)
+		Foreground(Dim).
+		Italic(true)
 
 	MolDAGFlow = lipgloss.NewStyle().
-			Foreground(Dim)
+		Foreground(Dim)
 
 	MolCritical = lipgloss.NewStyle().
-			Foreground(BrightGold).
-			Bold(true)
+		Foreground(BrightGold).
+		Bold(true)
 
 	// Metadata fields
 	MetaFieldName = lipgloss.NewStyle().
-			Foreground(Light)
+		Foreground(Light)
 
 	MetaFieldNameDim = lipgloss.NewStyle().
-				Foreground(Muted)
+		Foreground(Muted)
 
 	MetaFieldType = lipgloss.NewStyle().
-			Foreground(Muted)
+		Foreground(Muted)
 
 	MetaFieldValue = lipgloss.NewStyle().
-			Foreground(BrightGreen)
+		Foreground(BrightGreen)
 
 	MetaRequired = lipgloss.NewStyle().
-			Foreground(StatusStalled)
+		Foreground(StatusStalled)
 
 	// Filter Input
 	InputPrompt = lipgloss.NewStyle().
-			Foreground(BrightGold).
-			Bold(true).
-			PaddingLeft(1)
+		Foreground(BrightGold).
+		Bold(true).
+		PaddingLeft(1)
 
 	InputText = lipgloss.NewStyle().
-			Foreground(White)
+		Foreground(White)
 
 	InputCursor = lipgloss.NewStyle().
-			Foreground(Purple)
+		Foreground(Purple)
 
 	// Help Overlay
 	HelpOverlayBg = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(BrightPurple).
-			Background(lipgloss.Color("#121521")).
-			Padding(1, 2)
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(BrightPurple).
+		Background(HelpBg).
+		Padding(1, 2)
 
 	HelpTitle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(BrightGold).
-			Align(lipgloss.Center)
+		Bold(true).
+		Foreground(BrightGold).
+		Align(lipgloss.Center)
 
 	HelpSubtitle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#A9AFBF")).
-			Align(lipgloss.Center)
+		Foreground(HelpSubtitleFg).
+		Align(lipgloss.Center)
 
 	HelpSection = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(BrightGreen).
-			Underline(true)
+		Bold(true).
+		Foreground(BrightGreen).
+		Underline(true)
 
 	HelpKey = lipgloss.NewStyle().
 		Bold(true).
 		Foreground(Gold)
 
 	HelpDesc = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#D6D8DF"))
+		Foreground(HelpDescFg)
 
 	HelpHint = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#8E94A6")).
-			Align(lipgloss.Center)
+		Foreground(HelpHintFg).
+		Align(lipgloss.Center)
 
 	// Toast notifications
 	ToastInfo = lipgloss.NewStyle().
-			Foreground(Light).
-			Background(DimPurple).
-			Padding(0, 1)
+		Foreground(Light).
+		Background(DimPurple).
+		Padding(0, 1)
 
 	ToastSuccess = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#1A1A1A")).
-			Background(BrightGreen).
-			Bold(true).
-			Padding(0, 1)
+		Foreground(ToastAccentFg).
+		Background(BrightGreen).
+		Bold(true).
+		Padding(0, 1)
 
 	ToastWarn = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#1A1A1A")).
-			Background(BrightGold).
-			Bold(true).
-			Padding(0, 1)
+		Foreground(ToastAccentFg).
+		Background(BrightGold).
+		Bold(true).
+		Padding(0, 1)
 
 	ToastError = lipgloss.NewStyle().
-			Foreground(White).
-			Background(lipgloss.Color("#E74C3C")).
-			Bold(true).
-			Padding(0, 1)
-)
+		Foreground(ToastErrorFg).
+		Background(StatusStalled).
+		Bold(true).
+		Padding(0, 1)
+
+	matchStyle = lipgloss.NewStyle().Foreground(BrightGold).Bold(true).Underline(true)
+
+	r, g, b, _ := HelpBg.RGBA()
+	overlayBgSeq = fmt.Sprintf("\x1b[48;2;%d;%d;%dm", r>>8, g>>8, b>>8)
+}
 
 // RoleBadge returns a styled badge for a Gas Town role.
 func RoleBadge(role string) string {
@@ -357,8 +505,6 @@ func SectionDivider(title string, width int, focused bool) string {
 		titleStyle.Render(title) + " " +
 		ruleStyle.Render(trail)
 }
-
-var matchStyle = lipgloss.NewStyle().Foreground(BrightGold).Bold(true).Underline(true)
 
 // HighlightMatches renders a string with matched character positions highlighted.
 // Matched characters are rendered in bright gold bold; others use default style.

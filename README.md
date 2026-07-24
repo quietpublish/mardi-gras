@@ -95,6 +95,11 @@ mg --no-animations
 # or via environment variable
 MG_NO_ANIMATIONS=1 mg
 
+# Force the light or dark theme (default: auto-detect from the terminal background)
+mg --theme light
+# or via environment variable
+MG_THEME=light mg
+
 # Scale command timeouts for slow connections (default 30s, max 300s)
 mg --cmd-timeout 60
 

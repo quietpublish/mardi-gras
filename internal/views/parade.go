@@ -25,11 +25,15 @@ type paradeSection struct {
 	BorderVertical string
 }
 
-var sections = []paradeSection{
-	{Title: "Rolling", Symbol: ui.SymRolling, Style: ui.SectionRolling, Color: ui.StatusRolling, Status: data.ParadeRolling, BorderVertical: lipgloss.NewStyle().Foreground(ui.StatusRolling).Render(ui.BoxVertical)},
-	{Title: "Lined Up", Symbol: ui.SymLinedUp, Style: ui.SectionLinedUp, Color: ui.StatusLinedUp, Status: data.ParadeLinedUp, BorderVertical: lipgloss.NewStyle().Foreground(ui.StatusLinedUp).Render(ui.BoxVertical)},
-	{Title: "Stalled", Symbol: ui.SymStalled, Style: ui.SectionStalled, Color: ui.StatusStalled, Status: data.ParadeStalled, BorderVertical: lipgloss.NewStyle().Foreground(ui.StatusStalled).Render(ui.BoxVertical)},
-	{Title: "Past the Stand", Symbol: ui.SymPassed, Style: ui.SectionPassed, Color: ui.StatusPassed, Status: data.ParadePastTheStand, BorderVertical: lipgloss.NewStyle().Foreground(ui.StatusPassed).Render(ui.BoxVertical)},
+// sections is built per call (not a package var) so a theme switch at startup
+// is reflected in the captured styles and pre-rendered borders.
+func sections() []paradeSection {
+	return []paradeSection{
+		{Title: "Rolling", Symbol: ui.SymRolling, Style: ui.SectionRolling, Color: ui.StatusRolling, Status: data.ParadeRolling, BorderVertical: lipgloss.NewStyle().Foreground(ui.StatusRolling).Render(ui.BoxVertical)},
+		{Title: "Lined Up", Symbol: ui.SymLinedUp, Style: ui.SectionLinedUp, Color: ui.StatusLinedUp, Status: data.ParadeLinedUp, BorderVertical: lipgloss.NewStyle().Foreground(ui.StatusLinedUp).Render(ui.BoxVertical)},
+		{Title: "Stalled", Symbol: ui.SymStalled, Style: ui.SectionStalled, Color: ui.StatusStalled, Status: data.ParadeStalled, BorderVertical: lipgloss.NewStyle().Foreground(ui.StatusStalled).Render(ui.BoxVertical)},
+		{Title: "Past the Stand", Symbol: ui.SymPassed, Style: ui.SectionPassed, Color: ui.StatusPassed, Status: data.ParadePastTheStand, BorderVertical: lipgloss.NewStyle().Foreground(ui.StatusPassed).Render(ui.BoxVertical)},
+	}
 }
 
 // ParadeItem is a renderable entry — a section header, footer, or issue.
@@ -117,7 +121,7 @@ func NewParadeWithData(
 // rebuildItems flattens groups into the renderable item list.
 func (p *Parade) rebuildItems() {
 	p.Items = nil
-	for _, sec := range sections {
+	for _, sec := range sections() {
 		issues := p.Groups[sec.Status]
 		if len(issues) == 0 {
 			continue

@@ -284,7 +284,7 @@ func (p Palette) View() string {
 		hint,
 	)
 
-	box := ui.HelpOverlayBg.Width(contentWidth + 4).Render(content)
+	box := ui.OverlayBox(content, contentWidth+4)
 
 	return lipgloss.Place(p.width, p.height, lipgloss.Center, lipgloss.Center, box)
 }

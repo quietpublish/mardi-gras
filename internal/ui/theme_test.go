@@ -202,3 +202,21 @@ func TestAgentStateColorPatrolling(t *testing.T) {
 		t.Error("patrolling and idle must map to distinct colors")
 	}
 }
+
+// TestSetThemeRebakes guards the SetTheme contract: switching themes must
+// rebake derived artifacts (pre-rendered strings, gradients), not just the
+// palette vars.
+func TestSetThemeRebakes(t *testing.T) {
+	t.Cleanup(func() { SetTheme(ThemeDark) })
+
+	darkBadge := BadgeP0
+	darkHeat := GradientHeat.At(50).Render("█")
+
+	SetTheme(ThemeLight)
+	if BadgeP0 == darkBadge {
+		t.Error("SetTheme(ThemeLight) did not rebake pre-rendered BadgeP0")
+	}
+	if GradientHeat.At(50).Render("█") == darkHeat {
+		t.Error("SetTheme(ThemeLight) did not rebuild GradientHeat")
+	}
+}

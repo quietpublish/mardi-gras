@@ -181,20 +181,30 @@ func GradientBar(pct float64, width int, g Gradient) string {
 	return b.String()
 }
 
-// Pre-built gradients for common use cases.
+// Pre-built gradients for common use cases. Assigned by rebuildGradients (via
+// SetTheme) so a theme switch rebakes them from the active palette.
 var (
 	// GradientProgress: green → gold → red (for progress bars, budgets).
-	GradientProgress = NewGradient(BrightGreen, BrightGold, lipgloss.Color("#E74C3C"))
+	GradientProgress Gradient
 
 	// GradientHeat: green → orange → red (for age/staleness).
-	GradientHeat = NewGradient(BrightGreen, lipgloss.Color("#E67E22"), lipgloss.Color("#E74C3C"))
+	GradientHeat Gradient
 
 	// GradientPurpleGold: purple → gold (Mardi Gras themed, for selection proximity).
-	GradientPurpleGold = NewGradient2(DimPurple, BrightGold)
+	GradientPurpleGold Gradient
 
 	// GradientFade: bright → dim (for list item positional fading).
-	GradientFade = NewGradient2(White, Dim)
+	GradientFade Gradient
 )
+
+// rebuildGradients bakes the active palette into the pre-built gradients.
+// Called by SetTheme after the palette vars are assigned.
+func rebuildGradients() {
+	GradientProgress = NewGradient(BrightGreen, BrightGold, StatusStalled)
+	GradientHeat = NewGradient(BrightGreen, Orange, StatusStalled)
+	GradientPurpleGold = NewGradient2(DimPurple, BrightGold)
+	GradientFade = NewGradient2(White, Dim)
+}
 
 // ApplyPartialMardiGrasGradient applies the gradient as if the text was `totalLength` characters long,
 // ensuring a partial progress bar maps to the correct segment of the full color spectrum.

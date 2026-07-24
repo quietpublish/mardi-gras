@@ -33,7 +33,7 @@ Always run `make test` after changes. Run `make lint` before committing.
 
 - **Go style**: `gofmt` formatting, no lint warnings. Run `golangci-lint` before committing.
 - **Value receivers** on BubbleTea models (`Update`, `View`), **pointer receivers** on mutating helpers (`layout`, `rebuildParade`, `syncSelection`).
-- **UI constants** live in `internal/ui/` — colors in `theme.go`, symbols in `symbols.go`, lipgloss styles in `styles.go`. Don't scatter raw colors or symbols in view code.
+- **UI constants** live in `internal/ui/` — colors in `theme.go`, symbols in `symbols.go`, lipgloss styles in `styles.go`. Don't scatter raw colors or symbols in view code. The palette is theme-switchable (`ui.SetTheme`, rebaked at startup): never capture palette vars, styles, or pre-rendered strings in package-level vars outside `internal/ui` — they would freeze the dark values before the theme is applied.
 - **No new packages** without good reason. Prefer expanding existing packages.
 - **Test naming**: `TestFunctionName` for the happy path, `TestFunctionNameEdgeCase` for variants.
 

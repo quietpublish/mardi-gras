@@ -16,7 +16,7 @@ func BenchmarkParadeRenderIssue(b *testing.B) {
 	emptyMap := map[string]*data.Issue{}
 	eval := issue.EvaluateDependencies(emptyMap, bt)
 	p := NewParade([]data.Issue{issue}, 100, 40, bt)
-	item := ParadeItem{Issue: &issue, Section: sections[0], Eval: &eval}
+	item := ParadeItem{Issue: &issue, Section: sections()[0], Eval: &eval}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -35,7 +35,7 @@ func BenchmarkParadeRenderIssueSelected(b *testing.B) {
 	emptyMap := map[string]*data.Issue{}
 	eval := issue.EvaluateDependencies(emptyMap, bt)
 	p := NewParade([]data.Issue{issue}, 100, 40, bt)
-	item := ParadeItem{Issue: &issue, Section: sections[0], Eval: &eval}
+	item := ParadeItem{Issue: &issue, Section: sections()[0], Eval: &eval}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

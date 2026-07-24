@@ -13,10 +13,12 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/matt-wright86/mardi-gras/internal/app"
 	"github.com/matt-wright86/mardi-gras/internal/data"
 	"github.com/matt-wright86/mardi-gras/internal/gastown"
 	"github.com/matt-wright86/mardi-gras/internal/tmux"
+	"github.com/matt-wright86/mardi-gras/internal/ui"
 )
 
 // Alias SourceMode constants for convenience.
@@ -38,6 +40,7 @@ func main() {
 	noAnimations := flag.Bool("no-animations", false, "Disable confetti and header shimmer animations")
 	cmdTimeout := flag.Int("cmd-timeout", 0, "Command timeout in seconds (scales all external command timeouts; default 30)")
 	agentRuntime := flag.String("agent", "", "Preferred agent runtime: claude or cursor (default: claude if available, else cursor)")
+	themeFlag := flag.String("theme", "", "Color theme: auto, dark, or light (default: MG_THEME env or auto)")
 	flag.Parse()
 
 	// MG_NO_ANIMATIONS=1 env var as alternative to --no-animations flag
@@ -123,6 +126,7 @@ func main() {
 	}
 
 	// Run TUI
+	applyTheme(*themeFlag)
 	guard := app.NewOSCGuard()
 	model := app.NewWithGuard(issues, source, blockingTypes, guard, *noAnimations, filters)
 	p := tea.NewProgram(model, tea.WithFilter(guard.Filter()))
@@ -133,6 +137,30 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
+	}
+}
+
+// applyTheme resolves the color theme from the --theme flag, the MG_THEME env
+// var, or (in auto mode) the terminal's reported background color. It must run
+// before tea.NewProgram: the auto probe queries the tty directly, and the ui
+// package rebakes every style when the theme switches. Detection failures
+// (pipes, terminals that ignore OSC 11) fall back to the dark default.
+func applyTheme(flagVal string) {
+	mode := flagVal
+	if mode == "" {
+		mode = os.Getenv("MG_THEME")
+	}
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "light":
+		ui.SetTheme(ui.ThemeLight)
+	case "dark":
+		ui.SetTheme(ui.ThemeDark)
+	case "", "auto":
+		if !lipgloss.HasDarkBackground(os.Stdin, os.Stdout) {
+			ui.SetTheme(ui.ThemeLight)
+		}
+	default:
+		fmt.Fprintf(os.Stderr, "Warning: unknown theme %q (want auto, dark, or light); using dark\n", mode)
 	}
 }
 
