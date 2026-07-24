@@ -27,6 +27,12 @@ type Footer struct {
 	SourceMode   data.SourceMode
 	BeadsContext *data.BeadsContext
 	SourceHealth *data.SourceHealth
+	Focus        bool // focus mode active — show a persistent badge (audit #12)
+}
+
+// FooterModeChip renders a small gold mode indicator for bottom-bar overlays.
+func FooterModeChip(label string) string {
+	return ui.FooterKey.Render(label)
 }
 
 // ParadeBindings are the default keybindings for the parade view.
@@ -63,7 +69,6 @@ func (f Footer) View() string {
 		desc := ui.FooterDesc.Render(b.Desc)
 		parts = append(parts, key+" "+desc)
 	}
-	keybindings := strings.Join(parts, "  ")
 
 	// Build source info (left side)
 	sourceInfo := ""
@@ -79,15 +84,7 @@ func (f Footer) View() string {
 		}
 		age := "?"
 		if !f.LastRefresh.IsZero() {
-			elapsed := time.Since(f.LastRefresh)
-			switch {
-			case elapsed < time.Minute:
-				age = fmt.Sprintf("%ds ago", int(elapsed.Seconds()))
-			case elapsed < time.Hour:
-				age = fmt.Sprintf("%dm ago", int(elapsed.Minutes()))
-			default:
-				age = fmt.Sprintf("%dh ago", int(elapsed.Hours()))
-			}
+			age = data.RelativeAge(time.Since(f.LastRefresh))
 		}
 		contextInfo := ""
 		if f.BeadsContext != nil && f.BeadsContext.Database != "" {
@@ -109,16 +106,48 @@ func (f Footer) View() string {
 		}
 	}
 
+	// Persistent focus-mode badge: without it the only signal is a transient
+	// toast (audit #12).
+	if f.Focus {
+		badge := ui.FooterKey.Render(ui.FleurDeLis + " FOCUS")
+		if sourceInfo != "" {
+			sourceInfo = badge + ui.FooterSource.Render(" · ") + sourceInfo
+		} else {
+			sourceInfo = badge
+		}
+	}
+
 	if sourceInfo != "" {
-		// Lay out: source left, keybindings right
+		// Lay out: source left, keybindings right. Drop whole trailing hint
+		// chips when width is short — clipping one mid-keyword reads as a
+		// rendering bug (audit #11).
 		sourceW := lipgloss.Width(sourceInfo)
+		keybindings := fitBindings(parts, f.Width-sourceW-3)
 		keysW := lipgloss.Width(keybindings)
 		gap := max(f.Width-sourceW-keysW-2, 1) // 2 for padding
 		content := sourceInfo + strings.Repeat(" ", gap) + keybindings
 		return ui.FooterStyle.Width(f.Width).Render(content)
 	}
 
-	return ui.FooterStyle.Width(f.Width).Render(keybindings)
+	return ui.FooterStyle.Width(f.Width).Render(fitBindings(parts, f.Width-2))
+}
+
+// fitBindings joins hint chips, dropping whole chips from the end (with a "…"
+// marker) until the row fits the available width.
+func fitBindings(parts []string, avail int) string {
+	joined := strings.Join(parts, "  ")
+	if lipgloss.Width(joined) <= avail || len(parts) == 0 {
+		return joined
+	}
+	ellipsis := ui.FooterSource.Render("…")
+	for len(parts) > 1 {
+		parts = parts[:len(parts)-1]
+		joined = strings.Join(parts, "  ") + " " + ellipsis
+		if lipgloss.Width(joined) <= avail {
+			return joined
+		}
+	}
+	return ellipsis
 }
 
 // renderHealthState builds the source info string for degraded/fallback states.
@@ -126,16 +155,9 @@ func (f Footer) View() string {
 func (f Footer) renderHealthState(age string) string {
 	h := f.SourceHealth
 	staleness := h.StalenessAge()
-	var ageStr string
-	switch {
-	case staleness == 0:
-		ageStr = age
-	case staleness < time.Minute:
-		ageStr = fmt.Sprintf("%ds ago", int(staleness.Seconds()))
-	case staleness < time.Hour:
-		ageStr = fmt.Sprintf("%dm ago", int(staleness.Minutes()))
-	default:
-		ageStr = fmt.Sprintf("%dh ago", int(staleness.Hours()))
+	ageStr := age
+	if staleness != 0 {
+		ageStr = data.RelativeAge(staleness)
 	}
 
 	var label string

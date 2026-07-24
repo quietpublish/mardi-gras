@@ -40,7 +40,7 @@ type Detail struct {
 
 // NewDetail creates a detail panel.
 func NewDetail(width, height int, issues []data.Issue) Detail {
-	vp := viewport.New(viewport.WithWidth(width-2), viewport.WithHeight(height))
+	vp := viewport.New(viewport.WithWidth(width-2), viewport.WithHeight(max(height-1, 1)))
 	return Detail{
 		AllIssues: issues,
 		IssueMap:  data.BuildIssueMap(issues),
@@ -48,6 +48,13 @@ func NewDetail(width, height int, issues []data.Issue) Detail {
 		Width:     width,
 		Height:    height,
 	}
+}
+
+// ResetViewport replaces the viewport (dropping scroll state) while keeping
+// the pane's size contract: one row under the viewport belongs to the scroll
+// cue. Callers must size the pane via SetSize first.
+func (d *Detail) ResetViewport() {
+	d.Viewport = viewport.New(viewport.WithWidth(d.Width-2), viewport.WithHeight(max(d.Height-1, 1)))
 }
 
 // SetIssue updates the displayed issue and rebuilds content.
@@ -124,8 +131,9 @@ func (d *Detail) SetRichDetail(issueID string, rich *data.Issue) {
 func (d *Detail) SetSize(width, height int) {
 	d.Width = width
 	d.Height = height
+	// One row is reserved under the viewport for the scroll position cue.
 	d.Viewport.SetWidth(width - 2)
-	d.Viewport.SetHeight(height)
+	d.Viewport.SetHeight(max(height-1, 1))
 	d.mdRenderer = nil // re-create with new width
 	if d.Issue != nil {
 		d.Viewport.SetContent(d.renderContent())
@@ -153,7 +161,20 @@ func (d *Detail) View() string {
 	}
 
 	content := d.Viewport.View()
-	return border.Height(d.Height).Render(content)
+
+	// Scroll position cue: a scrolled pane gives no orientation otherwise
+	// (audit #13). Blank when everything fits.
+	cue := ""
+	if d.Viewport.TotalLineCount() > d.Viewport.Height() {
+		cue = fmt.Sprintf("%s %d%% ", strings.Repeat(ui.BoxHorizontal, 3), int(d.Viewport.ScrollPercent()*100))
+	}
+	cueLine := lipgloss.NewStyle().
+		Foreground(ui.Dim).
+		Width(d.Viewport.Width()).
+		Align(lipgloss.Right).
+		Render(cue)
+
+	return border.Height(d.Height).Render(content + "\n" + cueLine)
 }
 
 // renderMarkdown renders markdown text using glamour with mg's brand theme.
@@ -208,7 +229,7 @@ func (d *Detail) renderContent() string {
 	statusSym := statusSymbol(issue, isBlocked)
 	statusLabel := paradeLabel(issue, isBlocked)
 	statusStyle := lipgloss.NewStyle().Foreground(statusColor(issue, isBlocked))
-	lines = append(lines, d.row("Status:", statusSym+" "+statusStyle.Render(statusLabel+" ("+string(issue.Status)+")")))
+	lines = append(lines, d.row("Status:", statusStyle.Render(statusSym+" "+statusLabel+" ("+string(issue.Status)+")")))
 
 	// Type
 	typeColor := ui.IssueTypeColor(string(issue.IssueType))

@@ -332,3 +332,21 @@ func BuildIssueMap(issues []Issue) map[string]*Issue {
 	}
 	return m
 }
+
+// RelativeAge renders a duration as a compact human age ("42s ago", "5m ago",
+// "3h ago", "12d ago", "5w ago"). Hours cap at a day so long gaps don't read
+// as "969h ago".
+func RelativeAge(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds ago", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	case d < 14*24*time.Hour:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	default:
+		return fmt.Sprintf("%dw ago", int(d.Hours()/(24*7)))
+	}
+}

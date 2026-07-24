@@ -80,6 +80,7 @@ type Palette struct {
 	input        textinput.Model
 	commands     []PaletteCommand
 	filtered     []PaletteCommand
+	matched      [][]int // fuzzy match indices per filtered entry (nil when unfiltered)
 	cursor       int
 	scrollOffset int
 	width        int
@@ -174,6 +175,7 @@ func (p *Palette) refilter() {
 	query := strings.TrimSpace(p.input.Value())
 	if query == "" {
 		p.filtered = p.commands
+		p.matched = nil
 		p.cursor = 0
 		p.scrollOffset = 0
 		return
@@ -183,10 +185,13 @@ func (p *Palette) refilter() {
 	matches := fuzzy.FindFrom(query, src)
 
 	result := make([]PaletteCommand, 0, len(matches))
+	matched := make([][]int, 0, len(matches))
 	for _, match := range matches {
 		result = append(result, p.commands[match.Index])
+		matched = append(matched, match.MatchedIndexes)
 	}
 	p.filtered = result
+	p.matched = matched
 	p.cursor = 0
 	p.scrollOffset = 0
 }
@@ -239,27 +244,30 @@ func (p Palette) View() string {
 	rows := make([]string, 0, len(visible))
 	for i, cmd := range visible {
 		idx := p.scrollOffset + i
+		selected := idx == p.cursor
 		cursor := "  "
-		nameStyle := ui.HelpDesc
-		if idx == p.cursor {
+		if selected {
 			cursor = ui.ItemCursor.Render(ui.Cursor + " ")
-			nameStyle = lipgloss.NewStyle().Foreground(ui.White).Bold(true)
 		}
+
+		// Leading fixed-width hotkey chip: keeps key↔command pairing obvious
+		// and the row safely inside the box (audit #7).
+		key := ui.HelpKey.Width(keyWidth).Render(ansi.Truncate(cmd.Key, keyWidth-1, ""))
 
 		name := ansi.Truncate(cmd.Name, nameWidth, "...")
-		key := ui.HelpKey.Width(keyWidth).Align(lipgloss.Right).Render(cmd.Key)
-		row := cursor + nameStyle.Render(name)
-
-		// Pad to fill width, then append key
-		rowWidth := lipgloss.Width(row)
-		gap := contentWidth - rowWidth - keyWidth
-		if gap < 1 {
-			gap = 1
+		var renderedName string
+		switch {
+		case p.matched != nil && idx < len(p.matched) && len(p.matched[idx]) > 0:
+			renderedName = ui.HighlightMatches(name, p.matched[idx], nameWidth)
+		case selected:
+			renderedName = lipgloss.NewStyle().Foreground(ui.White).Bold(true).Render(name)
+		default:
+			renderedName = ui.HelpDesc.Render(name)
 		}
-		row = row + strings.Repeat(" ", gap) + key
 
-		if idx == p.cursor {
-			row = ui.ItemSelectedBg.Width(contentWidth).Render(row)
+		row := cursor + key + renderedName
+		if selected {
+			row = ui.SelectedRow(row, contentWidth)
 		}
 
 		rows = append(rows, row)

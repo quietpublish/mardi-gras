@@ -288,6 +288,18 @@ func (p *Parade) SelectedIssues() []*data.Issue {
 }
 
 // SelectionCount returns the number of multi-selected issues.
+// VisibleIssues returns the number of issue rows currently in the parade
+// (section headers and footers excluded). Used for the filter match count.
+func (p *Parade) VisibleIssues() int {
+	n := 0
+	for _, item := range p.Items {
+		if item.isSelectable() {
+			n++
+		}
+	}
+	return n
+}
+
 func (p *Parade) SelectionCount() int {
 	return len(p.Selected)
 }
@@ -332,15 +344,29 @@ func (p *Parade) View() string {
 		}
 	}
 
-	// Pad to fill height
-	rendered := len(lines)
+	// Pad to fill height. With room to spare, the bottom row carries the
+	// status-symbol legend instead of dead space (audit #19).
+	free := p.Height - len(lines)
 	padLine := strings.Repeat(" ", p.Width)
-	for rendered < p.Height {
+	for i := 0; i < free; i++ {
 		lines = append(lines, padLine)
-		rendered++
+	}
+	if free >= 2 {
+		lines[len(lines)-1] = p.renderLegend()
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// renderLegend renders the parade status-symbol legend shown in spare space
+// at the bottom of the pane.
+func (p *Parade) renderLegend() string {
+	dim := lipgloss.NewStyle().Foreground(ui.Dim)
+	legend := "  " + ui.StatusRollingStr + dim.Render(" rolling   ") +
+		ui.StatusLinedUpStr + dim.Render(" lined up   ") +
+		ui.StatusStalledStr + dim.Render(" stalled   ") +
+		ui.StatusPassedStr + dim.Render(" passed")
+	return ansi.Truncate(legend, p.Width, "")
 }
 
 // renderBorderTop builds a top border line: ╭─ ● Rolling (2) ────────╮
@@ -455,6 +481,12 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 	default:
 		prioStr = ui.BadgeP4
 	}
+	// Closed issues render muted throughout — done work shouldn't compete
+	// with live work for attention (audit #9).
+	isClosed := issue.Status == data.StatusClosed
+	if isClosed {
+		prioStr = lipgloss.NewStyle().Foreground(ui.Muted).Render(fmt.Sprintf("P%d", issue.Priority))
+	}
 
 	// Multi-select checkbox
 	selectPrefix := ""
@@ -520,17 +552,26 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 	indent := strings.Repeat("  ", depth)
 	indentWidth := depth * 2
 
-	// Due date badge
+	// Due date badge. Under width pressure the badge compresses ("▲151d")
+	// so it never crowds out the title (audit #2).
+	innerWidth := p.Width - 4 // │ + space + content + space + │
+	compactBadges := innerWidth < 70
 	dueBadge := ""
 	dueWidth := 0
 	if issue.IsOverdue() {
 		label := fmt.Sprintf("%s %s", ui.SymOverdue, issue.DueLabel())
+		if compactBadges {
+			label = ui.SymOverdue + strings.Fields(issue.DueLabel())[0]
+		}
 		dueBadge = " " + ui.OverdueBadge.Render(label)
 		dueWidth = lipgloss.Width(dueBadge)
 	} else if issue.DueAt != nil && issue.Status != data.StatusClosed {
 		days := int(time.Until(*issue.DueAt).Hours() / 24)
 		if days <= 3 {
 			label := fmt.Sprintf("%s %s", ui.SymDueDate, issue.DueLabel())
+			if compactBadges {
+				label = ui.SymDueDate + strings.Fields(issue.DueLabel())[0]
+			}
 			dueBadge = " " + ui.DueSoonBadge.Render(label)
 			dueWidth = lipgloss.Width(dueBadge)
 		}
@@ -555,19 +596,26 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 		}
 	}
 
-	// Inner width (between │ borders, with 1 char padding each side)
-	innerWidth := p.Width - 4 // │ + space + content + space + │
-
-	// First, constrain the hint length if the terminal is very narrow
-	maxHint := innerWidth - 16 - agentWidth - indentWidth - dueWidth - deferWidth - orphanWidth - zombieWidth
+	// Reserve a floor for the title before spending width on the blocker
+	// hint: the issue's own title is the primary scent, the hint is context
+	// (audit #2). The hint degrades to id-only before character truncation.
+	titleFloor := min(lipgloss.Width(issue.Title), max(innerWidth/3, 12))
+	maxHint := innerWidth - 16 - titleFloor - agentWidth - indentWidth - dueWidth - deferWidth - orphanWidth - zombieWidth
 	if maxHint < 0 {
 		maxHint = 0
 	}
 
-	if lipgloss.Width(rawHint) > maxHint && maxHint > 0 {
-		rawHint = truncate(rawHint, maxHint)
-	} else if maxHint == 0 {
+	if lipgloss.Width(rawHint) > maxHint && isBlocked && eval.NextBlockerID != "" {
+		idOnly := fmt.Sprintf(" %s %s", ui.SymNextArrow, eval.NextBlockerID)
+		if lipgloss.Width(idOnly) <= maxHint {
+			rawHint = idOnly
+		}
+	}
+	// Below ~10 cells a truncated hint is just fragments — drop it instead.
+	if maxHint < 10 {
 		rawHint = ""
+	} else if lipgloss.Width(rawHint) > maxHint {
+		rawHint = truncate(rawHint, maxHint)
 	}
 
 	hint := ""
@@ -591,10 +639,17 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 		if issue.IsDeferred() {
 			titleStyle = ui.DeferredStyle
 		}
+		if isClosed {
+			titleStyle = lipgloss.NewStyle().Foreground(ui.Muted)
+		}
 		renderedTitle = titleStyle.Render(title)
 	}
 
-	// Age-based color for issue ID (fresh=green, aging=gold, stale=red)
+	// Age-based color for issue ID (fresh=green, aging=gold, stale=red);
+	// closed issues skip the heat gradient and stay muted.
+	if isClosed {
+		item.RenderedID = lipgloss.NewStyle().Foreground(ui.Muted).Render(issue.ID)
+	}
 	renderedID := item.RenderedID
 	if renderedID == "" {
 		ageDays := int(issue.Age().Hours() / 24)
@@ -622,13 +677,7 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 
 	if selected {
 		cursor := ui.ItemCursor.Render(ui.Cursor + " ")
-		row := cursor + line
-		// Pad to fill inner width, then apply highlight
-		rowWidth := lipgloss.Width(row)
-		if padLen := innerWidth - rowWidth; padLen > 0 {
-			row += strings.Repeat(" ", padLen)
-		}
-		content := ui.ItemSelectedBg.Render(ansi.Truncate(row, innerWidth, ""))
+		content := ui.SelectedRow(cursor+line, innerWidth)
 		return leftBorder + " " + content + " " + rightBorder
 	}
 

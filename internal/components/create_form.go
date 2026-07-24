@@ -210,7 +210,6 @@ func (cf *CreateForm) focusActiveInput() {
 func (cf CreateForm) View() string {
 	titleStyle := lipgloss.NewStyle().Foreground(ui.BrightGold).Bold(true)
 	selectedStyle := lipgloss.NewStyle().Foreground(ui.BrightGreen)
-	normalStyle := lipgloss.NewStyle().Foreground(ui.Light)
 	dimStyle := lipgloss.NewStyle().Foreground(ui.Dim)
 
 	var lines []string
@@ -235,10 +234,12 @@ func (cf CreateForm) View() string {
 	lines = append(lines, label)
 	for i, opt := range typeOptions {
 		cursor := "  "
-		style := normalStyle
+		// Options wear their semantic color so the form reinforces the
+		// same color language as the parade (audit #8).
+		style := lipgloss.NewStyle().Foreground(ui.IssueTypeColor(opt.Value))
 		if i == cf.typeIdx {
 			cursor = selectedStyle.Render("> ")
-			style = selectedStyle
+			style = style.Bold(true)
 		}
 		lines = append(lines, fmt.Sprintf("  %s%s", cursor, style.Render(opt.Label)))
 	}
@@ -253,10 +254,10 @@ func (cf CreateForm) View() string {
 	lines = append(lines, label)
 	for i, opt := range priorityOptions {
 		cursor := "  "
-		style := normalStyle
+		style := lipgloss.NewStyle().Foreground(ui.PriorityColor(i))
 		if i == cf.prioIdx {
 			cursor = selectedStyle.Render("> ")
-			style = selectedStyle
+			style = style.Bold(true)
 		}
 		lines = append(lines, fmt.Sprintf("  %s%s", cursor, style.Render(opt.Label)))
 	}

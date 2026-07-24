@@ -35,9 +35,10 @@ func (h Header) View() string {
 	titleStr := fmt.Sprintf("%s MARDI GRAS %s", ui.FleurDeLis, ui.FleurDeLis)
 	title := ui.HeaderStyle.Render(ui.ApplyMardiGrasGradient(titleStr))
 
+	// Tight number+glyph pairs, in the parade's section order (audit #16).
 	counts := ui.HeaderCounts.Render(fmt.Sprintf(
-		" %d ⊘  %d ♪  %d ●  %d ✓ ",
-		stalled, linedUp, rolling, len(h.Groups[data.ParadePastTheStand]),
+		" %d●  %d♪  %d⊘  %d✓ ",
+		rolling, linedUp, stalled, len(h.Groups[data.ParadePastTheStand]),
 	))
 
 	agentInfo := ""
@@ -170,7 +171,7 @@ func (h Header) renderProgressBar(total, done, length int) string {
 	styledFilled := ui.ApplyPartialMardiGrasGradient(filled, length)
 	styledEmpty := lipgloss.NewStyle().Foreground(ui.DimPurple).Render(empty)
 
-	textRight := ui.HeaderCounts.Render(fmt.Sprintf(" %d%%", percent))
+	textRight := ui.HeaderCounts.Render(fmt.Sprintf(" %s%d%%", ui.SymPassed, percent))
 
 	return styledFilled + styledEmpty + textRight
 }

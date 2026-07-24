@@ -41,9 +41,14 @@ func MardiGrasGlamourStyle() ansi.StyleConfig {
 	c.H1.BackgroundColor = glamourStr("#7B2D8E")
 	c.H1.Bold = glamourBool(true)
 
-	// Subheadings (H2–H5 inherit Heading; H6 sets its own color) in bright purple.
+	// Subheadings (H2–H5 inherit Heading; H6 sets its own color) in bright
+	// purple. Literal "##" prefixes are replaced with a slim bar so heading
+	// levels read as hierarchy, not raw markdown (audit #15).
 	c.Heading.Color = glamourHex(BrightPurple)
 	c.Heading.Bold = glamourBool(true)
+	c.H2.Prefix = "▍ "
+	c.H3.Prefix = "▎ "
+	c.H4.Prefix = "▏ "
 	c.H6.Color = glamourHex(BrightPurple)
 	c.H6.Bold = glamourBool(true)
 

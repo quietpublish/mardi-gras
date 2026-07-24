@@ -162,6 +162,7 @@ func allSections() []helpSection {
 				{key: "w", desc: "Compose new message to agent"},
 				{key: "d", desc: "Archive selected message"},
 				{key: "C", desc: "Create convoy from selection"},
+				{key: "", desc: "convoy mini-DAG: ● done · ○ open · ─ dependency"},
 			},
 		},
 		{

@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/matt-wright86/mardi-gras/internal/data"
 	"github.com/matt-wright86/mardi-gras/internal/gastown"
 	"github.com/matt-wright86/mardi-gras/internal/ui"
 )
@@ -689,15 +690,31 @@ func (g *GasTown) renderAgentRoster(width int) string {
 		return strings.Join(lines, "\n")
 	}
 
-	// Column widths
+	// Column widths, with narrow-pane breakpoints: shrink Role, then drop
+	// the sparkline and the Work column, so rows never overflow (audit #3).
 	nameW := 14
 	roleW := 14
 	stateW := 16 // extra room for "● working 15m"
+	if width < 90 {
+		roleW = 9
+	}
+	sparkW := 8
+	const minWork = 12
+	showSpark := width >= nameW+roleW+stateW+sparkW+9+minWork
+	if !showSpark {
+		sparkW = 0
+	}
+	showWork := width >= nameW+roleW+stateW+9+minWork
+	showTag := width >= 80 // bracketed session tag is the first thing to go
 
 	// Header row (extra space for heat indicator column)
 	headerStyle := lipgloss.NewStyle().Foreground(ui.Dim).Bold(true)
+	workHeader := "Work"
+	if !showWork {
+		workHeader = ""
+	}
 	header := fmt.Sprintf("   %-*s %-*s %-*s %s",
-		nameW, "Name", roleW, "Role", stateW, "State", "Work")
+		nameW, "Name", roleW, "Role", stateW, "State", workHeader)
 	lines = append(lines, headerStyle.Render(header))
 	lines = append(lines, lipgloss.NewStyle().Foreground(ui.Dim).Render(
 		"  "+strings.Repeat("─", width-4)))
@@ -742,6 +759,7 @@ func (g *GasTown) renderAgentRoster(width int) string {
 				stateLabel += " " + formatDuration(time.Since(started))
 			}
 		}
+		stateLabel = truncateGT(stateLabel, stateW)
 		stateStr := stateStyle.Render(fmt.Sprintf("%-*s", stateW, stateLabel))
 
 		// Role with color
@@ -761,18 +779,23 @@ func (g *GasTown) renderAgentRoster(width int) string {
 			name = name[:nameW-1] + "…"
 		}
 		nameStr := nameStyle.Render(fmt.Sprintf("%-*s", nameW, name))
+		tag := ""
 		switch {
 		case a.AgentAlias != "" && a.AgentInfo != "":
-			nameStr += lipgloss.NewStyle().Foreground(ui.Dim).Render("["+a.AgentAlias+"]") + " "
+			tag = a.AgentAlias
 		case a.AgentInfo != "":
-			nameStr += lipgloss.NewStyle().Foreground(ui.Dim).Render("["+a.AgentInfo+"]") + " "
+			tag = a.AgentInfo
+		}
+		// Skip the tag when it just restates the agent name (audit #5), and
+		// drop it entirely on narrow panes.
+		if tag != "" && showTag && !strings.EqualFold(tag, a.Name) {
+			nameStr += lipgloss.NewStyle().Foreground(ui.Dim).Render("["+tag+"]") + " "
 		}
 
 		// Heat indicator (single char showing activity level)
 		heat := ui.HeatChar(g.agentEventCount[a.Name], g.maxEventCount)
 
 		// Work title (truncated) — leave room for sparkline
-		sparkW := 8
 		workWidth := max(width-nameW-roleW-stateW-sparkW-9, 4) // 9 = spaces + heat + mail padding
 		work := a.WorkTitle
 		if work == "" && a.HookBead != "" {
@@ -785,11 +808,14 @@ func (g *GasTown) renderAgentRoster(width int) string {
 			work = "-"
 		}
 		work = truncateGT(work, workWidth)
+		if !showWork {
+			work = ""
+		}
 		workStyle := lipgloss.NewStyle().Foreground(ui.Muted)
 
 		// Activity sparkline (8-char mini graph)
 		sparkline := ""
-		if hist, ok := g.agentHistograms[a.Name]; ok {
+		if hist, ok := g.agentHistograms[a.Name]; ok && showSpark {
 			sparkline = " " + ui.RenderSparkline(hist, sparkW)
 		}
 
@@ -810,7 +836,7 @@ func (g *GasTown) renderAgentRoster(width int) string {
 			prefix, heat, nameStr, roleStr, stateStr, workStyle.Render(work), sparkline, mailStr)
 
 		if isSelected {
-			row = ui.GasTownAgentSelected.Width(width).Render(row)
+			row = ui.SelectedRow(row, width)
 		}
 
 		lines = append(lines, row)
@@ -901,7 +927,7 @@ func (g *GasTown) renderConvoyDetails(width int) string {
 			countLabel)
 
 		if isSelected {
-			titleLine = ui.GasTownAgentSelected.Width(width).Render(titleLine)
+			titleLine = ui.SelectedRow(titleLine, width)
 		}
 		lines = append(lines, titleLine)
 
@@ -1054,7 +1080,7 @@ func (g *GasTown) renderMail(width int) string {
 			prefix, unreadSym, fromStyle.Render(from), typeBadge, subjectStyle.Render(subject))
 
 		if isSelected {
-			row = ui.GasTownAgentSelected.Width(width).Render(row)
+			row = ui.SelectedRow(row, width)
 		}
 		lines = append(lines, row)
 
@@ -1065,14 +1091,19 @@ func (g *GasTown) renderMail(width int) string {
 			if body == "" {
 				body = "(no body)"
 			}
-			// Wrap body lines
+			// Wrap body lines. Meta collapses to a single "from X · 2d ago"
+			// line so an expanded message doesn't dominate the pane (audit #18).
 			bodyStyle := lipgloss.NewStyle().Foreground(ui.Light).Width(bodyWidth)
-			lines = append(lines, "")
-			lines = append(lines, "      "+lipgloss.NewStyle().Foreground(ui.Dim).Render("From: ")+fromStyle.Render(m.From))
+			dimStyle := lipgloss.NewStyle().Foreground(ui.Dim)
+			meta := dimStyle.Render("from ") + fromStyle.Render(m.From)
 			if m.Time != "" {
-				lines = append(lines, "      "+lipgloss.NewStyle().Foreground(ui.Dim).Render("Time: ")+lipgloss.NewStyle().Foreground(ui.Muted).Render(m.Time))
+				mailAge := m.Time
+				if t, err := time.Parse(time.RFC3339, m.Time); err == nil {
+					mailAge = data.RelativeAge(time.Since(t))
+				}
+				meta += dimStyle.Render(" · ") + lipgloss.NewStyle().Foreground(ui.Muted).Render(mailAge)
 			}
-			lines = append(lines, "")
+			lines = append(lines, "      "+meta)
 			for _, bline := range strings.Split(bodyStyle.Render(body), "\n") {
 				lines = append(lines, "      "+bline)
 			}
