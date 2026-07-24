@@ -2,6 +2,25 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.28.0 (2026-07-24)
+
+A design-quality release driven by a screenshot-based audit of every surface ([#89](https://github.com/quietpublish/mardi-gras/pull/89)) — before/after pairs in `docs/screenshots/design-audit/`.
+
+### Fixed
+- **Selection rendering** — cursor rows in the parade, agent roster, convoys, mail, and command palette now paint clean full-row highlights. Previously inner style resets punched holes in the background, leaving a detached block at the row edge (and a wrapped orphan bar on narrow panes). Shared mechanism: `ui.FillBackground`/`ui.SelectedRow`.
+- **Footer pushed off-screen** — a latent layout bug rebuilt the detail viewport at full pane height behind `SetSize`'s back; now routed through `Detail.ResetViewport` and guarded by a screen-height regression test.
+- **Command palette rows wrapped** — the right-aligned hotkey overflowed the box by a hair, rendering every hotkey on its own line. Items are now single-line with a leading key chip and fuzzy-match highlighting.
+
+### Changed
+- **Truncation favors titles** — issue titles get a guaranteed width floor; blocker hints degrade to id-only (`→ vv-001`) and overdue badges compress (`▲151d`) before a title loses characters.
+- **Responsive Gas Town roster** — narrow panes shrink the Role column, then drop the sparkline, Work column, and session tags; `[Session]` tags that just restate the agent name are gone everywhere.
+- **Better orientation** — persistent `⚜ FOCUS` footer badge, live filter match count, detail scroll-position cue, humanized ages (`5w ago`, not `969h ago`), footer hints elide whole chips instead of clipping mid-keyword, header counts pair tightly in parade order, and the progress bar is labeled (`✓13%`).
+- **Calmer hierarchy** — closed issues render muted, markdown H2–H4 show slim bars instead of literal `##`, expanded mail meta collapses to one line, spare parade space carries a status legend, and toasts occupy the divider row so key hints stay visible.
+- **Forms** — create/edit dialogs are content-fit centered modals with complete hints and type/priority options in their semantic colors.
+
+### Docs
+- All committed screenshots (`demo.gif`, Gas City panels, light theme) regenerated against the new UI.
+
 ## v0.27.0 (2026-07-23)
 
 A light theme release. Mardi Gras now adapts to light-background terminals ([#86](https://github.com/quietpublish/mardi-gras/issues/86)) — the palette, every derived style, the markdown theme, and all overlay surfaces follow the active theme.
