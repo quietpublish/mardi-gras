@@ -2,6 +2,19 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.27.0 (2026-07-23)
+
+A light theme release. Mardi Gras now adapts to light-background terminals ([#86](https://github.com/quietpublish/mardi-gras/issues/86)) — the palette, every derived style, the markdown theme, and all overlay surfaces follow the active theme.
+
+### Added
+- **Light theme with terminal background auto-detection** ([#87](https://github.com/quietpublish/mardi-gras/pull/87)) — a full light palette selectable via `--theme light|dark|auto` or `MG_THEME`, defaulting to auto: the terminal background is queried (OSC 11) before the TUI starts, falling back to dark on pipes or unresponsive terminals. The brand look survives the flip — purple/gold/green stay, with inks darkened for light backgrounds; the glamour markdown theme and Gas Town panel follow suit.
+
+### Fixed
+- **Overlay background stripes on light terminals** ([#87](https://github.com/quietpublish/mardi-gras/pull/87)) — all overlay surfaces (help, command palette, create/edit forms, approval/recovery dialogs) now render through a shared `ui.OverlayBox` that re-asserts the box background after inner style resets. The stripes existed before but were invisible on dark terminals.
+
+### Internal
+- **Theme-switchable design system** ([#87](https://github.com/quietpublish/mardi-gras/pull/87)) — `internal/ui` styles, pre-rendered strings, and gradients rebake through `ui.SetTheme`; theme-invariant color aliases live in one place. New light-theme screenshot pipeline (`make screenshot-light`) with a shared vhs runner consolidating the capture scripts. Bumped `golang.org/x/text` to v0.39.0 (GO-2026-5970).
+
 ## v0.26.0 (2026-06-13)
 
 A UI-polish release. The detail panel and the Gas Town panel get brand-cohesive refinements, the slow orchestrator poll no longer reads as frozen, and the README gains an animated demo backed by a reproducible screenshot pipeline.
