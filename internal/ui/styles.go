@@ -2,9 +2,11 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Pre-built styles for the Mardi Gras theme. Assigned by rebuildStyles (via
@@ -32,10 +34,9 @@ var (
 	StatusPassedStr  string
 
 	// Issue items in the list
-	ItemNormal     lipgloss.Style
-	ItemSelected   lipgloss.Style
-	ItemCursor     lipgloss.Style
-	ItemSelectedBg lipgloss.Style
+	ItemNormal   lipgloss.Style
+	ItemSelected lipgloss.Style
+	ItemCursor   lipgloss.Style
 
 	// Detail panel (right side)
 	DetailBorder  lipgloss.Style
@@ -84,12 +85,11 @@ var (
 	GasTownTag  lipgloss.Style
 
 	// Gas Town panel
-	GasTownBorder        lipgloss.Style
-	GasTownTitle         lipgloss.Style
-	GasTownLabel         lipgloss.Style
-	GasTownValue         lipgloss.Style
-	GasTownAgentSelected lipgloss.Style
-	GasTownHint          lipgloss.Style
+	GasTownBorder lipgloss.Style
+	GasTownTitle  lipgloss.Style
+	GasTownLabel  lipgloss.Style
+	GasTownValue  lipgloss.Style
+	GasTownHint   lipgloss.Style
 
 	FooterSource lipgloss.Style
 
@@ -130,22 +130,42 @@ var (
 	ToastError   lipgloss.Style
 
 	matchStyle lipgloss.Style
-
-	// overlayBgSeq re-asserts the overlay background after inner SGR resets;
-	// rebuilt with the palette for OverlayBox.
-	overlayBgSeq string
 )
 
-// OverlayBox renders content inside the shared overlay box (help, command
-// palette, dialogs). Inner spans end with an SGR reset that would otherwise
-// punch terminal-default holes in the box background — invisible on dark
-// terminals, visible stripes on light ones — so the box background is
-// re-asserted after every reset before wrapping in HelpOverlayBg.
-func OverlayBox(content string, width int) string {
+// bgSequence returns the raw SGR that sets bg as the background color.
+func bgSequence(bg color.Color) string {
+	r, g, b, _ := bg.RGBA()
+	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", r>>8, g>>8, b>>8)
+}
+
+// FillBackground paints bg beneath already-styled content. Inner spans end
+// with an SGR reset that would otherwise punch terminal-default holes in the
+// fill — invisible on matching backgrounds, visible artifacts everywhere else
+// — so the background is applied up front and re-asserted after every reset.
+func FillBackground(content string, bg color.Color) string {
+	seq := bgSequence(bg)
 	for _, reset := range []string{"\x1b[0m", "\x1b[m"} {
-		content = strings.ReplaceAll(content, reset, reset+overlayBgSeq)
+		content = strings.ReplaceAll(content, reset, reset+seq)
 	}
-	return HelpOverlayBg.Width(width).Render(content)
+	return seq + content + "\x1b[m"
+}
+
+// SelectedRow truncates and pads a styled row to width, then paints the
+// selection background beneath the whole row. Use for cursor rows in lists —
+// applying a Background style to a row with inner spans leaves holes (and
+// Width-wrapping overflows), which this avoids.
+func SelectedRow(row string, width int) string {
+	row = ansi.Truncate(row, width, "")
+	if pad := width - lipgloss.Width(row); pad > 0 {
+		row += strings.Repeat(" ", pad)
+	}
+	return FillBackground(row, DimPurple)
+}
+
+// OverlayBox renders content inside the shared overlay box (help, command
+// palette, dialogs), with the box background re-asserted across inner spans.
+func OverlayBox(content string, width int) string {
+	return HelpOverlayBg.Width(width).Render(FillBackground(content, HelpBg))
 }
 
 // rebuildStyles bakes the active palette into the exported styles. Called by
@@ -200,9 +220,6 @@ func rebuildStyles() {
 	ItemCursor = lipgloss.NewStyle().
 		Foreground(BrightGold).
 		Bold(true)
-
-	ItemSelectedBg = lipgloss.NewStyle().
-		Background(DimPurple)
 
 	// Detail panel (right side)
 	DetailBorder = lipgloss.NewStyle().
@@ -315,9 +332,6 @@ func rebuildStyles() {
 
 	GasTownValue = lipgloss.NewStyle().
 		Foreground(Light)
-
-	GasTownAgentSelected = lipgloss.NewStyle().
-		Background(DimPurple)
 
 	GasTownHint = lipgloss.NewStyle().
 		Foreground(Dim).
@@ -436,9 +450,6 @@ func rebuildStyles() {
 		Padding(0, 1)
 
 	matchStyle = lipgloss.NewStyle().Foreground(BrightGold).Bold(true).Underline(true)
-
-	r, g, b, _ := HelpBg.RGBA()
-	overlayBgSeq = fmt.Sprintf("\x1b[48;2;%d;%d;%dm", r>>8, g>>8, b>>8)
 }
 
 // RoleBadge returns a styled badge for a Gas Town role.
@@ -476,17 +487,10 @@ func StateBadge(state string) string {
 }
 
 // SectionDivider renders a btop-style section divider: ── ⚜ TITLE ──────────
-// When focused, the fleur-de-lis and cursor glow bright gold.
+// When focused, the fleur-de-lis glows bright gold. The divider carries no
+// cursor glyph — rows do — so only one ">" is ever visible (audit #14).
 func SectionDivider(title string, width int, focused bool) string {
-	// Visible prefix: "── ⚜ " or "> ── ⚜ " when focused
-	cursorPrefix := ""
-	extraWidth := 0
-	if focused {
-		cursorPrefix = lipgloss.NewStyle().Bold(true).Foreground(BrightGold).Render(Cursor) + " "
-		extraWidth = 2 // "> "
-	}
-
-	usedWidth := extraWidth + 5 + len([]rune(title)) + 1
+	usedWidth := 5 + len([]rune(title)) + 1
 	trailWidth := max(width-usedWidth, 3)
 	trail := strings.Repeat(BoxHorizontal, trailWidth)
 
@@ -499,7 +503,7 @@ func SectionDivider(title string, width int, focused bool) string {
 	}
 	fleurStyle := lipgloss.NewStyle().Foreground(fleurColor)
 
-	return "\n" + cursorPrefix +
+	return "\n" +
 		ruleStyle.Render(BoxHorizontal+BoxHorizontal+" ") +
 		fleurStyle.Render(FleurDeLis) + " " +
 		titleStyle.Render(title) + " " +

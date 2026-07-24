@@ -14,7 +14,6 @@ import (
 
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
-	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/atotto/clipboard"
@@ -3217,7 +3216,7 @@ func (m *Model) layout() {
 		}
 	}
 
-	m.detail.Viewport = viewport.New(viewport.WithWidth(detailW-2), viewport.WithHeight(bodyH))
+	m.detail.ResetViewport()
 	m.propagateAgentState()
 	if m.parade.SelectedIssue != nil {
 		m.detail.SetIssue(m.parade.SelectedIssue)
@@ -3658,8 +3657,6 @@ func (m Model) View() tea.View {
 	inputBarStyle := lipgloss.NewStyle().Padding(0, 1).Width(m.width)
 	var bottomBar string
 	switch {
-	case m.toast.Active():
-		bottomBar = m.toast.View(m.width)
 	case m.parade.SelectionCount() > 0:
 		bottomBar = components.BulkFooter(m.width, m.parade.SelectionCount(), m.orchestratorAvailable())
 	case m.nudging:
@@ -3677,9 +3674,18 @@ func (m Model) View() tea.View {
 	case m.convoyCreating:
 		bottomBar = inputBarStyle.Render(m.convoyInput.View())
 	case m.filtering || m.filterInput.Value() != "":
-		bottomBar = inputBarStyle.Render(m.filterInput.View())
+		// Right-aligned match count so a narrowing query gives feedback
+		// (audit #12).
+		line := m.filterInput.View()
+		count := components.FooterModeChip(fmt.Sprintf("%d/%d match", m.parade.VisibleIssues(), len(m.parade.AllIssues)))
+		gap := m.width - lipgloss.Width(line) - lipgloss.Width(count) - 3
+		if gap > 0 {
+			line += strings.Repeat(" ", gap) + count
+		}
+		bottomBar = inputBarStyle.Render(line)
 	default:
 		footer := components.NewFooter(m.width, m.activPane == PaneDetail, m.orchestratorAvailable())
+		footer.Focus = m.focusMode
 		footer.SourcePath = m.watchPath
 		footer.LastRefresh = m.lastFileMod
 		footer.PathExplicit = m.pathExplicit
@@ -3689,7 +3695,12 @@ func (m Model) View() tea.View {
 		bottomBar = footer.View()
 	}
 
+	// Toasts take the divider row instead of replacing the footer, so key
+	// hints stay visible while a toast shows (audit #20).
 	divider := components.Divider(m.width)
+	if m.toast.Active() {
+		divider = m.toast.View(m.width)
+	}
 
 	screen := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -3718,20 +3729,24 @@ func (m Model) View() tea.View {
 	}
 
 	if m.editing {
-		formTitle := ui.HelpTitle.Render("[ EDIT ISSUE ]")
+		// Content-fit modal: a small form in a full-width box reads as
+		// dead space (audit #8).
+		formWidth := min(m.width-8, 64)
+		formTitle := ui.HelpTitle.Width(formWidth - 4).Render("[ EDIT ISSUE ]")
 		formBody := m.editForm.View()
-		formHint := ui.HelpHint.Render("esc to cancel  enter to save")
+		formHint := ui.HelpHint.Width(formWidth - 4).Render("tab next field · enter save · esc cancel")
 		formContent := lipgloss.JoinVertical(lipgloss.Left, formTitle, "", formBody, "", formHint)
-		formBox := ui.OverlayBox(formContent, m.width-8)
+		formBox := ui.OverlayBox(formContent, formWidth)
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, formBox))
 	}
 
 	if m.creating {
-		formTitle := ui.HelpTitle.Render("[ NEW ISSUE ]")
+		formWidth := min(m.width-8, 64)
+		formTitle := ui.HelpTitle.Width(formWidth - 4).Render("[ NEW ISSUE ]")
 		formBody := m.createForm.View()
-		formHint := ui.HelpHint.Render("esc to cancel")
+		formHint := ui.HelpHint.Width(formWidth - 4).Render("tab next field · enter create · esc cancel")
 		formContent := lipgloss.JoinVertical(lipgloss.Left, formTitle, "", formBody, "", formHint)
-		formBox := ui.OverlayBox(formContent, m.width-8)
+		formBox := ui.OverlayBox(formContent, formWidth)
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, formBox))
 	}
 
@@ -3744,11 +3759,12 @@ func (m Model) View() tea.View {
 	}
 
 	if m.recovering {
-		rdTitle := ui.HelpTitle.Render("[ RIG RECOVERY ]")
+		rdWidth := min(m.width-8, 64)
+		rdTitle := ui.HelpTitle.Width(rdWidth - 4).Render("[ RIG RECOVERY ]")
 		rdBody := m.recoveryDialog.View()
-		rdHint := ui.HelpHint.Render("enter to confirm  esc to cancel")
+		rdHint := ui.HelpHint.Width(rdWidth - 4).Render("enter to confirm  esc to cancel")
 		rdContent := lipgloss.JoinVertical(lipgloss.Left, rdTitle, "", rdBody, "", rdHint)
-		rdBox := ui.OverlayBox(rdContent, m.width-8)
+		rdBox := ui.OverlayBox(rdContent, rdWidth)
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, rdBox))
 	}
 

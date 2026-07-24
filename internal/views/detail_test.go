@@ -154,8 +154,8 @@ func TestSetSizeUpdatesDimensions(t *testing.T) {
 	if d.Viewport.Width() != 98 {
 		t.Fatalf("Viewport.Width = %d, want 98 (width-2)", d.Viewport.Width())
 	}
-	if d.Viewport.Height() != 30 {
-		t.Fatalf("Viewport.Height = %d, want 30", d.Viewport.Height())
+	if d.Viewport.Height() != 29 {
+		t.Fatalf("Viewport.Height = %d, want 29 (height-1, scroll cue row)", d.Viewport.Height())
 	}
 }
 
