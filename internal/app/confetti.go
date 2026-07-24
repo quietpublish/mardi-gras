@@ -21,9 +21,13 @@ const (
 
 var confettiGlyphs = []string{"●", "◆", "⚜", "✦", "✧", "★", "♦"}
 var necklaceGlyphs = []string{"●", "◆", "●", "◆", "●"} // alternating bead shapes
-var confettiColors = []color.Color{
-	ui.Purple, ui.Gold, ui.Green,
-	ui.BrightPurple, ui.BrightGold, ui.BrightGreen,
+// confettiColors reads the palette at call time (not package init) so a theme
+// switch at startup is reflected in the confetti.
+func confettiColors() []color.Color {
+	return []color.Color{
+		ui.Purple, ui.Gold, ui.Green,
+		ui.BrightPurple, ui.BrightGold, ui.BrightGreen,
+	}
 }
 
 type particle struct {
@@ -66,10 +70,11 @@ func NewConfetti(width, height int) Confetti {
 	centerX := float64(width) / 2
 	centerY := float64(height) / 2
 
+	colors := confettiColors()
 	particles := make([]particle, confettiParticles)
 	for i := range particles {
 		g := confettiGlyphs[rand.IntN(len(confettiGlyphs))]
-		c := confettiColors[rand.IntN(len(confettiColors))]
+		c := colors[rand.IntN(len(colors))]
 		particles[i] = particle{
 			x:      centerX,
 			y:      centerY,

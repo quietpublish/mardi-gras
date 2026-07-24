@@ -3722,7 +3722,7 @@ func (m Model) View() tea.View {
 		formBody := m.editForm.View()
 		formHint := ui.HelpHint.Render("esc to cancel  enter to save")
 		formContent := lipgloss.JoinVertical(lipgloss.Left, formTitle, "", formBody, "", formHint)
-		formBox := ui.HelpOverlayBg.Width(m.width - 8).Render(formContent)
+		formBox := ui.OverlayBox(formContent, m.width-8)
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, formBox))
 	}
 
@@ -3731,7 +3731,7 @@ func (m Model) View() tea.View {
 		formBody := m.createForm.View()
 		formHint := ui.HelpHint.Render("esc to cancel")
 		formContent := lipgloss.JoinVertical(lipgloss.Left, formTitle, "", formBody, "", formHint)
-		formBox := ui.HelpOverlayBg.Width(m.width - 8).Render(formContent)
+		formBox := ui.OverlayBox(formContent, m.width-8)
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, formBox))
 	}
 
@@ -3739,7 +3739,7 @@ func (m Model) View() tea.View {
 		adTitle := ui.HelpTitle.Render("[ CODEX APPROVAL ]")
 		adBody := m.approvalDialog.View()
 		adContent := lipgloss.JoinVertical(lipgloss.Left, adTitle, "", adBody)
-		adBox := ui.HelpOverlayBg.Width(m.width - 8).Render(adContent)
+		adBox := ui.OverlayBox(adContent, m.width-8)
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, adBox))
 	}
 
@@ -3748,7 +3748,7 @@ func (m Model) View() tea.View {
 		rdBody := m.recoveryDialog.View()
 		rdHint := ui.HelpHint.Render("enter to confirm  esc to cancel")
 		rdContent := lipgloss.JoinVertical(lipgloss.Left, rdTitle, "", rdBody, "", rdHint)
-		rdBox := ui.HelpOverlayBg.Width(m.width - 8).Render(rdContent)
+		rdBox := ui.OverlayBox(rdContent, m.width-8)
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, rdBox))
 	}
 
