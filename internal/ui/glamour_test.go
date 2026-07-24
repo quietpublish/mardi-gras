@@ -6,6 +6,7 @@ func deref(t *testing.T, p *string, field string) string {
 	t.Helper()
 	if p == nil {
 		t.Fatalf("%s color is nil; expected a brand hex", field)
+		return ""
 	}
 	return *p
 }
