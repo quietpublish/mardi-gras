@@ -1872,13 +1872,12 @@ func (m Model) handleHelpKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
+// handleFilteringKey routes keys while the filter input has focus. Only
+// esc/enter are intercepted — every printable key (including "q" and "?")
+// must reach the text input as a literal. ctrl+c is handled globally in
+// handleKeyPress, so quitting stays reachable.
 func (m Model) handleFilteringKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "q":
-		return m, tea.Quit
-	case "?":
-		m.showHelp = true
-		return m, nil
 	case "esc":
 		m.filtering = false
 		m.filterInput.SetValue("")
