@@ -195,7 +195,9 @@ func TestFilteringModeAcceptsTypedInput(t *testing.T) {
 	}
 }
 
-func TestFilteringModeQStillQuits(t *testing.T) {
+// startFiltering builds a ready model and opens the filter input.
+func startFiltering(t *testing.T) Model {
+	t.Helper()
 	issues := []data.Issue{
 		testIssue("alpha-1", data.StatusOpen),
 	}
@@ -210,16 +212,73 @@ func TestFilteringModeQStillQuits(t *testing.T) {
 	if !got.filtering {
 		t.Fatal("expected filtering mode to be active after pressing /")
 	}
+	return got
+}
 
-	_, cmd := got.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
+// Issue #91: q must be a literal while the filter input has focus, not a quit.
+func TestFilteringModeQIsLiteral(t *testing.T) {
+	got := startFiltering(t)
+
+	model, cmd := got.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	got = model.(Model)
+
+	if cmd != nil {
+		if _, ok := cmd().(tea.QuitMsg); ok {
+			t.Fatal("q must not quit while the filter input has focus")
+		}
+	}
+	if !got.filtering {
+		t.Fatal("expected filtering mode to stay active after typing q")
+	}
+	if got.filterInput.Value() != "q" {
+		t.Fatalf("expected filter input value %q, got %q", "q", got.filterInput.Value())
+	}
+}
+
+// Issue #91: the reporter's exact case — a query ending in q must survive intact.
+func TestFilteringModeTypedQueryWithQ(t *testing.T) {
+	got := startFiltering(t)
+
+	const want = "label:asdq"
+	for _, r := range want {
+		model, _ := got.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+		got = model.(Model)
+		if !got.filtering {
+			t.Fatalf("filtering mode exited while typing %q", r)
+		}
+	}
+
+	if got.filterInput.Value() != want {
+		t.Fatalf("expected filter input value %q, got %q", want, got.filterInput.Value())
+	}
+}
+
+// ctrl+c stays the escape hatch while filtering, since q no longer quits.
+func TestFilteringModeCtrlCQuits(t *testing.T) {
+	got := startFiltering(t)
+
+	_, cmd := got.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	if cmd == nil {
-		t.Fatal("expected quit command when pressing q in filtering mode")
+		t.Fatal("expected quit command when pressing ctrl+c in filtering mode")
 	}
+	if msg := cmd(); !isQuitMsg(msg) {
+		t.Fatalf("expected tea.QuitMsg from ctrl+c, got %T", msg)
+	}
+}
 
-	msg := cmd()
-	if _, ok := msg.(tea.QuitMsg); !ok {
-		t.Fatalf("expected tea.QuitMsg from quit command, got %T", msg)
+// isQuitMsg reports whether a message is a quit, unwrapping tea.Batch results.
+func isQuitMsg(msg tea.Msg) bool {
+	if _, ok := msg.(tea.QuitMsg); ok {
+		return true
 	}
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			if c != nil && isQuitMsg(c()) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func TestFileChangedMsgDeletedSelectedIssue(t *testing.T) {
@@ -266,38 +325,44 @@ func TestFileChangedMsgDeletedSelectedIssue(t *testing.T) {
 	}
 }
 
-func TestHelpCanOpenFromFilteringMode(t *testing.T) {
-	issues := []data.Issue{
-		testIssue("alpha-1", data.StatusOpen),
-	}
+// Issue #91: ? is a literal in the filter input too — help is reachable from
+// the parade or the command palette instead.
+func TestFilteringModeQuestionMarkIsLiteral(t *testing.T) {
+	got := startFiltering(t)
 
-	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
-	m.startedAt = time.Now().Add(-time.Second) // bypass startup guard
-	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
-	got := model.(Model)
-
-	model, _ = got.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
+	model, _ := got.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
 	got = model.(Model)
+
+	if got.showHelp {
+		t.Fatal("? must not open help while the filter input has focus")
+	}
 	if !got.filtering {
-		t.Fatal("expected filtering mode to be active after pressing /")
+		t.Fatal("expected filtering mode to stay active after typing ?")
+	}
+	if got.filterInput.Value() != "?" {
+		t.Fatalf("expected filter input value %q, got %q", "?", got.filterInput.Value())
+	}
+}
+
+// esc leaves the filter and clears the query; help still opens from the parade.
+func TestHelpOpensAfterLeavingFilteringMode(t *testing.T) {
+	got := startFiltering(t)
+
+	model, _ := got.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	got = model.(Model)
+	if got.filtering {
+		t.Fatal("expected esc to exit filtering mode")
 	}
 
 	model, _ = got.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
 	got = model.(Model)
 	if !got.showHelp {
-		t.Fatal("expected help overlay to open from filtering mode")
-	}
-	if !got.filtering {
-		t.Fatal("expected filtering mode state to be preserved while help is open")
+		t.Fatal("expected help overlay to open from the parade")
 	}
 
-	// Closing help should return to prior mode.
 	model, _ = got.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	got = model.(Model)
 	if got.showHelp {
 		t.Fatal("expected help overlay to close on esc")
-	}
-	if !got.filtering {
-		t.Fatal("expected filtering mode to resume after closing help")
 	}
 }
