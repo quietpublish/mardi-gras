@@ -2,6 +2,13 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.28.1 (2026-07-29)
+
+A one-fix patch release: typing in the filter no longer quits the app.
+
+### Fixed
+- **`q` and `?` are literals in the filter input** ([#91](https://github.com/quietpublish/mardi-gras/issues/91)) — `handleFilteringKey` intercepted `q` as quit and `?` as help before the keypress reached the text input, so a query containing either was truncated there and `q` killed the app mid-typing (filtering for `label:asdq` exited instead of entering the `q`). The filter now intercepts only `esc`/`enter` and forwards the rest, matching every other input mode in the app. `ctrl+c` still quits from the filter; help stays reachable with `?` from the parade and via the command palette.
+
 ## v0.28.0 (2026-07-24)
 
 A design-quality release driven by a screenshot-based audit of every surface ([#89](https://github.com/quietpublish/mardi-gras/pull/89)) — before/after pairs in `docs/screenshots/design-audit/`.
