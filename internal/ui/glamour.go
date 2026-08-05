@@ -3,9 +3,16 @@ package ui
 import (
 	"fmt"
 	"image/color"
+	"reflect"
 
 	"github.com/charmbracelet/glamour/ansi"
 	"github.com/charmbracelet/glamour/styles"
+	"github.com/muesli/termenv"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/renderer"
+	"github.com/yuin/goldmark/util"
 )
 
 func glamourStr(s string) *string { return &s }
@@ -66,4 +73,66 @@ func MardiGrasGlamourStyle() ansi.StyleConfig {
 	c.Enumeration.Color = glamourHex(BrightPurple)
 
 	return c
+}
+
+// NewMarkdownRenderer builds the markdown→ANSI pipeline for issue bodies,
+// themed with MardiGrasGlamourStyle and wrapped at wordWrap columns.
+//
+// It mirrors glamour.NewTermRenderer with one deliberate difference: goldmark's
+// raw-HTML parsers are left out. Issue bodies are plain text, so a tag-shaped
+// span like "<your-name>" has to survive verbatim — but goldmark parses any
+// "<" that looks like a tag as raw HTML, and glamour's renderer sanitizes those
+// nodes down to nothing, silently deleting the span (and, for an unclosed tag,
+// every line up to the next ">"). Without the parsers no HTML node is ever
+// produced, so the brackets stay ordinary text.
+//
+// Removing the parsers is what makes this correct rather than escaping the
+// brackets around the render: any stand-in character is still a foreign
+// character to the stages downstream of the parser, which read it as itself
+// rather than as "<". Chroma flags it as a lexer error and paints it on a red
+// background inside code fences, and its display width is not guaranteed to
+// match, which shifts word-wrap arithmetic. Here the author's real bytes reach
+// chroma and the wrapper.
+//
+// glamour v1.0.0 offers no option for this — every TermRendererOption reaches
+// only ansi.Options, and its goldmark instance is unexported — so the pipeline
+// is assembled here instead.
+func NewMarkdownRenderer(wordWrap int) goldmark.Markdown {
+	md := goldmark.New(
+		goldmark.WithExtensions(extension.GFM, extension.DefinitionList),
+		goldmark.WithParser(parser.NewParser(
+			parser.WithBlockParsers(withoutHTML(parser.DefaultBlockParsers(), parser.NewHTMLBlockParser())...),
+			parser.WithInlineParsers(withoutHTML(parser.DefaultInlineParsers(), parser.NewRawHTMLParser())...),
+			parser.WithParagraphTransformers(parser.DefaultParagraphTransformers()...),
+			parser.WithAutoHeadingID(),
+		)),
+	)
+	// SetRenderer (rather than a renderer option) matches glamour: it replaces
+	// the renderer wholesale after the extensions have registered their parsers.
+	md.SetRenderer(renderer.NewRenderer(renderer.WithNodeRenderers(
+		util.Prioritized(ansi.NewRenderer(ansi.Options{
+			WordWrap:     wordWrap,
+			ColorProfile: termenv.TrueColor,
+			Styles:       MardiGrasGlamourStyle(),
+		}), glamourRendererPriority),
+	)))
+	return md
+}
+
+// glamourRendererPriority mirrors glamour's unexported highPriority, the
+// priority it gives its ANSI renderer so it outranks every extension renderer.
+const glamourRendererPriority = 1000
+
+// withoutHTML returns ps minus any entry of the same concrete type as exclude.
+// Matching on type rather than priority keeps this working if goldmark renumbers
+// its defaults, and keeps any parser goldmark adds later.
+func withoutHTML(ps []util.PrioritizedValue, exclude any) []util.PrioritizedValue {
+	excludeType := reflect.TypeOf(exclude)
+	kept := make([]util.PrioritizedValue, 0, len(ps))
+	for _, p := range ps {
+		if reflect.TypeOf(p.Value) != excludeType {
+			kept = append(kept, p)
+		}
+	}
+	return kept
 }

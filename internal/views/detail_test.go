@@ -989,87 +989,88 @@ func TestFocusChangesBorder(t *testing.T) {
 }
 
 // TestRenderMarkdownPreservesAngleBracketSpans guards against silent text loss
-// in issue bodies. Goldmark (glamour's parser) treats any "<" that looks like
-// the start of an HTML tag as raw HTML, and glamour's ANSI renderer sanitizes
-// those nodes down to nothing — deleting the span with no warning, and for an
-// unclosed tag, everything up to the next ">". Bead bodies are plain text, so
-// placeholders like "<your-name>" must survive rendering verbatim.
-// Mirrors the upstream beads fix (gastownhall/beads#5348).
+// in issue bodies: a tag-shaped span like "<your-name>" must render verbatim.
+// See ui.NewMarkdownRenderer for why the raw-HTML parsers are left out, and
+// why that is done at the parser rather than by escaping around the render.
 func TestRenderMarkdownPreservesAngleBracketSpans(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []string
+	}{
+		{
+			name: "intra-line tag-shaped spans survive",
+			input: "LINE1: replace <your-name> with the rig\n" +
+				"LINE2: literal a<b and c>d\n" +
+				"LINE3: html-ish <em>text</em> tail\n",
+			want: []string{
+				"LINE1: replace <your-name> with the rig",
+				"LINE2: literal a<b and c>d",
+				"LINE3: html-ish <em>text</em> tail",
+			},
+		},
+		{
+			// The worst case: an unclosed tag used to swallow every line up
+			// to the next ">", not just its own span.
+			name: "unclosed tag-shaped token does not eat following lines",
+			input: "P: start <unclosed\n" +
+				"Q: middle line one\n" +
+				"R: middle line two\n" +
+				"S: end > tail\n",
+			want: []string{
+				"P: start <unclosed",
+				"Q: middle line one",
+				"R: middle line two",
+				"S: end > tail",
+			},
+		},
+		{
+			name:  "non-tag-shaped angle brackets stay intact",
+			input: "E1: use Map<string, int> and <123> for the cache",
+			want:  []string{"Map<string, int>", "<123>"},
+		},
+		{
+			// Code spans and syntax-highlighted fences are where an escaping
+			// approach breaks down, so they get their own case.
+			name: "angle brackets survive code spans and fences",
+			input: "inline `foo <bar> baz` span\n\n" +
+				"```go\nif a < b && c > d { f() }\n```\n",
+			want: []string{"foo <bar> baz", "if a < b && c > d { f() }"},
+		},
+	}
+
 	d := &Detail{Width: 80, Height: 24}
-
-	t.Run("intra-line tag-shaped spans survive", func(t *testing.T) {
-		input := "LINE1: replace <your-name> with the rig\n" +
-			"LINE2: literal a<b and c>d\n" +
-			"LINE3: html-ish <em>text</em> tail\n"
-		out := ansi.Strip(d.renderMarkdown(input))
-		for _, want := range []string{
-			"LINE1: replace <your-name> with the rig",
-			"LINE2: literal a<b and c>d",
-			"LINE3: html-ish <em>text</em> tail",
-		} {
-			if !strings.Contains(out, want) {
-				t.Errorf("expected rendered output to contain %q\ngot: %q", want, out)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := ansi.Strip(d.renderMarkdown(tt.input))
+			for _, want := range tt.want {
+				if !strings.Contains(out, want) {
+					t.Errorf("expected rendered output to contain %q\ngot: %q", want, out)
+				}
 			}
-		}
-	})
-
-	t.Run("unclosed tag-shaped token does not eat following lines", func(t *testing.T) {
-		input := "P: start <unclosed\n" +
-			"Q: middle line one\n" +
-			"R: middle line two\n" +
-			"S: end > tail\n"
-		out := ansi.Strip(d.renderMarkdown(input))
-		for _, want := range []string{
-			"P: start <unclosed",
-			"Q: middle line one",
-			"R: middle line two",
-			"S: end > tail",
-		} {
-			if !strings.Contains(out, want) {
-				t.Errorf("expected rendered output to contain %q\ngot: %q", want, out)
+			// No escaping happens any more, so an entity in the output would
+			// mean someone reintroduced a round-trip that does not round-trip.
+			if strings.Contains(out, "&lt;") || strings.Contains(out, "&gt;") {
+				t.Errorf("HTML entity leaked into rendered output\ngot: %q", out)
 			}
-		}
-	})
+		})
+	}
+}
 
-	t.Run("non-tag-shaped angle brackets stay intact", func(t *testing.T) {
-		input := "E1: use Map<string, int> and <123> for the cache"
-		out := ansi.Strip(d.renderMarkdown(input))
-		for _, want := range []string{"Map<string, int>", "<123>"} {
-			if !strings.Contains(out, want) {
-				t.Errorf("expected already-preserved span %q to remain intact\ngot: %q", want, out)
-			}
-		}
-	})
+// TestRenderMarkdownStylesCodeFenceOperators pins the styling half of the fix.
+// TestRenderMarkdownPreservesAngleBracketSpans strips ANSI, so it cannot see a
+// bracket that survives as text but renders as a chroma lexer error — which is
+// what any escape sentinel inside a fence produces. Compare the SGR sequence
+// around "<" with the one around a comparison operator chroma always accepts.
+func TestRenderMarkdownStylesCodeFenceOperators(t *testing.T) {
+	d := &Detail{Width: 80, Height: 24}
+	angle := d.renderMarkdown("```go\nif a < b { f() }\n```\n")
+	baseline := d.renderMarkdown("```go\nif a != b { f() }\n```\n")
 
-	// Code spans and syntax-highlighted fences are the failure mode an
-	// entity-based escape introduces: chroma tokenizes "&" apart from "lt",
-	// so ANSI codes land mid-entity and a naive unescape leaves "&lt;" visible
-	// in the rendered code. Brackets must round-trip in code too.
-	t.Run("angle brackets round-trip through code spans and fences", func(t *testing.T) {
-		input := "inline `foo <bar> baz` span\n\n" +
-			"```go\nif a < b && c > d { f() }\n```\n"
-		out := ansi.Strip(d.renderMarkdown(input))
-		for _, want := range []string{"foo <bar> baz", "if a < b && c > d { f() }"} {
-			if !strings.Contains(out, want) {
-				t.Errorf("expected code output to contain %q\ngot: %q", want, out)
-			}
-		}
-		if strings.Contains(out, "&lt;") || strings.Contains(out, "&gt;") {
-			t.Errorf("escape sentinel leaked into rendered output\ngot: %q", out)
-		}
-	})
-
-	// The escape must not distort glamour's word wrapping: a sentinel wider
-	// than the character it stands in for would wrap lines early.
-	t.Run("escaping does not change wrap width", func(t *testing.T) {
-		plain := strings.Repeat("aaaa ", 12)
-		bracketed := strings.Repeat("<aa> ", 12)
-		plainLines := strings.Count(strings.TrimSpace(ansi.Strip(d.renderMarkdown(plain))), "\n")
-		bracketLines := strings.Count(strings.TrimSpace(ansi.Strip(d.renderMarkdown(bracketed))), "\n")
-		if plainLines != bracketLines {
-			t.Errorf("wrap differs between plain (%d extra lines) and bracketed (%d) text of equal display width",
-				plainLines, bracketLines)
-		}
-	})
+	// Chroma's Error token carries a background color; a normal operator does
+	// not. Any "48;5;" (background) in the angle-bracket render that the
+	// baseline lacks means "<" was lexed as an error.
+	if strings.Contains(angle, "\x1b[48;5;") && !strings.Contains(baseline, "\x1b[48;5;") {
+		t.Errorf("'<' in a code fence rendered with an error background\nangle:    %q\nbaseline: %q", angle, baseline)
+	}
 }

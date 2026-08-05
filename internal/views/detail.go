@@ -8,10 +8,10 @@ import (
 
 	"charm.land/bubbles/v2/viewport"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/glamour"
 	"github.com/matt-wright86/mardi-gras/internal/data"
 	"github.com/matt-wright86/mardi-gras/internal/gastown"
 	"github.com/matt-wright86/mardi-gras/internal/ui"
+	"github.com/yuin/goldmark"
 )
 
 // Detail renders the right-panel issue details with a scrollable viewport.
@@ -35,7 +35,7 @@ type Detail struct {
 	MetadataSchema   *data.MetadataSchema
 	AgentOutput      []string // live captured lines from agent's tmux pane
 	AgentOutputID    string   // which issue the agent output belongs to
-	mdRenderer       *glamour.TermRenderer
+	mdRenderer       goldmark.Markdown
 }
 
 // NewDetail creates a detail panel.
@@ -189,49 +189,15 @@ func (d *Detail) renderMarkdown(text string) string {
 	}
 
 	if d.mdRenderer == nil {
-		r, err := glamour.NewTermRenderer(
-			glamour.WithStyles(ui.MardiGrasGlamourStyle()),
-			glamour.WithWordWrap(contentWidth),
-		)
-		if err != nil {
-			return wordWrap(text, contentWidth)
-		}
-		d.mdRenderer = r
+		d.mdRenderer = ui.NewMarkdownRenderer(contentWidth)
 	}
 
-	// Issue bodies are plain text, not HTML. Goldmark (glamour's parser) treats
-	// any "<" that looks like the start of a tag as raw HTML, and glamour's ANSI
-	// renderer sanitizes those nodes down to nothing — silently deleting the span,
-	// and for an unclosed tag, every line up to the next ">". Escape angle
-	// brackets so nothing is ever parsed as raw HTML, then unescape them in the
-	// rendered output so what's displayed matches what the author stored.
-	rendered, err := d.mdRenderer.Render(angleEscaper.Replace(text))
-	if err != nil {
+	var buf strings.Builder
+	if err := d.mdRenderer.Convert([]byte(text), &buf); err != nil {
 		return wordWrap(text, contentWidth)
 	}
-	rendered = angleUnescaper.Replace(rendered)
-	return strings.TrimRight(rendered, "\n")
+	return strings.TrimRight(buf.String(), "\n")
 }
-
-// angleEscaper/angleUnescaper bracket the glamour render in renderMarkdown so
-// tag-shaped spans in issue bodies survive it.
-//
-// The sentinels are single private-use runes rather than HTML entities. Entities
-// look like the obvious choice (and are what upstream beads uses in
-// gastownhall/beads#5348), but they break inside syntax-highlighted fences:
-// chroma tokenizes "&" apart from "lt", so it interleaves ANSI color codes
-// mid-entity and the reverse replacement no longer matches — leaving a literal
-// "&lt;" on screen. A single rune cannot be split that way, and it occupies one
-// display cell, so it also leaves glamour's word-wrap arithmetic undisturbed.
-const (
-	angleOpenSentinel  = "\uE000"
-	angleCloseSentinel = "\uE001"
-)
-
-var (
-	angleEscaper   = strings.NewReplacer("<", angleOpenSentinel, ">", angleCloseSentinel)
-	angleUnescaper = strings.NewReplacer(angleOpenSentinel, "<", angleCloseSentinel, ">")
-)
 
 func (d *Detail) renderContent() string {
 	issue := d.Issue
