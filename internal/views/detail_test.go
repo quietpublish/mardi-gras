@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/matt-wright86/mardi-gras/internal/data"
 	"github.com/matt-wright86/mardi-gras/internal/gastown"
 	"github.com/matt-wright86/mardi-gras/internal/ui"
@@ -985,4 +986,90 @@ func TestFocusChangesBorder(t *testing.T) {
 	if unfocused == focused {
 		t.Fatal("detail View() should differ between focused and unfocused (border cue)")
 	}
+}
+
+// TestRenderMarkdownPreservesAngleBracketSpans guards against silent text loss
+// in issue bodies. Goldmark (glamour's parser) treats any "<" that looks like
+// the start of an HTML tag as raw HTML, and glamour's ANSI renderer sanitizes
+// those nodes down to nothing — deleting the span with no warning, and for an
+// unclosed tag, everything up to the next ">". Bead bodies are plain text, so
+// placeholders like "<your-name>" must survive rendering verbatim.
+// Mirrors the upstream beads fix (gastownhall/beads#5348).
+func TestRenderMarkdownPreservesAngleBracketSpans(t *testing.T) {
+	d := &Detail{Width: 80, Height: 24}
+
+	t.Run("intra-line tag-shaped spans survive", func(t *testing.T) {
+		input := "LINE1: replace <your-name> with the rig\n" +
+			"LINE2: literal a<b and c>d\n" +
+			"LINE3: html-ish <em>text</em> tail\n"
+		out := ansi.Strip(d.renderMarkdown(input))
+		for _, want := range []string{
+			"LINE1: replace <your-name> with the rig",
+			"LINE2: literal a<b and c>d",
+			"LINE3: html-ish <em>text</em> tail",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("expected rendered output to contain %q\ngot: %q", want, out)
+			}
+		}
+	})
+
+	t.Run("unclosed tag-shaped token does not eat following lines", func(t *testing.T) {
+		input := "P: start <unclosed\n" +
+			"Q: middle line one\n" +
+			"R: middle line two\n" +
+			"S: end > tail\n"
+		out := ansi.Strip(d.renderMarkdown(input))
+		for _, want := range []string{
+			"P: start <unclosed",
+			"Q: middle line one",
+			"R: middle line two",
+			"S: end > tail",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("expected rendered output to contain %q\ngot: %q", want, out)
+			}
+		}
+	})
+
+	t.Run("non-tag-shaped angle brackets stay intact", func(t *testing.T) {
+		input := "E1: use Map<string, int> and <123> for the cache"
+		out := ansi.Strip(d.renderMarkdown(input))
+		for _, want := range []string{"Map<string, int>", "<123>"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("expected already-preserved span %q to remain intact\ngot: %q", want, out)
+			}
+		}
+	})
+
+	// Code spans and syntax-highlighted fences are the failure mode an
+	// entity-based escape introduces: chroma tokenizes "&" apart from "lt",
+	// so ANSI codes land mid-entity and a naive unescape leaves "&lt;" visible
+	// in the rendered code. Brackets must round-trip in code too.
+	t.Run("angle brackets round-trip through code spans and fences", func(t *testing.T) {
+		input := "inline `foo <bar> baz` span\n\n" +
+			"```go\nif a < b && c > d { f() }\n```\n"
+		out := ansi.Strip(d.renderMarkdown(input))
+		for _, want := range []string{"foo <bar> baz", "if a < b && c > d { f() }"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("expected code output to contain %q\ngot: %q", want, out)
+			}
+		}
+		if strings.Contains(out, "&lt;") || strings.Contains(out, "&gt;") {
+			t.Errorf("escape sentinel leaked into rendered output\ngot: %q", out)
+		}
+	})
+
+	// The escape must not distort glamour's word wrapping: a sentinel wider
+	// than the character it stands in for would wrap lines early.
+	t.Run("escaping does not change wrap width", func(t *testing.T) {
+		plain := strings.Repeat("aaaa ", 12)
+		bracketed := strings.Repeat("<aa> ", 12)
+		plainLines := strings.Count(strings.TrimSpace(ansi.Strip(d.renderMarkdown(plain))), "\n")
+		bracketLines := strings.Count(strings.TrimSpace(ansi.Strip(d.renderMarkdown(bracketed))), "\n")
+		if plainLines != bracketLines {
+			t.Errorf("wrap differs between plain (%d extra lines) and bracketed (%d) text of equal display width",
+				plainLines, bracketLines)
+		}
+	})
 }

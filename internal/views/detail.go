@@ -199,12 +199,39 @@ func (d *Detail) renderMarkdown(text string) string {
 		d.mdRenderer = r
 	}
 
-	rendered, err := d.mdRenderer.Render(text)
+	// Issue bodies are plain text, not HTML. Goldmark (glamour's parser) treats
+	// any "<" that looks like the start of a tag as raw HTML, and glamour's ANSI
+	// renderer sanitizes those nodes down to nothing — silently deleting the span,
+	// and for an unclosed tag, every line up to the next ">". Escape angle
+	// brackets so nothing is ever parsed as raw HTML, then unescape them in the
+	// rendered output so what's displayed matches what the author stored.
+	rendered, err := d.mdRenderer.Render(angleEscaper.Replace(text))
 	if err != nil {
 		return wordWrap(text, contentWidth)
 	}
+	rendered = angleUnescaper.Replace(rendered)
 	return strings.TrimRight(rendered, "\n")
 }
+
+// angleEscaper/angleUnescaper bracket the glamour render in renderMarkdown so
+// tag-shaped spans in issue bodies survive it.
+//
+// The sentinels are single private-use runes rather than HTML entities. Entities
+// look like the obvious choice (and are what upstream beads uses in
+// gastownhall/beads#5348), but they break inside syntax-highlighted fences:
+// chroma tokenizes "&" apart from "lt", so it interleaves ANSI color codes
+// mid-entity and the reverse replacement no longer matches — leaving a literal
+// "&lt;" on screen. A single rune cannot be split that way, and it occupies one
+// display cell, so it also leaves glamour's word-wrap arithmetic undisturbed.
+const (
+	angleOpenSentinel  = "\uE000"
+	angleCloseSentinel = "\uE001"
+)
+
+var (
+	angleEscaper   = strings.NewReplacer("<", angleOpenSentinel, ">", angleCloseSentinel)
+	angleUnescaper = strings.NewReplacer(angleOpenSentinel, "<", angleCloseSentinel, ">")
+)
 
 func (d *Detail) renderContent() string {
 	issue := d.Issue
