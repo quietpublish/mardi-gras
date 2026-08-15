@@ -20,6 +20,12 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: "1.25"
+          # Release binaries are compiled with whatever toolchain this step
+          # installs, and .goreleaser.yaml pins no Go version of its own.
+          # Without check-latest, setup-go serves the runner image's cached
+          # patch release, so a release can ship a stdlib that govulncheck
+          # already flags — CI hit exactly that with 1.25.12 vs 1.25.13.
+          check-latest: true
 
       - uses: goreleaser/goreleaser-action@v7
         with:
