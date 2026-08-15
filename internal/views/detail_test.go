@@ -1074,3 +1074,34 @@ func TestRenderMarkdownStylesCodeFenceOperators(t *testing.T) {
 		t.Errorf("'<' in a code fence rendered with an error background\nangle:    %q\nbaseline: %q", angle, baseline)
 	}
 }
+
+// TestRenderMarkdownShowsBlockHTMLLiterally pins the deliberate trade-off of
+// dropping goldmark's HTML parsers: real HTML in an issue body now renders as
+// literal text instead of being sanitized away. That is the point. With the
+// parsers installed, glamour ran every HTML node through bluemonday's
+// StrictPolicy, so "<img src=...>" alone rendered as an *empty document* and an
+// HTML comment vanished without trace — the same silent-deletion class as the
+// bug this file exists to prevent. Showing the markup is the honest failure
+// mode: bd issue bodies are never re-rendered as HTML anywhere in mg.
+func TestRenderMarkdownShowsBlockHTMLLiterally(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"image tag is not swallowed", `<img src="x.png" alt="pic">`, `<img src="x.png" alt="pic">`},
+		{"html comment stays visible", "before\n\n<!-- a hidden note -->\n\nafter", "<!-- a hidden note -->"},
+		{"details block keeps its tags", "<details>\n<summary>Click</summary>\n\nbody\n\n</details>", "<summary>Click</summary>"},
+		{"line break tag is literal", "line one<br>line two", "line one<br>line two"},
+	}
+
+	d := &Detail{Width: 80, Height: 24}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := ansi.Strip(d.renderMarkdown(tt.input))
+			if !strings.Contains(out, tt.want) {
+				t.Errorf("expected rendered output to contain %q\ngot: %q", tt.want, out)
+			}
+		})
+	}
+}
