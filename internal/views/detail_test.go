@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/matt-wright86/mardi-gras/internal/data"
 	"github.com/matt-wright86/mardi-gras/internal/gastown"
 	"github.com/matt-wright86/mardi-gras/internal/ui"
@@ -984,5 +985,123 @@ func TestFocusChangesBorder(t *testing.T) {
 
 	if unfocused == focused {
 		t.Fatal("detail View() should differ between focused and unfocused (border cue)")
+	}
+}
+
+// TestRenderMarkdownPreservesAngleBracketSpans guards against silent text loss
+// in issue bodies: a tag-shaped span like "<your-name>" must render verbatim.
+// See ui.NewMarkdownRenderer for why the raw-HTML parsers are left out, and
+// why that is done at the parser rather than by escaping around the render.
+func TestRenderMarkdownPreservesAngleBracketSpans(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []string
+	}{
+		{
+			name: "intra-line tag-shaped spans survive",
+			input: "LINE1: replace <your-name> with the rig\n" +
+				"LINE2: literal a<b and c>d\n" +
+				"LINE3: html-ish <em>text</em> tail\n",
+			want: []string{
+				"LINE1: replace <your-name> with the rig",
+				"LINE2: literal a<b and c>d",
+				"LINE3: html-ish <em>text</em> tail",
+			},
+		},
+		{
+			// The worst case: an unclosed tag used to swallow every line up
+			// to the next ">", not just its own span.
+			name: "unclosed tag-shaped token does not eat following lines",
+			input: "P: start <unclosed\n" +
+				"Q: middle line one\n" +
+				"R: middle line two\n" +
+				"S: end > tail\n",
+			want: []string{
+				"P: start <unclosed",
+				"Q: middle line one",
+				"R: middle line two",
+				"S: end > tail",
+			},
+		},
+		{
+			name:  "non-tag-shaped angle brackets stay intact",
+			input: "E1: use Map<string, int> and <123> for the cache",
+			want:  []string{"Map<string, int>", "<123>"},
+		},
+		{
+			// Code spans and syntax-highlighted fences are where an escaping
+			// approach breaks down, so they get their own case.
+			name: "angle brackets survive code spans and fences",
+			input: "inline `foo <bar> baz` span\n\n" +
+				"```go\nif a < b && c > d { f() }\n```\n",
+			want: []string{"foo <bar> baz", "if a < b && c > d { f() }"},
+		},
+	}
+
+	d := &Detail{Width: 80, Height: 24}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := ansi.Strip(d.renderMarkdown(tt.input))
+			for _, want := range tt.want {
+				if !strings.Contains(out, want) {
+					t.Errorf("expected rendered output to contain %q\ngot: %q", want, out)
+				}
+			}
+			// No escaping happens any more, so an entity in the output would
+			// mean someone reintroduced a round-trip that does not round-trip.
+			if strings.Contains(out, "&lt;") || strings.Contains(out, "&gt;") {
+				t.Errorf("HTML entity leaked into rendered output\ngot: %q", out)
+			}
+		})
+	}
+}
+
+// TestRenderMarkdownStylesCodeFenceOperators pins the styling half of the fix.
+// TestRenderMarkdownPreservesAngleBracketSpans strips ANSI, so it cannot see a
+// bracket that survives as text but renders as a chroma lexer error — which is
+// what any escape sentinel inside a fence produces. Compare the SGR sequence
+// around "<" with the one around a comparison operator chroma always accepts.
+func TestRenderMarkdownStylesCodeFenceOperators(t *testing.T) {
+	d := &Detail{Width: 80, Height: 24}
+	angle := d.renderMarkdown("```go\nif a < b { f() }\n```\n")
+	baseline := d.renderMarkdown("```go\nif a != b { f() }\n```\n")
+
+	// Chroma's Error token carries a background color; a normal operator does
+	// not. Any "48;5;" (background) in the angle-bracket render that the
+	// baseline lacks means "<" was lexed as an error.
+	if strings.Contains(angle, "\x1b[48;5;") && !strings.Contains(baseline, "\x1b[48;5;") {
+		t.Errorf("'<' in a code fence rendered with an error background\nangle:    %q\nbaseline: %q", angle, baseline)
+	}
+}
+
+// TestRenderMarkdownShowsBlockHTMLLiterally pins the deliberate trade-off of
+// dropping goldmark's HTML parsers: real HTML in an issue body now renders as
+// literal text instead of being sanitized away. That is the point. With the
+// parsers installed, glamour ran every HTML node through bluemonday's
+// StrictPolicy, so "<img src=...>" alone rendered as an *empty document* and an
+// HTML comment vanished without trace — the same silent-deletion class as the
+// bug this file exists to prevent. Showing the markup is the honest failure
+// mode: bd issue bodies are never re-rendered as HTML anywhere in mg.
+func TestRenderMarkdownShowsBlockHTMLLiterally(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"image tag is not swallowed", `<img src="x.png" alt="pic">`, `<img src="x.png" alt="pic">`},
+		{"html comment stays visible", "before\n\n<!-- a hidden note -->\n\nafter", "<!-- a hidden note -->"},
+		{"details block keeps its tags", "<details>\n<summary>Click</summary>\n\nbody\n\n</details>", "<summary>Click</summary>"},
+		{"line break tag is literal", "line one<br>line two", "line one<br>line two"},
+	}
+
+	d := &Detail{Width: 80, Height: 24}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := ansi.Strip(d.renderMarkdown(tt.input))
+			if !strings.Contains(out, tt.want) {
+				t.Errorf("expected rendered output to contain %q\ngot: %q", tt.want, out)
+			}
+		})
 	}
 }

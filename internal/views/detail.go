@@ -8,10 +8,10 @@ import (
 
 	"charm.land/bubbles/v2/viewport"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/glamour"
 	"github.com/matt-wright86/mardi-gras/internal/data"
 	"github.com/matt-wright86/mardi-gras/internal/gastown"
 	"github.com/matt-wright86/mardi-gras/internal/ui"
+	"github.com/yuin/goldmark"
 )
 
 // Detail renders the right-panel issue details with a scrollable viewport.
@@ -35,7 +35,7 @@ type Detail struct {
 	MetadataSchema   *data.MetadataSchema
 	AgentOutput      []string // live captured lines from agent's tmux pane
 	AgentOutputID    string   // which issue the agent output belongs to
-	mdRenderer       *glamour.TermRenderer
+	mdRenderer       goldmark.Markdown
 }
 
 // NewDetail creates a detail panel.
@@ -189,21 +189,14 @@ func (d *Detail) renderMarkdown(text string) string {
 	}
 
 	if d.mdRenderer == nil {
-		r, err := glamour.NewTermRenderer(
-			glamour.WithStyles(ui.MardiGrasGlamourStyle()),
-			glamour.WithWordWrap(contentWidth),
-		)
-		if err != nil {
-			return wordWrap(text, contentWidth)
-		}
-		d.mdRenderer = r
+		d.mdRenderer = ui.NewMarkdownRenderer(contentWidth)
 	}
 
-	rendered, err := d.mdRenderer.Render(text)
-	if err != nil {
+	var buf strings.Builder
+	if err := d.mdRenderer.Convert([]byte(text), &buf); err != nil {
 		return wordWrap(text, contentWidth)
 	}
-	return strings.TrimRight(rendered, "\n")
+	return strings.TrimRight(buf.String(), "\n")
 }
 
 func (d *Detail) renderContent() string {
