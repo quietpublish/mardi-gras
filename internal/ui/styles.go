@@ -74,6 +74,7 @@ var (
 	OverdueBadge  lipgloss.Style
 	DueSoonBadge  lipgloss.Style
 	DeferredStyle lipgloss.Style
+	CommentBadge  lipgloss.Style
 
 	// Rich dependency styles
 	DepRelated    lipgloss.Style
@@ -299,6 +300,10 @@ func rebuildStyles() {
 
 	DeferredStyle = lipgloss.NewStyle().
 		Foreground(Dim)
+
+	// Comment count — muted so discussion reads as context, not urgency.
+	CommentBadge = lipgloss.NewStyle().
+		Foreground(Muted)
 
 	// Rich dependency styles
 	DepRelated = lipgloss.NewStyle().

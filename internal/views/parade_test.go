@@ -1,9 +1,13 @@
 package views
 
 import (
+	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/matt-wright86/mardi-gras/internal/data"
+	"github.com/matt-wright86/mardi-gras/internal/ui"
 )
 
 // paradeIssues returns a mix of open, in_progress, and closed issues for testing.
@@ -232,5 +236,50 @@ func TestEnsureVisible(t *testing.T) {
 	// Cursor should be visible: within [ScrollOffset, ScrollOffset+Height)
 	if p.Cursor < p.ScrollOffset || p.Cursor >= p.ScrollOffset+p.Height {
 		t.Fatalf("cursor %d not visible in viewport [%d, %d)", p.Cursor, p.ScrollOffset, p.ScrollOffset+p.Height)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Comment count badge
+// ---------------------------------------------------------------------------
+
+// comment_count rides along on `bd list --json`, so the parade can show that an
+// issue carries discussion without the extra `bd comments` call the detail
+// panel makes.
+func TestParadeCommentBadge(t *testing.T) {
+	issues := []data.Issue{testIssue("mg-1", data.StatusOpen)}
+	issues[0].CommentCount = 3
+	p := NewParade(issues, 80, 20, data.DefaultBlockingTypes)
+	out := ansi.Strip(p.View())
+
+	if !strings.Contains(out, ui.SymComment+"3") {
+		t.Errorf("expected comment badge %q in parade output:\n%s", ui.SymComment+"3", out)
+	}
+}
+
+func TestParadeCommentBadgeAbsentWhenZero(t *testing.T) {
+	// The overwhelmingly common case: no comments, no badge, no wasted width.
+	issues := []data.Issue{testIssue("mg-1", data.StatusOpen)}
+	p := NewParade(issues, 80, 20, data.DefaultBlockingTypes)
+	out := ansi.Strip(p.View())
+
+	if strings.Contains(out, ui.SymComment) {
+		t.Errorf("expected no comment badge for CommentCount=0:\n%s", out)
+	}
+}
+
+// The badge is width-budgeted like the due/deferred badges, so adding it must
+// not push a row past the parade width.
+func TestParadeCommentBadgeRespectsWidth(t *testing.T) {
+	for _, width := range []int{40, 60, 80, 120} {
+		issues := []data.Issue{testIssue("mg-1", data.StatusOpen)}
+		issues[0].Title = strings.Repeat("long title ", 12)
+		issues[0].CommentCount = 42
+		p := NewParade(issues, width, 20, data.DefaultBlockingTypes)
+		for _, line := range strings.Split(ansi.Strip(p.View()), "\n") {
+			if got := lipgloss.Width(line); got > width {
+				t.Errorf("width %d: row overflows to %d cells: %q", width, got, line)
+			}
+		}
 	}
 }

@@ -116,6 +116,11 @@ type Issue struct {
 	DueAt              *time.Time             `json:"due_at,omitempty"`
 	DeferUntil         *time.Time             `json:"defer_until,omitempty"`
 	Metadata           map[string]interface{} `json:"metadata,omitempty"`
+	// CommentCount comes free with `bd list --json` (bd v1.1.0+). The parade
+	// badges it so discussion is visible without opening the issue; the detail
+	// panel's "COMMENTS (n)" header still counts the fetched comments instead,
+	// since those arrive from a separate `bd comments` call.
+	CommentCount int `json:"comment_count,omitempty"`
 }
 
 // EvaluateDependencies is the canonical function for classifying all dependency
