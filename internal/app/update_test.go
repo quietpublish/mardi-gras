@@ -469,3 +469,66 @@ func TestConvoyCreateFromNonEpic(t *testing.T) {
 		t.Fatalf("expected convoyIssueIDs = [open-1], got %v", got.convoyIssueIDs)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// TestBeadsContextMsgVersionWarning
+// ---------------------------------------------------------------------------
+
+// The accidental bd v1.2.0/v1.2.1 releases migrate the Beads schema out from
+// under every other bd version, so mg must surface them. The version arrives on
+// the existing `bd context --json` fetch, which is why this is wired to
+// beadsContextMsg rather than a second subprocess.
+func TestBeadsContextMsgVersionWarning(t *testing.T) {
+	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
+	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	got := model.(Model)
+
+	model, cmd := got.Update(beadsContextMsg{ctx: &data.BeadsContext{BdVersion: "1.2.1"}})
+	got = model.(Model)
+
+	if got.toast.Message == "" {
+		t.Fatal("expected a toast warning for bd v1.2.1, got none")
+	}
+	if !strings.Contains(got.toast.Message, "1.2.1") {
+		t.Errorf("toast should name the installed version, got %q", got.toast.Message)
+	}
+	if !strings.Contains(got.toast.Message, "v1.2.2+") {
+		t.Errorf("toast should name the fixed version, got %q", got.toast.Message)
+	}
+	if got.toast.Level != components.ToastWarn {
+		t.Errorf("expected ToastWarn, got %v", got.toast.Level)
+	}
+	if cmd == nil {
+		t.Error("expected a dismiss command alongside the toast")
+	}
+	if got.beadsContext == nil || got.beadsContext.BdVersion != "1.2.1" {
+		t.Error("beadsContext should still be stored when a warning fires")
+	}
+}
+
+func TestBeadsContextMsgVersionWarningSafeVersion(t *testing.T) {
+	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
+	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	got := model.(Model)
+
+	// v1.2.2 is the recovery release and must stay silent, as must a nil ctx.
+	for _, ctx := range []*data.BeadsContext{{BdVersion: "1.2.2"}, {BdVersion: "1.1.0"}, nil} {
+		model, _ = got.Update(beadsContextMsg{ctx: ctx})
+		after := model.(Model)
+		if after.toast.Message != "" {
+			t.Errorf("expected no toast for %+v, got %q", ctx, after.toast.Message)
+		}
+	}
+}
+
+// The toast renders into the single divider row (see Model.View), so a warning
+// long enough to wrap would push the layout down a line. 80 columns is the
+// width to hold: the message fit on one line there when it was written.
+func TestBdVersionWarningFitsToastRow(t *testing.T) {
+	toast := components.Toast{Message: data.BdVersionWarning("1.2.1"), Level: components.ToastWarn}
+	if got := strings.Count(toast.View(80), "\n") + 1; got != 1 {
+		t.Errorf("bd version warning renders %d lines at width 80, want 1: %q", got, toast.Message)
+	}
+}

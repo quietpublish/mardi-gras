@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os/exec"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -49,6 +50,36 @@ func TestParseBdStderrEmpty(t *testing.T) {
 	got = parseBdStderr([]byte(""))
 	if got != "" {
 		t.Errorf("parseBdStderr(empty) = %q, want empty", got)
+	}
+}
+
+func TestSchemaSkewHint(t *testing.T) {
+	// The literal message bd emits when the database is ahead of the binary.
+	err := errors.New("bd list --json: schema version mismatch: database is at v65, binary knows up to v53 (12 migrations ahead)")
+	got := SchemaSkewHint(err)
+	if got == "" {
+		t.Fatal("SchemaSkewHint() = empty, want remediation text")
+	}
+	if !strings.Contains(got, "RECOVERY-1.2.1.md") {
+		t.Errorf("SchemaSkewHint() = %q, want it to point at the recovery guide", got)
+	}
+	if !strings.Contains(got, "BD_IGNORE_SCHEMA_SKEW=1") {
+		t.Errorf("SchemaSkewHint() = %q, want it to name the stopgap", got)
+	}
+}
+
+func TestSchemaSkewHintUnrelatedErrors(t *testing.T) {
+	// Anything else must fall through to the generic Dolt-server advice.
+	cases := []error{
+		nil,
+		errors.New("bd list --json: connection refused"),
+		errors.New("bd: command not found"),
+		errors.New(""),
+	}
+	for _, err := range cases {
+		if got := SchemaSkewHint(err); got != "" {
+			t.Errorf("SchemaSkewHint(%v) = %q, want empty", err, got)
+		}
 	}
 }
 

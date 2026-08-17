@@ -44,7 +44,10 @@ const (
 )
 
 const (
-	toastDuration           = 4 * time.Second
+	toastDuration = 4 * time.Second
+	// criticalToastDuration is for warnings the user must not miss, such as a
+	// bd install that is actively damaging the database it reads.
+	criticalToastDuration   = 15 * time.Second
 	changeIndicatorDuration = 30 * time.Second
 )
 
@@ -1833,6 +1836,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case beadsContextMsg:
 		m.beadsContext = msg.ctx
+		// bd reports its own version here, so a known-bad install is caught
+		// without spawning `bd --version` on top of the context fetch.
+		if msg.ctx != nil {
+			if warning := data.BdVersionWarning(msg.ctx.BdVersion); warning != "" {
+				toast, toastCmd := components.ShowToast(warning, components.ToastWarn, criticalToastDuration)
+				m.toast = toast
+				return m, toastCmd
+			}
+		}
 		return m, nil
 
 	case agentFinishedMsg:

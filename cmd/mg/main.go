@@ -101,7 +101,11 @@ func main() {
 		issues, err = data.FetchIssuesCLI(source.ProjectDir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error loading issues via bd list: %v\n\n", err)
-			fmt.Fprintf(os.Stderr, "Ensure the Dolt server is running (dolt sql-server) and bd is working.\n")
+			if hint := data.SchemaSkewHint(err); hint != "" {
+				fmt.Fprint(os.Stderr, hint)
+			} else {
+				fmt.Fprintf(os.Stderr, "Ensure the Dolt server is running (dolt sql-server) and bd is working.\n")
+			}
 			os.Exit(1)
 		}
 	default:

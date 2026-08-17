@@ -37,22 +37,24 @@ func (s Source) Label() string {
 	return "issues.jsonl"
 }
 
-// CheckBdVersion runs `bd --version` and returns a warning if the installed
-// version is known to be broken. Returns "" for any safe or unparseable version.
-func CheckBdVersion() string {
-	return checkBdVersionOutput(nil)
-}
-
-// checkBdVersionOutput parses version output. If out is nil, it shells out to bd.
-func checkBdVersionOutput(out []byte) string {
-	if out == nil {
-		var err error
-		out, err = runWithTimeout(timeoutShort, "bd", "--version")
-		if err != nil {
-			return ""
-		}
+// BdVersionWarning returns a warning if the given bd version is known to be
+// broken or dangerous, or "" for any safe or unrecognized version. The argument
+// is a bare version string as reported by `bd context --json` ("1.2.1"), so
+// callers can reuse the context fetch instead of spawning `bd --version`.
+func BdVersionWarning(version string) string {
+	switch strings.TrimPrefix(strings.TrimSpace(version), "v") {
+	case "0.59.0":
+		return "bd v0.59.0 has a known bug where --json is ignored; upgrade to v0.60.0+"
+	case "1.2.0", "1.2.1":
+		// Published by accident on 2026-08-11 without release testing. Running
+		// one of these even once migrates the local schema v53→v65, after which
+		// every other bd version halts with "schema version mismatch".
+		// Kept short deliberately: the toast that renders this occupies a
+		// single divider row, and a longer string wraps at 80 columns.
+		return "bd v" + strings.TrimPrefix(strings.TrimSpace(version), "v") +
+			" migrates your Beads schema — untested, upgrade to v1.2.2+"
 	}
-	return parseBdVersionWarning(string(out))
+	return ""
 }
 
 // parseBdVersionWarning returns a warning string if the version is known-broken,
@@ -64,11 +66,7 @@ func parseBdVersionWarning(output string) string {
 		return ""
 	}
 	// Version is the last field (handles "bd version 0.59.0" and "0.59.0")
-	ver := fields[len(fields)-1]
-	if ver == "0.59.0" {
-		return "bd v0.59.0 has a known bug where --json is ignored; upgrade to v0.60.0+"
-	}
-	return ""
+	return BdVersionWarning(fields[len(fields)-1])
 }
 
 // FetchIssuesCLI runs `bd list --json --limit 0 --all` and parses the result.

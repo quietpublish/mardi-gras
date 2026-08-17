@@ -40,6 +40,9 @@ const (
 	SymSelected    = "◉"
 	SymUnselected  = "○"
 
+	// Comments
+	SymComment = "💬"
+
 	// Due dates
 	SymOverdue  = "▲"
 	SymDeferred = "⏸"

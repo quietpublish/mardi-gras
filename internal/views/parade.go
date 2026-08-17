@@ -5,6 +5,7 @@ package views
 import (
 	"fmt"
 	"image/color"
+	"strconv"
 	"strings"
 	"time"
 
@@ -585,6 +586,17 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 		deferWidth = 2
 	}
 
+	// Comment badge — shows that an issue carries discussion without opening
+	// it. Free from `bd list --json`, so it costs no extra CLI call. Width is
+	// measured rather than assumed, since the glyph is wide.
+	commentBadge := ""
+	commentWidth := 0
+	if issue.CommentCount > 0 {
+		label := ui.SymComment + strconv.Itoa(issue.CommentCount)
+		commentBadge = " " + ui.CommentBadge.Render(label)
+		commentWidth = lipgloss.Width(commentBadge)
+	}
+
 	// Build the "next blocker" hint for stalled issues
 	var rawHint string
 	hintStyle := lipgloss.NewStyle().Foreground(ui.Muted)
@@ -600,7 +612,7 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 	// hint: the issue's own title is the primary scent, the hint is context
 	// (audit #2). The hint degrades to id-only before character truncation.
 	titleFloor := min(lipgloss.Width(issue.Title), max(innerWidth/3, 12))
-	maxHint := innerWidth - 16 - titleFloor - agentWidth - indentWidth - dueWidth - deferWidth - orphanWidth - zombieWidth
+	maxHint := innerWidth - 16 - titleFloor - agentWidth - indentWidth - dueWidth - deferWidth - commentWidth - orphanWidth - zombieWidth
 	if maxHint < 0 {
 		maxHint = 0
 	}
@@ -624,7 +636,7 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 	}
 
 	hintLen := lipgloss.Width(hint)
-	maxTitle := innerWidth - 16 - hintLen - agentWidth - changeWidth - selectWidth - indentWidth - dueWidth - deferWidth - orphanWidth - zombieWidth
+	maxTitle := innerWidth - 16 - hintLen - agentWidth - changeWidth - selectWidth - indentWidth - dueWidth - deferWidth - commentWidth - orphanWidth - zombieWidth
 	if maxTitle < 0 {
 		maxTitle = 0
 	}
@@ -670,7 +682,7 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 		renderedTitle,
 		prioStr,
 	)
-	line += dueBadge + deferBadge + hint
+	line += dueBadge + deferBadge + commentBadge + hint
 
 	leftBorder := sec.BorderVertical
 	rightBorder := sec.BorderVertical

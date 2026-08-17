@@ -197,6 +197,25 @@ func scrubPaths(s string) string {
 	return strings.Join(words, " ")
 }
 
+// SchemaSkewHint returns remediation text when err carries bd's schema-version
+// mismatch signature, or "" for any other failure. The usual cause is the
+// accidental bd v1.2.0/v1.2.1 release, which migrates the local database from
+// schema v53 to v65; every other bd version then refuses to run against it, so
+// the generic "is the Dolt server running?" advice sends the user the wrong way.
+func SchemaSkewHint(err error) string {
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "schema version mismatch") {
+		return ""
+	}
+	return "This is a Beads schema skew, not a connection problem — the database is\n" +
+		"ahead of the bd binary reading it. It usually means bd v1.2.0 or v1.2.1 (both\n" +
+		"published by accident, untested) migrated the database on this machine.\n\n" +
+		"  1. Upgrade every bd install/clone to v1.2.2+ FIRST — a leftover v1.2.1\n" +
+		"     binary will silently re-migrate the database.\n" +
+		"  2. Roll the schema cursor back per docs/RECOVERY-1.2.1.md in the beads repo:\n" +
+		"     https://github.com/gastownhall/beads/blob/v1.2.2/docs/RECOVERY-1.2.1.md\n\n" +
+		"Need bd right now? BD_IGNORE_SCHEMA_SKEW=1 is a documented stopgap.\n"
+}
+
 // wrapExitError extracts a readable error from an exec.ExitError's stderr,
 // using parseBdStderr for structured JSON when available. Returns the original
 // error unchanged if it's not an ExitError or has no stderr.
