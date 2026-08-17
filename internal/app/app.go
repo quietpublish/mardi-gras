@@ -3530,7 +3530,10 @@ func gasTownTickCmd() tea.Cmd {
 // newCreateForm creates a create form with or without the crew member field
 // depending on whether Gas Town is available.
 func (m Model) newCreateForm() components.CreateForm {
-	if m.gtEnv.Available {
+	// Both drivers implement Assign now (Gas City takes the assignee inline on
+	// bead create), so the crew field is offered whenever any orchestrator is
+	// live rather than only when the gt binary is present.
+	if m.orchestratorAvailable() {
 		return components.NewCreateFormWithGT(m.width, m.height)
 	}
 	return components.NewCreateForm(m.width, m.height)

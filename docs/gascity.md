@@ -2,7 +2,7 @@
 
 [Gas City](https://github.com/gastownhall/gascity) (`gc`) is a pack-based rewrite of Gas Town that exposes a typed **Supervisor HTTP API** instead of a CLI. Mardi Gras can drive Gas City through that API as an alternative to Gas Town.
 
-> **Status: opt-in.** The Gas City backend powers the agent roster, mail, formulas, nudge, decommission, agent dispatch (sling), and convoys. A meaningful set of operations — comments, unsling, cascade close, crew assign, molecule DAG, convoy land/watch/unwatch, vitals/costs/patrol, rig recovery, handoff, and the activity feed — has no Gas City equivalent yet. See [What works today](#what-works-today) for the exact matrix.
+> **Status: opt-in.** The Gas City backend powers the agent roster, mail, formulas, nudge, decommission, agent dispatch (sling), convoys (including create-from-epic), and crew assign. Still missing: comments, unsling, cascade close, the molecule DAG, convoy land/watch/unwatch, vitals/costs/patrol, rig recovery, handoff, and the activity feed. See [What works today](#what-works-today) for the exact matrix.
 
 ## How it works
 
@@ -38,11 +38,12 @@ The supervisor binds a **dynamically assigned** TCP port (not a fixed one), logg
 | Nudge (`n`) / decommission (`K`) | ✅ | resolves the roster agent to a live session, then submits a message / kills the session |
 | Agent dispatch (sling, `a`) | ✅ | Gas City requires an explicit target agent (unlike gt's auto-pick), so `a` prompts for a target before slinging |
 | Convoys — list / create (`C`) / close | ✅ | Gas City models a convoy as a bead |
-| Issue comments in the detail panel | ⛔ | `bd comments` is driven through the Gas Town driver today |
-| Unsling (`shift+A`) | ⛔ | no Gas City endpoint; the action reports "not supported" |
-| Cascade close | ⛔ | no Gas City endpoint |
-| Create & assign to crew (`Y`) | ⛔ | no Gas City endpoint; the form submits and fails |
-| Convoy `land` / `watch` / `unwatch` / create-from-epic | ⛔ | no Gas City endpoint |
+| Create & assign to crew | ✅ | `POST /v0/city/{city}/beads` takes the assignee inline, so the bead is never briefly unowned; `--nudge` wakes the crew member's session afterwards |
+| Convoy create-from-epic | ✅ | no `--from-epic` flag upstream, so mg walks `GET …/beads/graph/{rootID}` and enrols the members, excluding the epic itself |
+| Issue comments in the detail panel | ⛔ | the supervisor API has no comments endpoint and `Bead` carries no comments field |
+| Unsling (`shift+A`) | ⛔ | `/sling` is POST-only; the action reports "not supported" |
+| Cascade close | ⛔ | `…/bead/{id}/close` takes no cascade parameter |
+| Convoy `land` / `watch` / `unwatch` | ⛔ | no Gas City endpoint (`land` is a CLI-only composite) |
 | Molecule DAG, progress, step-done | ⛔ | the Detail panel's DAG section stays empty |
 | Vitals / costs / patrol | ⛔ | no Gas City equivalent; these panels stay empty |
 | Rig recovery (`Recover dead rigs`) | ⛔ | shells out to `gt release`/`gt sling`; hidden from the palette on Gas City |

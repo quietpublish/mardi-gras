@@ -633,3 +633,128 @@ func TestGCMutationErrSucceedsOn2xx(t *testing.T) {
 		t.Errorf("gcMutationErr(422) = %v, want an error carrying the detail", err)
 	}
 }
+
+// --- Assign + ConvoyCreateFromEpic (Gas City v1.4.1 endpoints) --------------
+
+// Gas City takes the assignee inline on create, so a bead is never briefly
+// unowned the way a create-then-assign pair would leave it.
+func TestGCDriverAssignCreatesBeadWithAssignee(t *testing.T) {
+	var gotBody map[string]any
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v0/city/mardi_gras/beads", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-GC-Request") == "" {
+			t.Error("create bead: missing X-GC-Request header")
+		}
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"mg-42","title":"wire the thing","status":"open"}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	d, err := NewGCDriver(srv.URL, "mardi_gras")
+	if err != nil {
+		t.Fatalf("NewGCDriver: %v", err)
+	}
+	out, err := d.Assign(context.Background(), "obsidian", "wire the thing", "task", "1", "ui", false)
+	if err != nil {
+		t.Fatalf("Assign: %v", err)
+	}
+	if !strings.Contains(out, "mg-42") || !strings.Contains(out, "obsidian") {
+		t.Errorf("Assign() = %q, want it to name the new bead and the crew member", out)
+	}
+	if gotBody["assignee"] != "obsidian" {
+		t.Errorf("assignee = %v, want obsidian", gotBody["assignee"])
+	}
+	if gotBody["title"] != "wire the thing" {
+		t.Errorf("title = %v", gotBody["title"])
+	}
+	if gotBody["type"] != "task" {
+		t.Errorf("type = %v, want task", gotBody["type"])
+	}
+	// gt passes priority as a CLI string; the API wants a number.
+	if p, ok := gotBody["priority"].(float64); !ok || p != 1 {
+		t.Errorf("priority = %v, want numeric 1", gotBody["priority"])
+	}
+}
+
+// A non-numeric priority is dropped rather than failing the whole create — gt
+// accepts free-form strings there.
+func TestGCDriverAssignDropsUnparseablePriority(t *testing.T) {
+	var gotBody map[string]any
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v0/city/mardi_gras/beads", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"mg-43","title":"t","status":"open"}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	d, _ := NewGCDriver(srv.URL, "mardi_gras")
+	if _, err := d.Assign(context.Background(), "obsidian", "t", "", "high", "", false); err != nil {
+		t.Fatalf("Assign: %v", err)
+	}
+	if _, present := gotBody["priority"]; present {
+		t.Errorf("priority should be omitted when unparseable, got %v", gotBody["priority"])
+	}
+}
+
+// ConvoyCreateFromEpic walks the epic's graph and must not enrol the epic itself.
+func TestGCDriverConvoyCreateFromEpicExcludesRoot(t *testing.T) {
+	var convoyBody map[string]any
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v0/city/mardi_gras/beads/graph/mg-epic", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"root":{"id":"mg-epic","title":"epic","status":"open"},
+			"beads":[{"id":"mg-epic","title":"epic","status":"open"},
+			         {"id":"mg-1","title":"one","status":"open"},
+			         {"id":"mg-2","title":"two","status":"open"}],
+			"deps":[]}`))
+	})
+	mux.HandleFunc("/v0/city/mardi_gras/convoys", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&convoyBody)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"cv-9","title":"parade"}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	d, _ := NewGCDriver(srv.URL, "mardi_gras")
+	id, err := d.ConvoyCreateFromEpic(context.Background(), "parade", "mg-epic")
+	if err != nil {
+		t.Fatalf("ConvoyCreateFromEpic: %v", err)
+	}
+	if id != "cv-9" {
+		t.Errorf("id = %q, want cv-9", id)
+	}
+	items, _ := convoyBody["items"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("items = %v, want exactly the two members (epic excluded)", convoyBody["items"])
+	}
+	for _, it := range items {
+		if it == "mg-epic" {
+			t.Error("the epic itself must not be enrolled in its own convoy")
+		}
+	}
+}
+
+// An epic with no members is a clear error, not an empty convoy.
+func TestGCDriverConvoyCreateFromEpicEmpty(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v0/city/mardi_gras/beads/graph/mg-solo", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"root":{"id":"mg-solo","title":"solo","status":"open"},
+			"beads":[{"id":"mg-solo","title":"solo","status":"open"}],"deps":[]}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	d, _ := NewGCDriver(srv.URL, "mardi_gras")
+	if _, err := d.ConvoyCreateFromEpic(context.Background(), "parade", "mg-solo"); err == nil {
+		t.Fatal("expected an error for an epic with no members")
+	}
+}
