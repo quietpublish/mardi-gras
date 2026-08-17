@@ -80,6 +80,41 @@ func TestCheckBdVersionUnparseable(t *testing.T) {
 	}
 }
 
+func TestBdVersionWarningAccidentalRelease(t *testing.T) {
+	// bd v1.2.0/v1.2.1 were published by accident and migrate the local schema
+	// v53→v65, which breaks every other bd version against that database.
+	for _, ver := range []string{"1.2.0", "1.2.1", "v1.2.1", " 1.2.1 "} {
+		got := BdVersionWarning(ver)
+		if got == "" {
+			t.Errorf("BdVersionWarning(%q) = empty, want a warning", ver)
+			continue
+		}
+		if !strings.Contains(got, "v1.2.2+") {
+			t.Errorf("BdVersionWarning(%q) = %q, want it to name the fixed version", ver, got)
+		}
+	}
+}
+
+func TestBdVersionWarningSafeVersions(t *testing.T) {
+	// 1.2.2 is the recovery release and must not warn, even though it sorts
+	// above the accidental pair.
+	for _, ver := range []string{"1.1.0", "1.1.2", "1.2.2", "1.3.0", "0.60.0", ""} {
+		if got := BdVersionWarning(ver); got != "" {
+			t.Errorf("BdVersionWarning(%q) = %q, want empty", ver, got)
+		}
+	}
+}
+
+func TestParseBdVersionWarningAccidentalRelease(t *testing.T) {
+	// The `bd --version` output form must reach the same verdict.
+	if got := parseBdVersionWarning("bd version 1.2.1"); got == "" {
+		t.Error("parseBdVersionWarning(\"bd version 1.2.1\") = empty, want a warning")
+	}
+	if got := parseBdVersionWarning("bd version 1.2.2"); got != "" {
+		t.Errorf("parseBdVersionWarning(\"bd version 1.2.2\") = %q, want empty", got)
+	}
+}
+
 func TestBdListArgs(t *testing.T) {
 	args := bdListArgs()
 	got := strings.Join(args, " ")
