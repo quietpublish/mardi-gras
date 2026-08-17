@@ -2,6 +2,19 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.29.1 (2026-08-17)
+
+A Gas City correctness release: features that only exist in Gas Town no longer pretend to work on a Gas City backend.
+
+### Fixed
+- **Gas Town-only features are no longer offered on Gas City** ([#98](https://github.com/quietpublish/mardi-gras/pull/98)) — three operations call `gt` directly rather than going through the driver seam, and each failed badly on a Gas City backend instead of cleanly. "Recover dead rigs" appeared in the command palette and then died with `exec: "gt": executable not found`; handoff blamed tmux for what was actually a missing binary; and the recent-activity section silently never appeared, because it reads `~/gt/.events.jsonl` off local disk. They are now gated like vitals/costs/patrol already were — recovery is hidden, handoff explains itself, and the activity feed returns empty without looking for a file that cannot exist.
+- **Stopping an agent no longer reports a false success on Gas City** ([#98](https://github.com/quietpublish/mardi-gras/pull/98)) — `shift+A` gated on the `gt` binary, so on Gas City it fell through to killing the tmux window and reported success while the orchestrator still held the agent. It now asks the active driver to unsling and surfaces a truthful "not supported" when the backend cannot.
+- **Dead-rig advice no longer names a binary you may not have** ([#98](https://github.com/quietpublish/mardi-gras/pull/98)) — the suggested fix was hardcoded `gt sling <issue> <rig>`. It is now backend-specific, and the Problems overlay simply omits the command rather than printing wrong advice.
+
+### Changed
+- **Pinned Gas City Supervisor spec refreshed to v1.4.1** ([#98](https://github.com/quietpublish/mardi-gras/pull/98)) — the committed OpenAPI spec was from 2026-06-12; the generated client now covers 127 paths (up from 111, none removed). Error handling decodes the raw problem+json response body instead of a generated typed field, so it survives future regenerations regardless of how the spec models its errors.
+- **`docs/gascity.md` capability table corrected** ([#98](https://github.com/quietpublish/mardi-gras/pull/98)) — it previously listed only convoy land/watch/unwatch and vitals/costs/patrol as unsupported, omitting comments, unsling, cascade close, crew assign, the molecule DAG trio, and convoy create-from-epic.
+
 ## v0.29.0 (2026-08-17)
 
 A safety release prompted by an accident upstream: beads published two untested versions, and mg now tells you when it is talking to one of them.
