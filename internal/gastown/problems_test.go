@@ -3,7 +3,7 @@ package gastown
 import "testing"
 
 func TestDetectProblemsNil(t *testing.T) {
-	problems := DetectProblems(nil)
+	problems := DetectProblems(nil, BackendGasTown)
 	if len(problems) != 0 {
 		t.Errorf("expected 0 problems from nil status, got %d", len(problems))
 	}
@@ -15,7 +15,7 @@ func TestDetectProblemsStalled(t *testing.T) {
 			{Name: "Toast", Role: "polecat", HasWork: true, State: "idle"},
 		},
 	}
-	problems := DetectProblems(status)
+	problems := DetectProblems(status, BackendGasTown)
 	if len(problems) != 1 {
 		t.Fatalf("expected 1 problem, got %d", len(problems))
 	}
@@ -36,7 +36,7 @@ func TestDetectProblemsBackoff(t *testing.T) {
 			{Name: "Muffin", Role: "polecat", State: "backoff"},
 		},
 	}
-	problems := DetectProblems(status)
+	problems := DetectProblems(status, BackendGasTown)
 	if len(problems) != 1 {
 		t.Fatalf("expected 1 problem, got %d", len(problems))
 	}
@@ -55,7 +55,7 @@ func TestDetectProblemsZombie(t *testing.T) {
 			{Name: "Stale", Role: "polecat", Rig: "myrig", Running: false, HookBead: "bd-e5f6"},
 		},
 	}
-	problems := DetectProblems(status)
+	problems := DetectProblems(status, BackendGasTown)
 	if len(problems) != 1 {
 		t.Fatalf("expected 1 problem, got %d", len(problems))
 	}
@@ -73,7 +73,7 @@ func TestDetectProblemsStuck(t *testing.T) {
 			{Name: "Granite", Role: "polecat", State: "stuck"},
 		},
 	}
-	problems := DetectProblems(status)
+	problems := DetectProblems(status, BackendGasTown)
 	if len(problems) != 1 {
 		t.Fatalf("expected 1 problem, got %d", len(problems))
 	}
@@ -96,7 +96,7 @@ func TestDetectProblemsHealthy(t *testing.T) {
 			{Name: "Witness", Role: "witness", Running: true, State: "working"},
 		},
 	}
-	problems := DetectProblems(status)
+	problems := DetectProblems(status, BackendGasTown)
 	if len(problems) != 0 {
 		t.Errorf("expected 0 problems for healthy agents, got %d", len(problems))
 	}
@@ -114,7 +114,7 @@ func TestDetectProblemsDeadRig(t *testing.T) {
 				Running: false, HookBead: "mg-002", WorkTitle: "Add tests"},
 		},
 	}
-	problems := DetectProblems(status)
+	problems := DetectProblems(status, BackendGasTown)
 
 	// Should emit one dead_rig, NOT two zombies.
 	var deadRig, zombie int
@@ -159,7 +159,7 @@ func TestDetectProblemsDeadRigDoesNotSuppressOtherRigZombie(t *testing.T) {
 				Running: false, HookBead: "lr-001"},
 		},
 	}
-	problems := DetectProblems(status)
+	problems := DetectProblems(status, BackendGasTown)
 
 	types := map[string]int{}
 	for _, p := range problems {
@@ -242,7 +242,7 @@ func TestDetectProblemsMultiple(t *testing.T) {
 			{Name: "Stale", Role: "polecat", Running: false, HookBead: "bd-e5f6"}, // zombie
 		},
 	}
-	problems := DetectProblems(status)
+	problems := DetectProblems(status, BackendGasTown)
 	if len(problems) != 3 {
 		t.Fatalf("expected 3 problems, got %d", len(problems))
 	}
@@ -255,5 +255,41 @@ func TestDetectProblemsMultiple(t *testing.T) {
 		if !types[expected] {
 			t.Errorf("expected problem type %q not found", expected)
 		}
+	}
+}
+
+// The dead_rig fix is a `gt` command, so it must not be suggested on a backend
+// that has no gt. The overlay omits an empty Fix rather than printing bad advice.
+func TestDetectProblemsDeadRigFixIsBackendSpecific(t *testing.T) {
+	status := &TownStatus{
+		Rigs: []RigStatus{{Name: "dead_rig", PolecatCount: 0}},
+		Agents: []AgentRuntime{
+			{Name: "obsidian", Role: "polecat", Rig: "dead_rig", Running: false, HookBead: "dr-001"},
+		},
+	}
+
+	tests := []struct {
+		backend string
+		wantFix string
+	}{
+		{BackendGasTown, "gt sling <issue> dead_rig"},
+		{BackendGasCity, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.backend, func(t *testing.T) {
+			var found bool
+			for _, p := range DetectProblems(status, tt.backend) {
+				if p.Type != "dead_rig" {
+					continue
+				}
+				found = true
+				if p.Fix != tt.wantFix {
+					t.Errorf("backend %q: Fix = %q, want %q", tt.backend, p.Fix, tt.wantFix)
+				}
+			}
+			if !found {
+				t.Fatalf("backend %q: no dead_rig problem detected", tt.backend)
+			}
+		})
 	}
 }

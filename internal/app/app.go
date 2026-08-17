@@ -414,7 +414,7 @@ func (m *Model) activateGasTown() tea.Cmd {
 		m.fetchConvoyList,
 		m.fetchMailInbox,
 		m.fetchCosts,
-		fetchActivity,
+		m.fetchActivity,
 		m.fetchVitals,
 		m.gatedPollAgentState(),
 	}
@@ -434,7 +434,7 @@ func (m *Model) activateGasTown() tea.Cmd {
 // allProblems returns the combined list of Gas Town agent problems, doctor diagnostics,
 // and patrol scan findings.
 func (m Model) allProblems() []gastown.Problem {
-	problems := gastown.DetectProblems(m.townStatus)
+	problems := gastown.DetectProblems(m.townStatus, m.driver.Backend())
 	problems = append(problems, m.doctorProblems...)
 	problems = append(problems, gastown.PatrolScanProblems(m.patrolScan)...)
 	return problems
@@ -2160,7 +2160,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		issueID := issue.ID
-		if m.gtEnv.Available {
+		// Any live orchestrator owns the agent's lifecycle, so ask it to
+		// unsling — a backend that cannot returns ErrUnsupported, which is a
+		// truthful message. Fall back to killing the tmux window only when
+		// there is no orchestrator at all.
+		if m.orchestratorAvailable() {
 			driver := m.driver
 			return m, func() tea.Msg {
 				err := driver.Unsling(context.Background(), issueID)
@@ -2709,10 +2713,14 @@ func (m Model) buildPaletteCommands() []components.PaletteCommand {
 			components.PaletteCommand{Name: "Create convoy", Desc: "Create convoy from selected issues", Key: "C", Action: components.ActionCreateConvoy},
 			components.PaletteCommand{Name: "Cascade close", Desc: "Close issue and all children", Key: "", Action: components.ActionCascadeClose},
 		)
-		if deadRigs := gastown.FindDeadRigs(m.townStatus); len(deadRigs) > 0 {
-			cmds = append(cmds,
-				components.PaletteCommand{Name: "Recover dead rigs", Desc: fmt.Sprintf("Release orphans from %d dead rig(s)", len(deadRigs)), Key: "", Action: components.ActionRecoverRigs},
-			)
+		// Recovery shells out to gt directly rather than going through the
+		// Driver, so it must not be offered on a backend that has no gt.
+		if m.driver.Supports(gastown.FeatureRecovery) {
+			if deadRigs := gastown.FindDeadRigs(m.townStatus); len(deadRigs) > 0 {
+				cmds = append(cmds,
+					components.PaletteCommand{Name: "Recover dead rigs", Desc: fmt.Sprintf("Release orphans from %d dead rig(s)", len(deadRigs)), Key: "", Action: components.ActionRecoverRigs},
+				)
+			}
 		}
 	}
 
@@ -2813,6 +2821,13 @@ func (m Model) executePaletteAction(action components.PaletteAction) (tea.Model,
 		m.layout()
 		return m, cmd
 	case components.ActionRecoverRigs:
+		if !m.driver.Supports(gastown.FeatureRecovery) {
+			toast, cmd := components.ShowToast(
+				"Rig recovery is a Gas Town feature", components.ToastWarn, toastDuration,
+			)
+			m.toast = toast
+			return m, cmd
+		}
 		deadRigs := gastown.FindDeadRigs(m.townStatus)
 		if len(deadRigs) == 0 {
 			toast, cmd := components.ShowToast("No dead rigs found", components.ToastInfo, toastDuration)
@@ -2881,6 +2896,16 @@ func (m Model) handleGasTownAction(msg views.GasTownActionMsg) (tea.Model, tea.C
 		return m, textinput.Blink
 
 	case views.ActionHandoff:
+		// Handoff shells out to `gt handoff`, so it needs Gas Town regardless
+		// of tmux — check the backend before blaming the terminal.
+		if !m.driver.Supports(gastown.FeatureHandoff) {
+			toast, cmd := components.ShowToast(
+				"Handoff is a Gas Town feature",
+				components.ToastWarn, toastDuration,
+			)
+			m.toast = toast
+			return m, cmd
+		}
 		if !m.inTmux {
 			toast, cmd := components.ShowToast(
 				"Handoff requires tmux",
@@ -3580,7 +3605,13 @@ func (m Model) fetchCosts() tea.Msg {
 	return costsMsg{costs: costs, err: err}
 }
 
-func fetchActivity() tea.Msg {
+// fetchActivity reads the recent-activity log. The log is a Gas Town artifact
+// on local disk (~/gt/.events.jsonl), so on any other backend this returns an
+// empty feed rather than silently stat-ing a path that cannot exist.
+func (m Model) fetchActivity() tea.Msg {
+	if !m.driver.Supports(gastown.FeatureActivityFeed) {
+		return activityMsg{}
+	}
 	path := gastown.EventsPath()
 	events, err := gastown.LoadRecentEvents(path, 20)
 	return activityMsg{events: events, err: err}

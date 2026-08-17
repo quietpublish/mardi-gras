@@ -2,6 +2,7 @@ package gastown
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -38,10 +39,12 @@ func NewGCDriver(baseURL, city string) (*GCDriver, error) {
 	return &GCDriver{baseURL: baseURL, city: strings.TrimSpace(city), client: c}, nil
 }
 
-func (*GCDriver) Backend() string { return "gascity" }
+func (*GCDriver) Backend() string { return BackendGasCity }
 
 // Supports reports false for every optional feature today: vitals/costs/patrol
-// have no Gas City equivalent, and the SSE stream lands in Phase 4.
+// have no Gas City equivalent; recovery/handoff/activity-feed are gt-shaped
+// (they shell out to gt or read ~/gt/.events.jsonl) and would fail with a raw
+// exec error rather than cleanly; and the SSE stream lands in Phase 4.
 func (*GCDriver) Supports(Feature) bool { return false }
 
 // Status fetches the live agent roster over HTTP and adapts it to TownStatus.
@@ -55,7 +58,7 @@ func (d *GCDriver) Status(ctx context.Context) (*TownStatus, error) {
 		return nil, fmt.Errorf("gc agents: %w", err)
 	}
 	if resp.JSON200 == nil {
-		return nil, fmt.Errorf("gc agents: %s", gcRespErr(resp.StatusCode(), resp.ApplicationproblemJSONDefault))
+		return nil, fmt.Errorf("gc agents: %s", gcRespErr(resp.StatusCode(), resp.Body))
 	}
 	var agents []AgentRuntime
 	if resp.JSON200.Items != nil {
@@ -78,7 +81,7 @@ func (d *GCDriver) resolveCity(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("gc cities: %w", err)
 	}
 	if resp.JSON200 == nil || resp.JSON200.Items == nil {
-		return "", fmt.Errorf("gc cities: %s", gcRespErr(resp.StatusCode(), resp.ApplicationproblemJSONDefault))
+		return "", fmt.Errorf("gc cities: %s", gcRespErr(resp.StatusCode(), resp.Body))
 	}
 	items := *resp.JSON200.Items
 	for _, c := range items {
@@ -93,9 +96,20 @@ func (d *GCDriver) resolveCity(ctx context.Context) (string, error) {
 }
 
 // gcRespErr renders an RFC 9457 problem+json body (or a bare status) for errors.
-func gcRespErr(code int, e *gcclient.ErrorModel) string {
-	if e != nil && e.Detail != nil && *e.Detail != "" {
-		return fmt.Sprintf("%d: %s", code, *e.Detail)
+//
+// It decodes the raw response body rather than one of the generated typed error
+// fields. The supervisor spec models errors as a single `default` response on
+// some operations and as explicit status codes (400/404/422/500/503) on others,
+// so oapi-codegen emits either ApplicationproblemJSONDefault or a set of
+// ApplicationproblemJSON<code> fields — and which one it picks changes when the
+// spec is regenerated against a newer Gas City. The raw Body is always present,
+// so keying off it survives those regenerations.
+func gcRespErr(code int, body []byte) string {
+	var e gcclient.ErrorModel
+	if len(body) > 0 && json.Unmarshal(body, &e) == nil {
+		if e.Detail != nil && *e.Detail != "" {
+			return fmt.Sprintf("%d: %s", code, *e.Detail)
+		}
 	}
 	return fmt.Sprintf("status %d", code)
 }
@@ -224,7 +238,7 @@ func (d *GCDriver) Formulas(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("gc formulas: %w", err)
 	}
 	if resp.JSON200 == nil {
-		return nil, fmt.Errorf("gc formulas: %s", gcRespErr(resp.StatusCode(), resp.ApplicationproblemJSONDefault))
+		return nil, fmt.Errorf("gc formulas: %s", gcRespErr(resp.StatusCode(), resp.Body))
 	}
 	var names []string
 	if resp.JSON200.Items != nil {
@@ -254,7 +268,7 @@ func (d *GCDriver) MailInbox(ctx context.Context, unreadOnly bool) ([]MailMessag
 		return nil, fmt.Errorf("gc mail: %w", err)
 	}
 	if resp.JSON200 == nil {
-		return nil, fmt.Errorf("gc mail: %s", gcRespErr(resp.StatusCode(), resp.ApplicationproblemJSONDefault))
+		return nil, fmt.Errorf("gc mail: %s", gcRespErr(resp.StatusCode(), resp.Body))
 	}
 	var msgs []MailMessage
 	if resp.JSON200.Items != nil {
@@ -277,7 +291,7 @@ func (d *GCDriver) MailRead(ctx context.Context, messageID string) (*MailMessage
 		return nil, fmt.Errorf("gc mail read: %w", err)
 	}
 	if resp.JSON200 == nil {
-		return nil, fmt.Errorf("gc mail read: %s", gcRespErr(resp.StatusCode(), resp.ApplicationproblemJSONDefault))
+		return nil, fmt.Errorf("gc mail read: %s", gcRespErr(resp.StatusCode(), resp.Body))
 	}
 	m := gcMessageToMail(*resp.JSON200)
 	return &m, nil
@@ -295,7 +309,7 @@ func (d *GCDriver) MailReply(ctx context.Context, messageID, body string) error 
 	if err != nil {
 		return fmt.Errorf("gc mail reply: %w", err)
 	}
-	return gcMutationErr("gc mail reply", resp.StatusCode(), resp.ApplicationproblemJSONDefault)
+	return gcMutationErr("gc mail reply", resp.StatusCode(), resp.Body)
 }
 
 // MailSend sends a new message via POST /v0/city/{city}/mail.
@@ -310,7 +324,7 @@ func (d *GCDriver) MailSend(ctx context.Context, address, subject, body string) 
 	if err != nil {
 		return fmt.Errorf("gc mail send: %w", err)
 	}
-	return gcMutationErr("gc mail send", resp.StatusCode(), resp.ApplicationproblemJSONDefault)
+	return gcMutationErr("gc mail send", resp.StatusCode(), resp.Body)
 }
 
 // MailArchive archives a message via POST /v0/city/{city}/mail/{id}/archive.
@@ -324,7 +338,7 @@ func (d *GCDriver) MailArchive(ctx context.Context, messageID string) error {
 	if err != nil {
 		return fmt.Errorf("gc mail archive: %w", err)
 	}
-	return gcMutationErr("gc mail archive", resp.StatusCode(), resp.ApplicationproblemJSONDefault)
+	return gcMutationErr("gc mail archive", resp.StatusCode(), resp.Body)
 }
 
 // MailMarkRead marks a message read via POST /v0/city/{city}/mail/{id}/read.
@@ -338,7 +352,7 @@ func (d *GCDriver) MailMarkRead(ctx context.Context, messageID string) error {
 	if err != nil {
 		return fmt.Errorf("gc mail mark-read: %w", err)
 	}
-	return gcMutationErr("gc mail mark-read", resp.StatusCode(), resp.ApplicationproblemJSONDefault)
+	return gcMutationErr("gc mail mark-read", resp.StatusCode(), resp.Body)
 }
 
 // MailMarkAllRead marks every unread message read. Gas City has no bulk
@@ -377,11 +391,11 @@ func gcMessageToMail(m gcclient.Message) MailMessage {
 
 // gcMutationErr converts a mutation response into an error: nil on 2xx,
 // otherwise an error carrying the problem+json detail.
-func gcMutationErr(label string, code int, e *gcclient.ErrorModel) error {
+func gcMutationErr(label string, code int, body []byte) error {
 	if code >= 200 && code < 300 {
 		return nil
 	}
-	return fmt.Errorf("%s: %s", label, gcRespErr(code, e))
+	return fmt.Errorf("%s: %s", label, gcRespErr(code, body))
 }
 
 // --- sessions: nudge + decommission ----------------------------------------
@@ -408,7 +422,7 @@ func (d *GCDriver) Nudge(ctx context.Context, target, message string) error {
 	if err != nil {
 		return fmt.Errorf("gc nudge: %w", err)
 	}
-	return gcMutationErr("gc nudge", resp.StatusCode(), resp.ApplicationproblemJSONDefault)
+	return gcMutationErr("gc nudge", resp.StatusCode(), resp.Body)
 }
 
 // Decommission terminates the agent's session via
@@ -427,7 +441,7 @@ func (d *GCDriver) Decommission(ctx context.Context, address string) error {
 	if err != nil {
 		return fmt.Errorf("gc decommission: %w", err)
 	}
-	return gcMutationErr("gc decommission", resp.StatusCode(), resp.ApplicationproblemJSONDefault)
+	return gcMutationErr("gc decommission", resp.StatusCode(), resp.Body)
 }
 
 // resolveSessionID maps a gt-style agent name/address to a session id by
@@ -439,7 +453,7 @@ func (d *GCDriver) resolveSessionID(ctx context.Context, city, target string) (s
 		return "", fmt.Errorf("gc sessions: %w", err)
 	}
 	if resp.JSON200 == nil || resp.JSON200.Items == nil {
-		return "", fmt.Errorf("gc sessions: %s", gcRespErr(resp.StatusCode(), resp.ApplicationproblemJSONDefault))
+		return "", fmt.Errorf("gc sessions: %s", gcRespErr(resp.StatusCode(), resp.Body))
 	}
 	want := strings.ToLower(strings.TrimSpace(target))
 	var fallback string
@@ -503,7 +517,7 @@ func (d *GCDriver) Sling(ctx context.Context, req SlingRequest) error {
 		if err != nil {
 			return fmt.Errorf("gc sling %s: %w", id, err)
 		}
-		if e := gcMutationErr("gc sling "+id, resp.StatusCode(), resp.ApplicationproblemJSONDefault); e != nil {
+		if e := gcMutationErr("gc sling "+id, resp.StatusCode(), resp.Body); e != nil {
 			return e
 		}
 	}
@@ -526,7 +540,7 @@ func (d *GCDriver) ConvoyList(ctx context.Context) ([]ConvoyDetail, error) {
 		return nil, fmt.Errorf("gc convoys: %w", err)
 	}
 	if resp.JSON200 == nil {
-		return nil, fmt.Errorf("gc convoys: %s", gcRespErr(resp.StatusCode(), resp.ApplicationproblemJSONDefault))
+		return nil, fmt.Errorf("gc convoys: %s", gcRespErr(resp.StatusCode(), resp.Body))
 	}
 	var out []ConvoyDetail
 	if resp.JSON200.Items != nil {
@@ -559,7 +573,7 @@ func (d *GCDriver) convoyDetail(ctx context.Context, city, convoyID string) (*Co
 		return nil, fmt.Errorf("gc convoy: %w", err)
 	}
 	if resp.JSON200 == nil {
-		return nil, fmt.Errorf("gc convoy: %s", gcRespErr(resp.StatusCode(), resp.ApplicationproblemJSONDefault))
+		return nil, fmt.Errorf("gc convoy: %s", gcRespErr(resp.StatusCode(), resp.Body))
 	}
 	cg := resp.JSON200
 	cd := &ConvoyDetail{}
@@ -604,7 +618,7 @@ func (d *GCDriver) ConvoyCreate(ctx context.Context, name string, issueIDs []str
 		return "", fmt.Errorf("gc convoy create: %w", err)
 	}
 	if resp.JSON201 == nil {
-		return "", fmt.Errorf("gc convoy create: %s", gcRespErr(resp.StatusCode(), resp.ApplicationproblemJSONDefault))
+		return "", fmt.Errorf("gc convoy create: %s", gcRespErr(resp.StatusCode(), resp.Body))
 	}
 	return resp.JSON201.Id, nil
 }
@@ -620,7 +634,7 @@ func (d *GCDriver) ConvoyClose(ctx context.Context, convoyID string) error {
 	if err != nil {
 		return fmt.Errorf("gc convoy close: %w", err)
 	}
-	return gcMutationErr("gc convoy close", resp.StatusCode(), resp.ApplicationproblemJSONDefault)
+	return gcMutationErr("gc convoy close", resp.StatusCode(), resp.Body)
 }
 
 // --- unsupported operations -------------------------------------------------
