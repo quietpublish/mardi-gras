@@ -39,7 +39,7 @@ Always run `make test` after changes. Run `make lint` before committing.
 
 ## Beads Workflow
 
-This project uses [Beads](https://github.com/beads-project/beads) for issue tracking.
+This project uses [Beads](https://github.com/gastownhall/beads) for issue tracking.
 
 ```bash
 bd ready                              # Find unblocked work

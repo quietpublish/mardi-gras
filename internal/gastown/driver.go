@@ -11,6 +11,12 @@ import (
 // ErrUnsupported as "hide this feature", not as a failure to surface.
 var ErrUnsupported = errors.New("operation not supported by this driver")
 
+// Backend names returned by Driver.Backend.
+const (
+	BackendGasTown = "gastown"
+	BackendGasCity = "gascity"
+)
+
 // Feature identifies an optional capability a Driver may or may not provide.
 // The UI consults Driver.Supports to decide whether to render a panel/section.
 type Feature int
@@ -24,6 +30,17 @@ const (
 	FeaturePatrol
 	// FeatureSSE is a live server-sent-events status stream (Gas City; Phase 4).
 	FeatureSSE
+	// FeatureRecovery is dead-rig recovery (`gt release` + `gt sling`). Gas Town
+	// only — RecoverRig shells out to gt directly rather than going through a
+	// Driver, so the UI must not offer it on another backend.
+	FeatureRecovery
+	// FeatureHandoff is handing a live agent's session to the user in a tmux
+	// pane (`gt handoff`). Gas Town only, for the same reason as FeatureRecovery.
+	FeatureHandoff
+	// FeatureActivityFeed is the recent-activity log, read straight off disk
+	// from ~/gt/.events.jsonl. Gas Town only — Gas City has no such file (its
+	// equivalent is the supervisor events API, not yet wired up).
+	FeatureActivityFeed
 )
 
 // SlingRequest collapses the several `gt sling` variants (single/multiple,

@@ -20,7 +20,11 @@ type Problem struct {
 // Dead-rig detection groups orphaned agents under a single "dead_rig"
 // problem instead of emitting individual "zombie" entries, reducing
 // alarm fatigue when an entire rig is down.
-func DetectProblems(status *TownStatus) []Problem {
+//
+// backend is the active Driver's Backend() name. Suggested fix commands are
+// backend-specific, so a non-gastown backend gets no command rather than one
+// naming a binary it does not use; the overlay omits an empty Fix.
+func DetectProblems(status *TownStatus, backend string) []Problem {
 	if status == nil {
 		return nil
 	}
@@ -38,13 +42,17 @@ func DetectProblems(status *TownStatus) []Problem {
 	for rigName := range deadRigs {
 		orphans := FindOrphans(status, rigName)
 		detail := fmt.Sprintf("Rig has 0 polecats — %d issues left without an agent", len(orphans))
+		fix := ""
+		if backend == BackendGasTown {
+			fix = "gt sling <issue> " + rigName
+		}
 		problems = append(problems, Problem{
 			Type:     "dead_rig",
 			Detail:   detail,
 			Severity: "error",
 			RigName:  rigName,
 			Orphans:  orphans,
-			Fix:      "gt sling <issue> " + rigName,
+			Fix:      fix,
 		})
 	}
 

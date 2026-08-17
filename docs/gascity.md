@@ -2,7 +2,7 @@
 
 [Gas City](https://github.com/gastownhall/gascity) (`gc`) is a pack-based rewrite of Gas Town that exposes a typed **Supervisor HTTP API** instead of a CLI. Mardi Gras can drive Gas City through that API as an alternative to Gas Town.
 
-> **Status: opt-in.** The Gas City backend powers the agent roster, mail, formulas, nudge, decommission, agent dispatch (sling), and convoys. A few gt-only operations (`convoy land`/`watch`/`unwatch`, vitals/costs/patrol) have no Gas City equivalent. See [What works today](#what-works-today) for the exact matrix.
+> **Status: opt-in.** The Gas City backend powers the agent roster, mail, formulas, nudge, decommission, agent dispatch (sling), and convoys. A meaningful set of operations — comments, unsling, cascade close, crew assign, molecule DAG, convoy land/watch/unwatch, vitals/costs/patrol, rig recovery, handoff, and the activity feed — has no Gas City equivalent yet. See [What works today](#what-works-today) for the exact matrix.
 
 ## How it works
 
@@ -37,10 +37,29 @@ The supervisor binds a **dynamically assigned** TCP port (not a fixed one), logg
 | Formula listing | ✅ | scoped to the city |
 | Nudge (`n`) / decommission (`K`) | ✅ | resolves the roster agent to a live session, then submits a message / kills the session |
 | Agent dispatch (sling, `a`) | ✅ | Gas City requires an explicit target agent (unlike gt's auto-pick), so `a` prompts for a target before slinging |
-| Convoys — list / create (`C`) / close | ✅ | Gas City models a convoy as a bead; `land`/`watch`/`unwatch` have no Gas City endpoint |
-| Vitals / costs / patrol | — | no Gas City equivalent; these panels stay empty |
+| Convoys — list / create (`C`) / close | ✅ | Gas City models a convoy as a bead |
+| Issue comments in the detail panel | ⛔ | `bd comments` is driven through the Gas Town driver today |
+| Unsling (`shift+A`) | ⛔ | no Gas City endpoint; the action reports "not supported" |
+| Cascade close | ⛔ | no Gas City endpoint |
+| Create & assign to crew (`Y`) | ⛔ | no Gas City endpoint; the form submits and fails |
+| Convoy `land` / `watch` / `unwatch` / create-from-epic | ⛔ | no Gas City endpoint |
+| Molecule DAG, progress, step-done | ⛔ | the Detail panel's DAG section stays empty |
+| Vitals / costs / patrol | ⛔ | no Gas City equivalent; these panels stay empty |
+| Rig recovery (`Recover dead rigs`) | ⛔ | shells out to `gt release`/`gt sling`; hidden from the palette on Gas City |
+| Handoff (`h`) | ⛔ | shells out to `gt handoff`; reports "Handoff is a Gas Town feature" |
+| Recent activity feed | ⛔ | reads `~/gt/.events.jsonl` off local disk, which Gas City does not write |
 
-Operations not yet supported on Gas City surface as no-ops or empty sections rather than errors. For anything in the ⛔ rows, run mg against Gas Town (`gt`) instead.
+Unsupported operations either hide themselves (recovery is dropped from the
+command palette) or return a clear "not supported" message — none of them fail
+with a raw `exec: "gt": executable not found`. For anything in the ⛔ rows, run
+mg against Gas Town (`gt`) instead.
+
+The three gt-shaped rows at the bottom — recovery, handoff, and the activity
+feed — are not Gas City limitations so much as mg ones: they bypass the `Driver`
+seam and call `gt` (or read its files) directly. They are declared as
+`FeatureRecovery`, `FeatureHandoff`, and `FeatureActivityFeed` so the UI can
+gate them, and porting them to the supervisor API would close the gap. Gas
+City's events API is the natural replacement for the activity feed.
 
 ## Trying it without a real `gc` (demos / screenshots)
 
@@ -63,3 +82,14 @@ make gc-client
 ```
 
 The spec is OpenAPI 3.1; `downgrade.jq` rewrites it to 3.0 first (oapi-codegen does not yet fully support 3.1). Generation is scoped to the endpoints mg uses.
+
+The committed spec is currently **Gas City v1.4.1** (127 paths). Fetch a newer one with:
+
+```bash
+gh api "repos/gastownhall/gascity/contents/docs/reference/schema/openapi.json?ref=<tag>" \
+  -H "Accept: application/vnd.github.raw" > internal/gastown/gcclient/openapi.json
+```
+
+The raw media type matters — the spec is over 1 MB, and the contents API omits inline `content` above that size.
+
+**A path-level diff is not enough to call a bump safe.** Going from the June spec to v1.4.1 added 16 paths and removed none, yet still broke the build: several operations moved from a single `default` error response to explicit status codes, so oapi-codegen stopped emitting `ApplicationproblemJSONDefault` for them. `gcRespErr`/`gcMutationErr` now decode the raw response `Body` instead of a generated typed field, which is stable across regenerations — but after any bump, run `go build ./...` and the `internal/gastown` tests before assuming the contract held.

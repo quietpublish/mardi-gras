@@ -19,11 +19,12 @@ var _ Driver = GTDriver{}
 // NewGTDriver returns the Gas Town driver.
 func NewGTDriver() Driver { return GTDriver{} }
 
-func (GTDriver) Backend() string { return "gastown" }
+func (GTDriver) Backend() string { return BackendGasTown }
 
 func (GTDriver) Supports(feature Feature) bool {
 	switch feature {
-	case FeatureVitals, FeatureCosts, FeaturePatrol:
+	case FeatureVitals, FeatureCosts, FeaturePatrol,
+		FeatureRecovery, FeatureHandoff, FeatureActivityFeed:
 		return true
 	case FeatureSSE:
 		return false

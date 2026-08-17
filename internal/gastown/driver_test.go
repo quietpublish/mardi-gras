@@ -41,3 +41,25 @@ func TestGTDriverSupports(t *testing.T) {
 		}
 	}
 }
+
+// The gt-shaped operations that bypass the Driver seam (RecoverRig shells to
+// `gt release`/`gt sling`, HandoffInTmux to `gt handoff`, the activity feed
+// reads ~/gt/.events.jsonl) are declared as Features so the UI can gate them
+// instead of failing with a raw exec error on another backend.
+func TestGTDriverSupportsGtShapedFeatures(t *testing.T) {
+	d := GTDriver{}
+	for _, f := range []Feature{FeatureRecovery, FeatureHandoff, FeatureActivityFeed} {
+		if !d.Supports(f) {
+			t.Errorf("GTDriver.Supports(%v) = false, want true", f)
+		}
+	}
+}
+
+func TestGCDriverDoesNotSupportGtShapedFeatures(t *testing.T) {
+	d := &GCDriver{}
+	for _, f := range []Feature{FeatureRecovery, FeatureHandoff, FeatureActivityFeed, FeatureVitals, FeatureCosts, FeaturePatrol} {
+		if d.Supports(f) {
+			t.Errorf("GCDriver.Supports(%v) = true, want false", f)
+		}
+	}
+}
