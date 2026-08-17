@@ -2,6 +2,17 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.30.0 (2026-08-17)
+
+Two more Gas City capabilities, unlocked by the v1.4.1 API bump in v0.29.1.
+
+### Added
+- **Create & assign to crew works on Gas City** ([#100](https://github.com/quietpublish/mardi-gras/pull/100)) — previously a Gas Town-only action. Gas City takes the assignee inline when the bead is created, so unlike a create-then-assign pair the issue is never briefly unowned. With nudge enabled the crew member's session is woken afterwards; if only the nudge fails, mg reports the partial success rather than implying the issue was not created. The create form's crew field now appears whenever any orchestrator is live, not only when the `gt` binary is present.
+- **Convoy create-from-epic works on Gas City** ([#100](https://github.com/quietpublish/mardi-gras/pull/100)) — Gas City has no `--from-epic` flag, so mg walks the epic's dependency graph and enrols its members, excluding the epic itself. An epic with no members is reported as an error instead of producing an empty convoy.
+
+### Changed
+- **`docs/gascity.md` now records *why* each unsupported operation is unsupported** ([#100](https://github.com/quietpublish/mardi-gras/pull/100)) — every remaining `ErrUnsupported` operation was checked against the v1.4.1 spec. Comments have no endpoint and beads carry no comments field; `sling` is create-only so there is no unsling; `close` takes no cascade parameter; convoy land/watch/unwatch have no endpoint. The molecule DAG remains unsupported for a subtler reason: Gas City's runs are *formula* runs and its bead graph has no tier structure, so it is a modelling question rather than missing wiring.
+
 ## v0.29.1 (2026-08-17)
 
 A Gas City correctness release: features that only exist in Gas Town no longer pretend to work on a Gas City backend.
