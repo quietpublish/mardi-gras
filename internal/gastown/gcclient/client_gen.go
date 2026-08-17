@@ -278,6 +278,46 @@ type Bead struct {
 	UpdatedAt    *time.Time         `json:"updated_at,omitempty"`
 }
 
+// BeadCreateInputBody defines model for BeadCreateInputBody.
+type BeadCreateInputBody struct {
+	// Assignee Assigned agent.
+	Assignee *string `json:"assignee,omitempty"`
+
+	// DeferUntil Hide the bead from ready views until this time.
+	DeferUntil *time.Time `json:"defer_until,omitempty"`
+
+	// Description Bead description.
+	Description *string `json:"description,omitempty"`
+
+	// Labels Bead labels.
+	Labels *[]string `json:"labels,omitempty"`
+
+	// Metadata Metadata key-value pairs to set at create time.
+	Metadata *map[string]string `json:"metadata,omitempty"`
+
+	// Parent Parent bead ID.
+	Parent *string `json:"parent,omitempty"`
+
+	// Priority Bead priority.
+	Priority *int64 `json:"priority,omitempty"`
+
+	// Rig Rig name.
+	Rig *string `json:"rig,omitempty"`
+
+	// Title Bead title.
+	Title string `json:"title"`
+
+	// Type Bead type.
+	Type *string `json:"type,omitempty"`
+}
+
+// BeadGraphResponse defines model for BeadGraphResponse.
+type BeadGraphResponse struct {
+	Beads *[]Bead                `json:"beads"`
+	Deps  *[]WorkflowDepResponse `json:"deps"`
+	Root  Bead                   `json:"root"`
+}
+
 // BeadsDiagnostic defines model for BeadsDiagnostic.
 type BeadsDiagnostic struct {
 	BeadsStore          string  `json:"beads_store"`
@@ -961,6 +1001,13 @@ type SupervisorCitiesOutputBody struct {
 	Total int64 `json:"total"`
 }
 
+// WorkflowDepResponse defines model for WorkflowDepResponse.
+type WorkflowDepResponse struct {
+	From string  `json:"from"`
+	Kind *string `json:"kind,omitempty"`
+	To   string  `json:"to"`
+}
+
 // GetV0CityByCityNameAgentsParams defines parameters for GetV0CityByCityNameAgents.
 type GetV0CityByCityNameAgentsParams struct {
 	// Index Event sequence number; when provided, blocks until a newer event arrives.
@@ -984,6 +1031,15 @@ type GetV0CityByCityNameAgentsParams struct {
 
 // GetV0CityByCityNameAgentsParamsRunning defines parameters for GetV0CityByCityNameAgents.
 type GetV0CityByCityNameAgentsParamsRunning string
+
+// CreateBeadParams defines parameters for CreateBead.
+type CreateBeadParams struct {
+	// XGCRequest Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.
+	XGCRequest string `json:"X-GC-Request"`
+
+	// IdempotencyKey Idempotency key for safe retries.
+	IdempotencyKey *string `json:"Idempotency-Key,omitempty"`
+}
 
 // PostV0CityByCityNameConvoyByIdCloseParams defines parameters for PostV0CityByCityNameConvoyByIdClose.
 type PostV0CityByCityNameConvoyByIdCloseParams struct {
@@ -1141,6 +1197,9 @@ type GetV0CityByCityNameStatusParams struct {
 	Lite *bool `form:"lite,omitempty" json:"lite,omitempty"`
 }
 
+// CreateBeadJSONRequestBody defines body for CreateBead for application/json ContentType.
+type CreateBeadJSONRequestBody = BeadCreateInputBody
+
 // CreateConvoyJSONRequestBody defines body for CreateConvoy for application/json ContentType.
 type CreateConvoyJSONRequestBody = ConvoyCreateInputBody
 
@@ -1235,6 +1294,14 @@ type ClientInterface interface {
 	// GetV0CityByCityNameAgents request
 	GetV0CityByCityNameAgents(ctx context.Context, cityName string, params *GetV0CityByCityNameAgentsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// CreateBeadWithBody request with any body
+	CreateBeadWithBody(ctx context.Context, cityName string, params *CreateBeadParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CreateBead(ctx context.Context, cityName string, params *CreateBeadParams, body CreateBeadJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetV0CityByCityNameBeadsGraphByRootId request
+	GetV0CityByCityNameBeadsGraphByRootId(ctx context.Context, cityName string, rootID string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetV0CityByCityNameConvoyById request
 	GetV0CityByCityNameConvoyById(ctx context.Context, cityName string, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -1308,6 +1375,42 @@ func (c *Client) GetV0Cities(ctx context.Context, reqEditors ...RequestEditorFn)
 
 func (c *Client) GetV0CityByCityNameAgents(ctx context.Context, cityName string, params *GetV0CityByCityNameAgentsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetV0CityByCityNameAgentsRequest(c.Server, cityName, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateBeadWithBody(ctx context.Context, cityName string, params *CreateBeadParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateBeadRequestWithBody(c.Server, cityName, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateBead(ctx context.Context, cityName string, params *CreateBeadParams, body CreateBeadJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateBeadRequest(c.Server, cityName, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetV0CityByCityNameBeadsGraphByRootId(ctx context.Context, cityName string, rootID string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetV0CityByCityNameBeadsGraphByRootIdRequest(c.Server, cityName, rootID)
 	if err != nil {
 		return nil, err
 	}
@@ -1708,6 +1811,118 @@ func NewGetV0CityByCityNameAgentsRequest(server string, cityName string, params 
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
 		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateBeadRequest calls the generic CreateBead builder with application/json body
+func NewCreateBeadRequest(server string, cityName string, params *CreateBeadParams, body CreateBeadJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateBeadRequestWithBody(server, cityName, params, "application/json", bodyReader)
+}
+
+// NewCreateBeadRequestWithBody generates requests for CreateBead with any type of body
+func NewCreateBeadRequestWithBody(server string, cityName string, params *CreateBeadParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "cityName", cityName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v0/city/%s/beads", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-GC-Request", params.XGCRequest, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-GC-Request", headerParam0)
+
+		if params.IdempotencyKey != nil {
+			var headerParam1 string
+
+			headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam1)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewGetV0CityByCityNameBeadsGraphByRootIdRequest generates requests for GetV0CityByCityNameBeadsGraphByRootId
+func NewGetV0CityByCityNameBeadsGraphByRootIdRequest(server string, cityName string, rootID string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "cityName", cityName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "rootID", rootID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v0/city/%s/beads/graph/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
@@ -3017,6 +3232,14 @@ type ClientWithResponsesInterface interface {
 	// GetV0CityByCityNameAgentsWithResponse request
 	GetV0CityByCityNameAgentsWithResponse(ctx context.Context, cityName string, params *GetV0CityByCityNameAgentsParams, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameAgentsResponse, error)
 
+	// CreateBeadWithBodyWithResponse request with any body
+	CreateBeadWithBodyWithResponse(ctx context.Context, cityName string, params *CreateBeadParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateBeadResponse, error)
+
+	CreateBeadWithResponse(ctx context.Context, cityName string, params *CreateBeadParams, body CreateBeadJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateBeadResponse, error)
+
+	// GetV0CityByCityNameBeadsGraphByRootIdWithResponse request
+	GetV0CityByCityNameBeadsGraphByRootIdWithResponse(ctx context.Context, cityName string, rootID string, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameBeadsGraphByRootIdResponse, error)
+
 	// GetV0CityByCityNameConvoyByIdWithResponse request
 	GetV0CityByCityNameConvoyByIdWithResponse(ctx context.Context, cityName string, id string, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameConvoyByIdResponse, error)
 
@@ -3134,6 +3357,76 @@ func (r GetV0CityByCityNameAgentsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetV0CityByCityNameAgentsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateBeadResponse struct {
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON201                   *Bead
+	ApplicationproblemJSON400 *ErrorModel
+	ApplicationproblemJSON401 *ErrorModel
+	ApplicationproblemJSON403 *ErrorModel
+	ApplicationproblemJSON404 *ErrorModel
+	ApplicationproblemJSON409 *ErrorModel
+	ApplicationproblemJSON422 *ErrorModel
+	ApplicationproblemJSON500 *ErrorModel
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateBeadResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateBeadResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateBeadResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetV0CityByCityNameBeadsGraphByRootIdResponse struct {
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *BeadGraphResponse
+	ApplicationproblemJSON404 *ErrorModel
+	ApplicationproblemJSON422 *ErrorModel
+	ApplicationproblemJSON500 *ErrorModel
+}
+
+// Status returns HTTPResponse.Status
+func (r GetV0CityByCityNameBeadsGraphByRootIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetV0CityByCityNameBeadsGraphByRootIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetV0CityByCityNameBeadsGraphByRootIdResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -3727,6 +4020,32 @@ func (c *ClientWithResponses) GetV0CityByCityNameAgentsWithResponse(ctx context.
 	return ParseGetV0CityByCityNameAgentsResponse(rsp)
 }
 
+// CreateBeadWithBodyWithResponse request with arbitrary body returning *CreateBeadResponse
+func (c *ClientWithResponses) CreateBeadWithBodyWithResponse(ctx context.Context, cityName string, params *CreateBeadParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateBeadResponse, error) {
+	rsp, err := c.CreateBeadWithBody(ctx, cityName, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateBeadResponse(rsp)
+}
+
+func (c *ClientWithResponses) CreateBeadWithResponse(ctx context.Context, cityName string, params *CreateBeadParams, body CreateBeadJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateBeadResponse, error) {
+	rsp, err := c.CreateBead(ctx, cityName, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateBeadResponse(rsp)
+}
+
+// GetV0CityByCityNameBeadsGraphByRootIdWithResponse request returning *GetV0CityByCityNameBeadsGraphByRootIdResponse
+func (c *ClientWithResponses) GetV0CityByCityNameBeadsGraphByRootIdWithResponse(ctx context.Context, cityName string, rootID string, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameBeadsGraphByRootIdResponse, error) {
+	rsp, err := c.GetV0CityByCityNameBeadsGraphByRootId(ctx, cityName, rootID, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetV0CityByCityNameBeadsGraphByRootIdResponse(rsp)
+}
+
 // GetV0CityByCityNameConvoyByIdWithResponse request returning *GetV0CityByCityNameConvoyByIdResponse
 func (c *ClientWithResponses) GetV0CityByCityNameConvoyByIdWithResponse(ctx context.Context, cityName string, id string, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameConvoyByIdResponse, error) {
 	rsp, err := c.GetV0CityByCityNameConvoyById(ctx, cityName, id, reqEditors...)
@@ -3960,6 +4279,128 @@ func ParseGetV0CityByCityNameAgentsResponse(rsp *http.Response) (*GetV0CityByCit
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest ListBodyAgentResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateBeadResponse parses an HTTP response from a CreateBeadWithResponse call
+func ParseCreateBeadResponse(rsp *http.Response) (*CreateBeadResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateBeadResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Bead
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetV0CityByCityNameBeadsGraphByRootIdResponse parses an HTTP response from a GetV0CityByCityNameBeadsGraphByRootIdWithResponse call
+func ParseGetV0CityByCityNameBeadsGraphByRootIdResponse(rsp *http.Response) (*GetV0CityByCityNameBeadsGraphByRootIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetV0CityByCityNameBeadsGraphByRootIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest BeadGraphResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

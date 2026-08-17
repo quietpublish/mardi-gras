@@ -34,3 +34,7 @@ output-options:
     - post-v0-city-by-city-name-convoy-by-id-close
     # Sling
     - post-v0-city-by-city-name-sling
+    # Assign (create a bead already hooked to a crew member) + convoy-from-epic
+    # (walk the epic's dependency graph, then create a convoy from its members)
+    - create-bead
+    - get-v0-city-by-city-name-beads-graph-by-root-id

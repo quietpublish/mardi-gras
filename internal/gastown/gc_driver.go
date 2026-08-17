@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,10 +16,12 @@ import (
 // Supervisor HTTP API (https://docs.gascityhall.com/reference/api) via the
 // generated gcclient package instead of shelling out to a CLI.
 //
-// Phase 2 implements the read path (Status → live roster). Dispatch, mail,
-// convoy, and molecule operations return ErrUnsupported until Phase 3; the
-// gt-only health features (vitals/costs/patrol) have no Gas City equivalent
-// and stay ErrUnsupported permanently — callers leave those sections empty.
+// The read path (roster), mail, formulas, sling, nudge/decommission, convoys,
+// and assign are implemented. What remains ErrUnsupported is either absent from
+// the supervisor API (comments, unsling, cascade close, convoy land/watch, the
+// molecule DAG trio) or gt-only by nature (vitals/costs/patrol, plus the
+// gt-shaped recovery/handoff/activity features declared on the Feature enum) —
+// callers hide those rather than surfacing an error.
 type GCDriver struct {
 	baseURL string
 	city    string // optional pin; "" = resolve the first running city
@@ -623,6 +626,88 @@ func (d *GCDriver) ConvoyCreate(ctx context.Context, name string, issueIDs []str
 	return resp.JSON201.Id, nil
 }
 
+// Assign creates a bead already hooked to a crew member, the Gas City analogue
+// of `gt assign`. Gas City needs no separate assign call: POST /v0/city/{city}/beads
+// takes the assignee inline, so the bead is never briefly unowned. When nudge is
+// set the crew member's session is woken afterwards, matching gt's --nudge.
+//
+// gt returns human-readable command output here rather than an ID, so this
+// returns an equivalent summary line.
+func (d *GCDriver) Assign(ctx context.Context, crewMember, title, issueType, priority, label string, nudge bool) (string, error) {
+	city, err := d.resolveCity(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	body := gcclient.CreateBeadJSONRequestBody{Title: title, Assignee: &crewMember}
+	if issueType != "" {
+		body.Type = &issueType
+	}
+	// gt takes the priority as a CLI string; the API wants an int. A value that
+	// is not a number is dropped rather than failing the whole create.
+	if priority != "" {
+		if p, convErr := strconv.ParseInt(strings.TrimSpace(priority), 10, 64); convErr == nil {
+			body.Priority = &p
+		}
+	}
+	if label != "" {
+		labels := []string{label}
+		body.Labels = &labels
+	}
+
+	resp, err := d.client.CreateBeadWithResponse(ctx, city,
+		&gcclient.CreateBeadParams{XGCRequest: gcRequestToken}, body)
+	if err != nil {
+		return "", fmt.Errorf("gc assign: %w", err)
+	}
+	if resp.JSON201 == nil {
+		return "", fmt.Errorf("gc assign: %s", gcRespErr(resp.StatusCode(), resp.Body))
+	}
+	id := resp.JSON201.Id
+
+	summary := fmt.Sprintf("Created %s and assigned to %s", id, crewMember)
+	if !nudge {
+		return summary, nil
+	}
+	// A nudge failure must not read as an assign failure — the bead exists and
+	// is hooked either way, so report the partial success.
+	if err := d.Nudge(ctx, crewMember, "You have new work: "+id); err != nil {
+		return summary + " (nudge failed: " + err.Error() + ")", nil
+	}
+	return summary + " and nudged", nil
+}
+
+// ConvoyCreateFromEpic creates a convoy from an epic's members. Gas City has no
+// --from-epic flag, so this walks the epic's dependency graph
+// (GET /v0/city/{city}/beads/graph/{rootID}) and creates a convoy from the beads
+// it returns, excluding the epic itself.
+func (d *GCDriver) ConvoyCreateFromEpic(ctx context.Context, name, epicID string) (string, error) {
+	city, err := d.resolveCity(ctx)
+	if err != nil {
+		return "", err
+	}
+	resp, err := d.client.GetV0CityByCityNameBeadsGraphByRootIdWithResponse(ctx, city, epicID)
+	if err != nil {
+		return "", fmt.Errorf("gc convoy from epic: %w", err)
+	}
+	if resp.JSON200 == nil {
+		return "", fmt.Errorf("gc convoy from epic: %s", gcRespErr(resp.StatusCode(), resp.Body))
+	}
+
+	var ids []string
+	if resp.JSON200.Beads != nil {
+		for _, b := range *resp.JSON200.Beads {
+			if b.Id != epicID {
+				ids = append(ids, b.Id)
+			}
+		}
+	}
+	if len(ids) == 0 {
+		return "", fmt.Errorf("gc convoy from epic: %s has no members", epicID)
+	}
+	return d.ConvoyCreate(ctx, name, ids)
+}
+
 // ConvoyClose closes a convoy via POST /v0/city/{city}/convoy/{id}/close.
 func (d *GCDriver) ConvoyClose(ctx context.Context, convoyID string) error {
 	city, err := d.resolveCity(ctx)
@@ -652,17 +737,9 @@ func (*GCDriver) Unsling(context.Context, string) error { return ErrUnsupported 
 
 func (*GCDriver) CascadeClose(context.Context, string) error { return ErrUnsupported }
 
-func (*GCDriver) Assign(context.Context, string, string, string, string, string, bool) (string, error) {
-	return "", ErrUnsupported
-}
-
-// ConvoyCreateFromEpic, ConvoyLand, ConvoyWatch, and ConvoyUnwatch have no Gas
-// City endpoint (land is a CLI-only composite; watch/unwatch and --from-epic are
-// gt concepts), so they stay ErrUnsupported.
-
-func (*GCDriver) ConvoyCreateFromEpic(context.Context, string, string) (string, error) {
-	return "", ErrUnsupported
-}
+// ConvoyLand, ConvoyWatch, and ConvoyUnwatch have no Gas City endpoint — land
+// is a CLI-only composite, and watch/unwatch are gt-side subscriptions — so
+// they stay ErrUnsupported.
 
 func (*GCDriver) ConvoyLand(context.Context, string) error { return ErrUnsupported }
 
