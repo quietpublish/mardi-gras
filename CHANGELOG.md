@@ -2,6 +2,17 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.29.0 (2026-08-17)
+
+A safety release prompted by an accident upstream: beads published two untested versions, and mg now tells you when it is talking to one of them.
+
+### Added
+- **Warning when bd is a known-bad release** ([#96](https://github.com/quietpublish/mardi-gras/pull/96)) — beads published **v1.2.0 and v1.2.1 by accident** on 2026-08-11 without release testing. Running either one *even once* migrates the local Dolt schema v53 → v65, after which every other bd binary halts with `schema version mismatch`. mg now warns on startup when it is talking to one of them, and says which version to move to. The version comes from the `bd context --json` fetch that already runs at startup, so the check costs no extra subprocess. [beads v1.2.2](https://github.com/gastownhall/beads/releases/tag/v1.2.2) is the recovery release; it re-issues the tested 1.1.2 code under a higher version number.
+- **Comment count in the parade** ([#96](https://github.com/quietpublish/mardi-gras/pull/96)) — issues carrying discussion now show a muted `💬N` after the priority badge, so you can see where the conversation is without opening anything. `bd list --json` has returned `comment_count` since bd v1.1.0 and mg was discarding it, so this costs no extra CLI call. The detail panel continues to count the comments it actually fetches.
+
+### Fixed
+- **Schema-skew errors point somewhere useful** ([#96](https://github.com/quietpublish/mardi-gras/pull/96)) — when the Beads database is ahead of the bd binary reading it (the v1.2.1 aftermath), mg answered with "Ensure the Dolt server is running", which is the wrong place to look. It now names the skew, links the recovery guide, and mentions the `BD_IGNORE_SCHEMA_SKEW=1` stopgap. Every other `bd list` failure keeps the original advice.
+
 ## v0.28.1 (2026-07-29)
 
 A one-fix patch release: typing in the filter no longer quits the app.
