@@ -600,3 +600,36 @@ func TestGCEnabled(t *testing.T) {
 		t.Error("GCEnabled() = false with set env")
 	}
 }
+
+// gcRespErr reads the raw problem+json body rather than a generated typed
+// field, because which typed error field oapi-codegen emits changes when the
+// spec is regenerated (a `default` response becomes explicit status codes).
+func TestGCRespErrParsesProblemBody(t *testing.T) {
+	body := []byte(`{"title":"Not Found","status":404,"detail":"city \"nope\" is not running"}`)
+	got := gcRespErr(404, body)
+	if !strings.Contains(got, `city "nope" is not running`) {
+		t.Errorf("gcRespErr() = %q, want it to carry the problem detail", got)
+	}
+	if !strings.Contains(got, "404") {
+		t.Errorf("gcRespErr() = %q, want it to carry the status code", got)
+	}
+}
+
+func TestGCRespErrFallsBackToStatus(t *testing.T) {
+	for _, body := range [][]byte{nil, {}, []byte("not json"), []byte(`{"detail":""}`)} {
+		got := gcRespErr(503, body)
+		if got != "status 503" {
+			t.Errorf("gcRespErr(503, %q) = %q, want %q", body, got, "status 503")
+		}
+	}
+}
+
+func TestGCMutationErrSucceedsOn2xx(t *testing.T) {
+	if err := gcMutationErr("gc nudge", 204, nil); err != nil {
+		t.Errorf("gcMutationErr(204) = %v, want nil", err)
+	}
+	err := gcMutationErr("gc nudge", 422, []byte(`{"detail":"session is gone"}`))
+	if err == nil || !strings.Contains(err.Error(), "session is gone") {
+		t.Errorf("gcMutationErr(422) = %v, want an error carrying the detail", err)
+	}
+}

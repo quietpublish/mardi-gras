@@ -17,6 +17,168 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for RunRefKind.
+const (
+	Order RunRefKind = "order"
+	Sling RunRefKind = "sling"
+)
+
+// Valid indicates whether the value is a known member of the RunRefKind enum.
+func (e RunRefKind) Valid() bool {
+	switch e {
+	case Order:
+		return true
+	case Sling:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunStatus.
+const (
+	RunStatusActive    RunStatus = "active"
+	RunStatusCanceled  RunStatus = "canceled"
+	RunStatusCanceling RunStatus = "canceling"
+	RunStatusCompleted RunStatus = "completed"
+	RunStatusFailed    RunStatus = "failed"
+	RunStatusPending   RunStatus = "pending"
+	RunStatusSkipped   RunStatus = "skipped"
+	RunStatusWaiting   RunStatus = "waiting"
+)
+
+// Valid indicates whether the value is a known member of the RunStatus enum.
+func (e RunStatus) Valid() bool {
+	switch e {
+	case RunStatusActive:
+		return true
+	case RunStatusCanceled:
+		return true
+	case RunStatusCanceling:
+		return true
+	case RunStatusCompleted:
+		return true
+	case RunStatusFailed:
+		return true
+	case RunStatusPending:
+		return true
+	case RunStatusSkipped:
+		return true
+	case RunStatusWaiting:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StatusConditionalWriteStoreVerdictLatch.
+const (
+	StatusConditionalWriteStoreVerdictLatchIncapable StatusConditionalWriteStoreVerdictLatch = "incapable"
+	StatusConditionalWriteStoreVerdictLatchUnlatched StatusConditionalWriteStoreVerdictLatch = "unlatched"
+)
+
+// Valid indicates whether the value is a known member of the StatusConditionalWriteStoreVerdictLatch enum.
+func (e StatusConditionalWriteStoreVerdictLatch) Valid() bool {
+	switch e {
+	case StatusConditionalWriteStoreVerdictLatchIncapable:
+		return true
+	case StatusConditionalWriteStoreVerdictLatchUnlatched:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StatusConditionalWriteStoreVerdictProbe.
+const (
+	StatusConditionalWriteStoreVerdictProbeCapable   StatusConditionalWriteStoreVerdictProbe = "capable"
+	StatusConditionalWriteStoreVerdictProbeIncapable StatusConditionalWriteStoreVerdictProbe = "incapable"
+	StatusConditionalWriteStoreVerdictProbeUnprobed  StatusConditionalWriteStoreVerdictProbe = "unprobed"
+)
+
+// Valid indicates whether the value is a known member of the StatusConditionalWriteStoreVerdictProbe enum.
+func (e StatusConditionalWriteStoreVerdictProbe) Valid() bool {
+	switch e {
+	case StatusConditionalWriteStoreVerdictProbeCapable:
+		return true
+	case StatusConditionalWriteStoreVerdictProbeIncapable:
+		return true
+	case StatusConditionalWriteStoreVerdictProbeUnprobed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StatusConditionalWritesEffective.
+const (
+	StatusConditionalWritesEffectiveActive         StatusConditionalWritesEffective = "active"
+	StatusConditionalWritesEffectiveDegraded       StatusConditionalWritesEffective = "degraded"
+	StatusConditionalWritesEffectiveFailClosed     StatusConditionalWritesEffective = "fail_closed"
+	StatusConditionalWritesEffectiveOff            StatusConditionalWritesEffective = "off"
+	StatusConditionalWritesEffectivePendingRestart StatusConditionalWritesEffective = "pending_restart"
+)
+
+// Valid indicates whether the value is a known member of the StatusConditionalWritesEffective enum.
+func (e StatusConditionalWritesEffective) Valid() bool {
+	switch e {
+	case StatusConditionalWritesEffectiveActive:
+		return true
+	case StatusConditionalWritesEffectiveDegraded:
+		return true
+	case StatusConditionalWritesEffectiveFailClosed:
+		return true
+	case StatusConditionalWritesEffectiveOff:
+		return true
+	case StatusConditionalWritesEffectivePendingRestart:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StatusConditionalWritesMode.
+const (
+	Auto    StatusConditionalWritesMode = "auto"
+	Off     StatusConditionalWritesMode = "off"
+	Require StatusConditionalWritesMode = "require"
+)
+
+// Valid indicates whether the value is a known member of the StatusConditionalWritesMode enum.
+func (e StatusConditionalWritesMode) Valid() bool {
+	switch e {
+	case Auto:
+		return true
+	case Off:
+		return true
+	case Require:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StatusConditionalWritesOrigin.
+const (
+	Builtin StatusConditionalWritesOrigin = "builtin"
+	Config  StatusConditionalWritesOrigin = "config"
+	Env     StatusConditionalWritesOrigin = "env"
+)
+
+// Valid indicates whether the value is a known member of the StatusConditionalWritesOrigin enum.
+func (e StatusConditionalWritesOrigin) Valid() bool {
+	switch e {
+	case Builtin:
+		return true
+	case Config:
+		return true
+	case Env:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SubmitIntent.
 const (
 	Default      SubmitIntent = "default"
@@ -68,6 +230,8 @@ type AgentResponse struct {
 	LastOutput        *string      `json:"last_output,omitempty"`
 	Model             *string      `json:"model,omitempty"`
 	Name              string       `json:"name"`
+	Pack              *string      `json:"pack,omitempty"`
+	PackDerived       bool         `json:"pack_derived"`
 	Pool              *string      `json:"pool,omitempty"`
 	Provider          *string      `json:"provider,omitempty"`
 	Rig               *string      `json:"rig,omitempty"`
@@ -94,20 +258,32 @@ type AsyncAcceptedBody struct {
 type Bead struct {
 	Assignee     *string            `json:"assignee,omitempty"`
 	CreatedAt    time.Time          `json:"created_at"`
+	DeferUntil   *time.Time         `json:"defer_until,omitempty"`
 	Dependencies *[]Dep             `json:"dependencies,omitempty"`
 	Description  *string            `json:"description,omitempty"`
 	Ephemeral    *bool              `json:"ephemeral,omitempty"`
 	From         *string            `json:"from,omitempty"`
 	Id           string             `json:"id"`
+	IsBlocked    *bool              `json:"is_blocked,omitempty"`
 	IssueType    string             `json:"issue_type"`
 	Labels       *[]string          `json:"labels,omitempty"`
 	Metadata     *map[string]string `json:"metadata,omitempty"`
 	Needs        *[]string          `json:"needs,omitempty"`
+	NoHistory    *bool              `json:"no_history,omitempty"`
 	Parent       *string            `json:"parent,omitempty"`
 	Priority     *int64             `json:"priority,omitempty"`
 	Ref          *string            `json:"ref,omitempty"`
 	Status       string             `json:"status"`
 	Title        string             `json:"title"`
+	UpdatedAt    *time.Time         `json:"updated_at,omitempty"`
+}
+
+// BeadsDiagnostic defines model for BeadsDiagnostic.
+type BeadsDiagnostic struct {
+	BeadsStore          string  `json:"beads_store"`
+	NativeStoreEligible bool    `json:"native_store_eligible"`
+	PreflightGate       *string `json:"preflight_gate,omitempty"`
+	PreflightReason     *string `json:"preflight_reason,omitempty"`
 }
 
 // CityInfo defines model for CityInfo.
@@ -170,6 +346,9 @@ type ErrorDetail struct {
 
 // ErrorModel defines model for ErrorModel.
 type ErrorModel struct {
+	// Code Stable machine-readable error code (the final segment of the type URN).
+	Code *string `json:"code,omitempty"`
+
 	// Detail A human-readable explanation specific to this occurrence of the problem.
 	Detail *string `json:"detail,omitempty"`
 
@@ -217,7 +396,6 @@ type FormulaSummaryResponse struct {
 	RecentRuns  *[]FormulaRecentRunResponse `json:"recent_runs"`
 	RunCount    int64                       `json:"run_count"`
 	VarDefs     *[]FormulaVarDefResponse    `json:"var_defs"`
-	Version     string                      `json:"version"`
 }
 
 // FormulaVarDefResponse defines model for FormulaVarDefResponse.
@@ -364,6 +542,24 @@ type OKWithIDResponseBody struct {
 	Status string `json:"status"`
 }
 
+// RunRef defines model for RunRef.
+type RunRef struct {
+	// Kind Launch mechanism that produced the run.
+	Kind RunRefKind `json:"kind"`
+
+	// RunId Run identifier; GET /v0/city/{cityName}/runs/{run_id} for detail.
+	RunId string `json:"run_id"`
+
+	// Status Closed lifecycle state of a run.
+	Status RunStatus `json:"status"`
+}
+
+// RunRefKind Launch mechanism that produced the run.
+type RunRefKind string
+
+// RunStatus Closed lifecycle state of a run.
+type RunStatus string
+
 // SessionInfo defines model for SessionInfo.
 type SessionInfo struct {
 	Attached     bool       `json:"attached"`
@@ -401,6 +597,7 @@ type SessionResponse struct {
 	SubmissionCapabilities *SubmissionCapabilities `json:"submission_capabilities,omitempty"`
 	Template               string                  `json:"template"`
 	Title                  string                  `json:"title"`
+	WorkDir                *string                 `json:"work_dir,omitempty"`
 }
 
 // SessionSubmitInputBody defines model for SessionSubmitInputBody.
@@ -426,6 +623,21 @@ type SlingInputBody struct {
 	// Formula Formula name for workflow launch.
 	Formula *string `json:"formula,omitempty"`
 
+	// Merge Merge strategy: direct, mr, or local.
+	Merge *string `json:"merge,omitempty"`
+
+	// NoConvoy Do not create an auto-convoy for the routed bead.
+	NoConvoy *bool `json:"no_convoy,omitempty"`
+
+	// NoFormula Suppress the target's default_sling_formula even when configured.
+	NoFormula *bool `json:"no_formula,omitempty"`
+
+	// Owned Mark the routed bead as owned by the target.
+	Owned *bool `json:"owned,omitempty"`
+
+	// Reassign Clear any existing human assignee on the bead before routing, so a bead claimed via bd update --claim is handed to the target's pool.
+	Reassign *bool `json:"reassign,omitempty"`
+
 	// Rig Rig name.
 	Rig *string `json:"rig,omitempty"`
 
@@ -447,15 +659,19 @@ type SlingInputBody struct {
 
 // SlingResponse defines model for SlingResponse.
 type SlingResponse struct {
-	AttachedBeadId *string   `json:"attached_bead_id,omitempty"`
-	Bead           *string   `json:"bead,omitempty"`
-	Formula        *string   `json:"formula,omitempty"`
-	Mode           *string   `json:"mode,omitempty"`
-	RootBeadId     *string   `json:"root_bead_id,omitempty"`
-	Status         string    `json:"status"`
-	Target         string    `json:"target"`
-	Warnings       *[]string `json:"warnings,omitempty"`
-	WorkflowId     *string   `json:"workflow_id,omitempty"`
+	AttachedBeadId *string `json:"attached_bead_id,omitempty"`
+	Bead           *string `json:"bead,omitempty"`
+
+	// DashboardUrl Absolute dashboard deep link for the slung work: the run detail view when a graph workflow was launched, otherwise the runs list. Present only when the serving process also hosts the dashboard (the supervisor listener); the standalone controller API omits it.
+	DashboardUrl *string   `json:"dashboard_url,omitempty"`
+	Formula      *string   `json:"formula,omitempty"`
+	Mode         *string   `json:"mode,omitempty"`
+	RootBeadId   *string   `json:"root_bead_id,omitempty"`
+	Run          *RunRef   `json:"run,omitempty"`
+	Status       string    `json:"status"`
+	Target       string    `json:"target"`
+	Warnings     *[]string `json:"warnings,omitempty"`
+	WorkflowId   *string   `json:"workflow_id,omitempty"`
 }
 
 // StatusAgentCounts defines model for StatusAgentCounts.
@@ -514,7 +730,15 @@ type StatusBody struct {
 	// AgentDetails Per-agent state (for CLI status views). Empty when none.
 	AgentDetails *[]StatusAgentDetail `json:"agent_details,omitempty"`
 	Agents       StatusAgentCounts    `json:"agents"`
-	Mail         StatusMailCounts     `json:"mail"`
+	Beads        *BeadsDiagnostic     `json:"beads,omitempty"`
+
+	// BeadsVersion Version of the bd (beads) CLI the supervisor drives. Omitted when the probe failed or the binary is unavailable.
+	BeadsVersion      *string                  `json:"beads_version,omitempty"`
+	ConditionalWrites *StatusConditionalWrites `json:"conditional_writes,omitempty"`
+
+	// DoltVersion Version of the dolt engine binary the supervisor drives. Omitted when the probe failed or the binary is unavailable.
+	DoltVersion *string          `json:"dolt_version,omitempty"`
+	Mail        StatusMailCounts `json:"mail"`
 
 	// Name City name.
 	Name string `json:"name"`
@@ -553,6 +777,60 @@ type StatusBody struct {
 	Version *string          `json:"version,omitempty"`
 	Work    StatusWorkCounts `json:"work"`
 }
+
+// StatusConditionalWriteStoreVerdict defines model for StatusConditionalWriteStoreVerdict.
+type StatusConditionalWriteStoreVerdict struct {
+	// Capable What the write path uses today: false only on a definitive incapable verdict.
+	Capable bool `json:"capable"`
+
+	// Kind Store kind in the degraded-event wire vocabulary (bd, native, caching, mem, file).
+	Kind string `json:"kind"`
+
+	// Latch Runtime unsupported latch: incapable after the store rejected a real fenced write; cleared only by restart.
+	Latch StatusConditionalWriteStoreVerdictLatch `json:"latch"`
+
+	// Probe Memoized capability-probe verdict. unprobed means no fenced write has exercised this store yet.
+	Probe StatusConditionalWriteStoreVerdictProbe `json:"probe"`
+
+	// Reason Incapable cause, verbatim from the probe or latch.
+	Reason *string `json:"reason,omitempty"`
+
+	// StoreId Store scope: city, or rig/<name>.
+	StoreId string `json:"store_id"`
+}
+
+// StatusConditionalWriteStoreVerdictLatch Runtime unsupported latch: incapable after the store rejected a real fenced write; cleared only by restart.
+type StatusConditionalWriteStoreVerdictLatch string
+
+// StatusConditionalWriteStoreVerdictProbe Memoized capability-probe verdict. unprobed means no fenced write has exercised this store yet.
+type StatusConditionalWriteStoreVerdictProbe string
+
+// StatusConditionalWrites defines model for StatusConditionalWrites.
+type StatusConditionalWrites struct {
+	// Effective Aggregate verdict: off (gate off), active (every store capable), degraded (auto with at least one incapable store), fail_closed (require with at least one incapable store — fenced writes on it refuse), pending_restart (on-disk config drifted from the latched mode).
+	Effective StatusConditionalWritesEffective `json:"effective"`
+
+	// Mode Boot-latched beads.conditional_writes mode.
+	Mode StatusConditionalWritesMode `json:"mode"`
+
+	// Notices Retained rollout notices (env overrides, drift, invalid spellings).
+	Notices *[]StatusRolloutNotice `json:"notices,omitempty"`
+
+	// Origin Where the latched mode came from.
+	Origin StatusConditionalWritesOrigin `json:"origin"`
+
+	// Stores Per-store verdicts, one row per controller-owned store.
+	Stores *[]StatusConditionalWriteStoreVerdict `json:"stores,omitempty"`
+}
+
+// StatusConditionalWritesEffective Aggregate verdict: off (gate off), active (every store capable), degraded (auto with at least one incapable store), fail_closed (require with at least one incapable store — fenced writes on it refuse), pending_restart (on-disk config drifted from the latched mode).
+type StatusConditionalWritesEffective string
+
+// StatusConditionalWritesMode Boot-latched beads.conditional_writes mode.
+type StatusConditionalWritesMode string
+
+// StatusConditionalWritesOrigin Where the latched mode came from.
+type StatusConditionalWritesOrigin string
 
 // StatusMailCounts defines model for StatusMailCounts.
 type StatusMailCounts struct {
@@ -596,6 +874,27 @@ type StatusRigDetail struct {
 	Suspended bool `json:"suspended"`
 }
 
+// StatusRolloutNotice defines model for StatusRolloutNotice.
+type StatusRolloutNotice struct {
+	// ConfigValue Raw config spelling; empty when unset.
+	ConfigValue *string `json:"config_value,omitempty"`
+
+	// EnvValue Raw env spelling as found.
+	EnvValue *string `json:"env_value,omitempty"`
+
+	// EnvVar Environment variable involved, when env-related.
+	EnvVar *string `json:"env_var,omitempty"`
+
+	// FlagKey Rollout gate key the notice is about.
+	FlagKey string `json:"flag_key"`
+
+	// Kind Notice kind (env_overrides_config, pending_restart, invalid_value, ...).
+	Kind string `json:"kind"`
+
+	// Message Human-readable line carrying the gate and the outcome.
+	Message string `json:"message"`
+}
+
 // StatusSessionCountsDetail defines model for StatusSessionCountsDetail.
 type StatusSessionCountsDetail struct {
 	// Active Number of active sessions.
@@ -613,13 +912,13 @@ type StatusStoreHealth struct {
 	// LastGcStatus Status of last maintenance run ('success' or 'failed').
 	LastGcStatus *string `json:"last_gc_status,omitempty"`
 
-	// LiveRows Live bead row count.
+	// LiveRows Retained bead row count used as the denominator, including open and closed beads.
 	LiveRows int64 `json:"live_rows"`
 
 	// Path On-disk path of the Dolt store.
 	Path string `json:"path"`
 
-	// RatioMbPerRow Derived megabytes per row.
+	// RatioMbPerRow Derived megabytes per retained row, including open and closed beads.
 	RatioMbPerRow float64 `json:"ratio_mb_per_row"`
 
 	// SizeBytes Total bytes of the store directory.
@@ -700,10 +999,10 @@ type GetV0CityByCityNameConvoysParams struct {
 	// Wait How long to block waiting for changes (Go duration string, e.g. 30s). Default 30s, max 2m.
 	Wait *string `form:"wait,omitempty" json:"wait,omitempty"`
 
-	// Cursor Pagination cursor from a previous response's next_cursor field.
+	// Cursor Opaque keyset pagination token from a previous response's next_cursor field. Invalid or legacy tokens are rejected with a typed 400 (invalid-cursor); re-fetch the first page.
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 
-	// Limit Maximum number of results to return. 0 = server default.
+	// Limit Maximum number of results to return. Omitted or 0 = server default (100). Values above 1000 are rejected.
 	Limit *int64 `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
@@ -711,6 +1010,9 @@ type GetV0CityByCityNameConvoysParams struct {
 type CreateConvoyParams struct {
 	// XGCRequest Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.
 	XGCRequest string `json:"X-GC-Request"`
+
+	// IdempotencyKey Idempotency key for safe retries.
+	IdempotencyKey *string `json:"Idempotency-Key,omitempty"`
 }
 
 // GetV0CityByCityNameFormulasParams defines parameters for GetV0CityByCityNameFormulas.
@@ -730,10 +1032,10 @@ type GetV0CityByCityNameMailParams struct {
 	// Wait How long to block waiting for changes (Go duration string, e.g. 30s). Default 30s, max 2m.
 	Wait *string `form:"wait,omitempty" json:"wait,omitempty"`
 
-	// Cursor Pagination cursor from a previous response's next_cursor field.
+	// Cursor Opaque keyset pagination token from a previous response's next_cursor field. Invalid or legacy tokens are rejected with a typed 400 (invalid-cursor); re-fetch the first page.
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 
-	// Limit Maximum number of results to return. 0 = server default.
+	// Limit Maximum number of results to return. Omitted or 0 = server default (100). Values above 1000 are rejected.
 	Limit *int64 `form:"limit,omitempty" json:"limit,omitempty"`
 
 	// Agent Filter by agent name.
@@ -786,6 +1088,9 @@ type ReplyMailParams struct {
 
 	// XGCRequest Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.
 	XGCRequest string `json:"X-GC-Request"`
+
+	// IdempotencyKey Idempotency key for safe retries.
+	IdempotencyKey *string `json:"Idempotency-Key,omitempty"`
 }
 
 // PostV0CityByCityNameSessionByIdKillParams defines parameters for PostV0CityByCityNameSessionByIdKill.
@@ -802,10 +1107,10 @@ type SubmitSessionParams struct {
 
 // GetV0CityByCityNameSessionsParams defines parameters for GetV0CityByCityNameSessions.
 type GetV0CityByCityNameSessionsParams struct {
-	// Cursor Pagination cursor from a previous response's next_cursor field.
+	// Cursor Opaque keyset pagination token from a previous response's next_cursor field. Invalid or legacy tokens are rejected with a typed 400 (invalid-cursor); re-fetch the first page.
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 
-	// Limit Maximum number of results to return. 0 = server default.
+	// Limit Maximum number of results to return. Omitted or 0 = server default (100). Values above 1000 are rejected.
 	Limit *int64 `form:"limit,omitempty" json:"limit,omitempty"`
 
 	// State Filter by session state (e.g. active, closed).
@@ -831,6 +1136,9 @@ type GetV0CityByCityNameStatusParams struct {
 
 	// Wait How long to block waiting for changes (Go duration string, e.g. 30s). Default 30s, max 2m.
 	Wait *string `form:"wait,omitempty" json:"wait,omitempty"`
+
+	// Lite When true, omit the expensive store-health, session-count, and work-count blocks for low-cost dashboard polls.
+	Lite *bool `form:"lite,omitempty" json:"lite,omitempty"`
 }
 
 // CreateConvoyJSONRequestBody defines body for CreateConvoy for application/json ContentType.
@@ -1657,6 +1965,17 @@ func NewCreateConvoyRequestWithBody(server string, cityName string, params *Crea
 
 		req.Header.Set("X-GC-Request", headerParam0)
 
+		if params.IdempotencyKey != nil {
+			var headerParam1 string
+
+			headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam1)
+		}
+
 	}
 
 	return req, nil
@@ -2258,6 +2577,17 @@ func NewReplyMailRequestWithBody(server string, cityName string, id string, para
 
 		req.Header.Set("X-GC-Request", headerParam0)
 
+		if params.IdempotencyKey != nil {
+			var headerParam1 string
+
+			headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam1)
+		}
+
 	}
 
 	return req, nil
@@ -2612,6 +2942,18 @@ func NewGetV0CityByCityNameStatusRequest(server string, cityName string, params 
 
 		}
 
+		if params.Lite != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "lite", *params.Lite, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if encoded := queryValues.Encode(); encoded != "" {
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
@@ -2766,10 +3108,12 @@ func (r GetV0CitiesResponse) ContentType() string {
 }
 
 type GetV0CityByCityNameAgentsResponse struct {
-	Body                          []byte
-	HTTPResponse                  *http.Response
-	JSON200                       *ListBodyAgentResponse
-	ApplicationproblemJSONDefault *ErrorModel
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *ListBodyAgentResponse
+	ApplicationproblemJSON404 *ErrorModel
+	ApplicationproblemJSON422 *ErrorModel
+	ApplicationproblemJSON500 *ErrorModel
 }
 
 // Status returns HTTPResponse.Status
@@ -2797,10 +3141,13 @@ func (r GetV0CityByCityNameAgentsResponse) ContentType() string {
 }
 
 type GetV0CityByCityNameConvoyByIdResponse struct {
-	Body                          []byte
-	HTTPResponse                  *http.Response
-	JSON200                       *ConvoyGetResponse
-	ApplicationproblemJSONDefault *ErrorModel
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *ConvoyGetResponse
+	ApplicationproblemJSON404 *ErrorModel
+	ApplicationproblemJSON422 *ErrorModel
+	ApplicationproblemJSON500 *ErrorModel
+	ApplicationproblemJSON503 *ErrorModel
 }
 
 // Status returns HTTPResponse.Status
@@ -2828,10 +3175,15 @@ func (r GetV0CityByCityNameConvoyByIdResponse) ContentType() string {
 }
 
 type PostV0CityByCityNameConvoyByIdCloseResponse struct {
-	Body                          []byte
-	HTTPResponse                  *http.Response
-	JSON200                       *OKResponseBody
-	ApplicationproblemJSONDefault *ErrorModel
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *OKResponseBody
+	ApplicationproblemJSON400 *ErrorModel
+	ApplicationproblemJSON401 *ErrorModel
+	ApplicationproblemJSON403 *ErrorModel
+	ApplicationproblemJSON404 *ErrorModel
+	ApplicationproblemJSON422 *ErrorModel
+	ApplicationproblemJSON500 *ErrorModel
 }
 
 // Status returns HTTPResponse.Status
@@ -2859,10 +3211,14 @@ func (r PostV0CityByCityNameConvoyByIdCloseResponse) ContentType() string {
 }
 
 type GetV0CityByCityNameConvoysResponse struct {
-	Body                          []byte
-	HTTPResponse                  *http.Response
-	JSON200                       *ListBodyBead
-	ApplicationproblemJSONDefault *ErrorModel
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *ListBodyBead
+	ApplicationproblemJSON400 *ErrorModel
+	ApplicationproblemJSON404 *ErrorModel
+	ApplicationproblemJSON422 *ErrorModel
+	ApplicationproblemJSON500 *ErrorModel
+	ApplicationproblemJSON503 *ErrorModel
 }
 
 // Status returns HTTPResponse.Status
@@ -2890,10 +3246,16 @@ func (r GetV0CityByCityNameConvoysResponse) ContentType() string {
 }
 
 type CreateConvoyResponse struct {
-	Body                          []byte
-	HTTPResponse                  *http.Response
-	JSON201                       *Bead
-	ApplicationproblemJSONDefault *ErrorModel
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON201                   *Bead
+	ApplicationproblemJSON400 *ErrorModel
+	ApplicationproblemJSON401 *ErrorModel
+	ApplicationproblemJSON403 *ErrorModel
+	ApplicationproblemJSON404 *ErrorModel
+	ApplicationproblemJSON409 *ErrorModel
+	ApplicationproblemJSON422 *ErrorModel
+	ApplicationproblemJSON500 *ErrorModel
 }
 
 // Status returns HTTPResponse.Status
@@ -2921,10 +3283,14 @@ func (r CreateConvoyResponse) ContentType() string {
 }
 
 type GetV0CityByCityNameFormulasResponse struct {
-	Body                          []byte
-	HTTPResponse                  *http.Response
-	JSON200                       *FormulaListBody
-	ApplicationproblemJSONDefault *ErrorModel
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *FormulaListBody
+	ApplicationproblemJSON400 *ErrorModel
+	ApplicationproblemJSON404 *ErrorModel
+	ApplicationproblemJSON422 *ErrorModel
+	ApplicationproblemJSON500 *ErrorModel
+	ApplicationproblemJSON503 *ErrorModel
 }
 
 // Status returns HTTPResponse.Status
@@ -2952,10 +3318,14 @@ func (r GetV0CityByCityNameFormulasResponse) ContentType() string {
 }
 
 type GetV0CityByCityNameMailResponse struct {
-	Body                          []byte
-	HTTPResponse                  *http.Response
-	JSON200                       *MailListBody
-	ApplicationproblemJSONDefault *ErrorModel
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *MailListBody
+	ApplicationproblemJSON400 *ErrorModel
+	ApplicationproblemJSON404 *ErrorModel
+	ApplicationproblemJSON422 *ErrorModel
+	ApplicationproblemJSON500 *ErrorModel
+	ApplicationproblemJSON503 *ErrorModel
 }
 
 // Status returns HTTPResponse.Status
@@ -2983,10 +3353,16 @@ func (r GetV0CityByCityNameMailResponse) ContentType() string {
 }
 
 type SendMailResponse struct {
-	Body                          []byte
-	HTTPResponse                  *http.Response
-	JSON201                       *Message
-	ApplicationproblemJSONDefault *ErrorModel
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON201                   *Message
+	ApplicationproblemJSON400 *ErrorModel
+	ApplicationproblemJSON401 *ErrorModel
+	ApplicationproblemJSON403 *ErrorModel
+	ApplicationproblemJSON404 *ErrorModel
+	ApplicationproblemJSON409 *ErrorModel
+	ApplicationproblemJSON422 *ErrorModel
+	ApplicationproblemJSON500 *ErrorModel
 }
 
 // Status returns HTTPResponse.Status
@@ -3014,10 +3390,13 @@ func (r SendMailResponse) ContentType() string {
 }
 
 type GetV0CityByCityNameMailByIdResponse struct {
-	Body                          []byte
-	HTTPResponse                  *http.Response
-	JSON200                       *Message
-	ApplicationproblemJSONDefault *ErrorModel
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *Message
+	ApplicationproblemJSON404 *ErrorModel
+	ApplicationproblemJSON422 *ErrorModel
+	ApplicationproblemJSON500 *ErrorModel
+	ApplicationproblemJSON503 *ErrorModel
 }
 
 // Status returns HTTPResponse.Status
@@ -3045,10 +3424,14 @@ func (r GetV0CityByCityNameMailByIdResponse) ContentType() string {
 }
 
 type PostV0CityByCityNameMailByIdArchiveResponse struct {
-	Body                          []byte
-	HTTPResponse                  *http.Response
-	JSON200                       *OKResponseBody
-	ApplicationproblemJSONDefault *ErrorModel
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *OKResponseBody
+	ApplicationproblemJSON401 *ErrorModel
+	ApplicationproblemJSON403 *ErrorModel
+	ApplicationproblemJSON404 *ErrorModel
+	ApplicationproblemJSON422 *ErrorModel
+	ApplicationproblemJSON500 *ErrorModel
 }
 
 // Status returns HTTPResponse.Status
@@ -3076,10 +3459,14 @@ func (r PostV0CityByCityNameMailByIdArchiveResponse) ContentType() string {
 }
 
 type PostV0CityByCityNameMailByIdReadResponse struct {
-	Body                          []byte
-	HTTPResponse                  *http.Response
-	JSON200                       *OKResponseBody
-	ApplicationproblemJSONDefault *ErrorModel
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *OKResponseBody
+	ApplicationproblemJSON401 *ErrorModel
+	ApplicationproblemJSON403 *ErrorModel
+	ApplicationproblemJSON404 *ErrorModel
+	ApplicationproblemJSON422 *ErrorModel
+	ApplicationproblemJSON500 *ErrorModel
 }
 
 // Status returns HTTPResponse.Status
@@ -3107,10 +3494,15 @@ func (r PostV0CityByCityNameMailByIdReadResponse) ContentType() string {
 }
 
 type ReplyMailResponse struct {
-	Body                          []byte
-	HTTPResponse                  *http.Response
-	JSON201                       *Message
-	ApplicationproblemJSONDefault *ErrorModel
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON201                   *Message
+	ApplicationproblemJSON401 *ErrorModel
+	ApplicationproblemJSON403 *ErrorModel
+	ApplicationproblemJSON404 *ErrorModel
+	ApplicationproblemJSON409 *ErrorModel
+	ApplicationproblemJSON422 *ErrorModel
+	ApplicationproblemJSON500 *ErrorModel
 }
 
 // Status returns HTTPResponse.Status
@@ -3138,10 +3530,16 @@ func (r ReplyMailResponse) ContentType() string {
 }
 
 type PostV0CityByCityNameSessionByIdKillResponse struct {
-	Body                          []byte
-	HTTPResponse                  *http.Response
-	JSON200                       *OKWithIDResponseBody
-	ApplicationproblemJSONDefault *ErrorModel
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *OKWithIDResponseBody
+	ApplicationproblemJSON401 *ErrorModel
+	ApplicationproblemJSON403 *ErrorModel
+	ApplicationproblemJSON404 *ErrorModel
+	ApplicationproblemJSON409 *ErrorModel
+	ApplicationproblemJSON422 *ErrorModel
+	ApplicationproblemJSON500 *ErrorModel
+	ApplicationproblemJSON503 *ErrorModel
 }
 
 // Status returns HTTPResponse.Status
@@ -3169,10 +3567,16 @@ func (r PostV0CityByCityNameSessionByIdKillResponse) ContentType() string {
 }
 
 type SubmitSessionResponse struct {
-	Body                          []byte
-	HTTPResponse                  *http.Response
-	JSON202                       *AsyncAcceptedBody
-	ApplicationproblemJSONDefault *ErrorModel
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON202                   *AsyncAcceptedBody
+	ApplicationproblemJSON401 *ErrorModel
+	ApplicationproblemJSON403 *ErrorModel
+	ApplicationproblemJSON404 *ErrorModel
+	ApplicationproblemJSON409 *ErrorModel
+	ApplicationproblemJSON422 *ErrorModel
+	ApplicationproblemJSON500 *ErrorModel
+	ApplicationproblemJSON503 *ErrorModel
 }
 
 // Status returns HTTPResponse.Status
@@ -3200,10 +3604,14 @@ func (r SubmitSessionResponse) ContentType() string {
 }
 
 type GetV0CityByCityNameSessionsResponse struct {
-	Body                          []byte
-	HTTPResponse                  *http.Response
-	JSON200                       *ListBodySessionResponse
-	ApplicationproblemJSONDefault *ErrorModel
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *ListBodySessionResponse
+	ApplicationproblemJSON400 *ErrorModel
+	ApplicationproblemJSON404 *ErrorModel
+	ApplicationproblemJSON422 *ErrorModel
+	ApplicationproblemJSON500 *ErrorModel
+	ApplicationproblemJSON503 *ErrorModel
 }
 
 // Status returns HTTPResponse.Status
@@ -3231,10 +3639,16 @@ func (r GetV0CityByCityNameSessionsResponse) ContentType() string {
 }
 
 type PostV0CityByCityNameSlingResponse struct {
-	Body                          []byte
-	HTTPResponse                  *http.Response
-	JSON200                       *SlingResponse
-	ApplicationproblemJSONDefault *ErrorModel
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *SlingResponse
+	ApplicationproblemJSON400 *ErrorModel
+	ApplicationproblemJSON401 *ErrorModel
+	ApplicationproblemJSON403 *ErrorModel
+	ApplicationproblemJSON404 *ErrorModel
+	ApplicationproblemJSON409 *ErrorModel
+	ApplicationproblemJSON422 *ErrorModel
+	ApplicationproblemJSON500 *ErrorModel
 }
 
 // Status returns HTTPResponse.Status
@@ -3262,10 +3676,13 @@ func (r PostV0CityByCityNameSlingResponse) ContentType() string {
 }
 
 type GetV0CityByCityNameStatusResponse struct {
-	Body                          []byte
-	HTTPResponse                  *http.Response
-	JSON200                       *StatusBody
-	ApplicationproblemJSONDefault *ErrorModel
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *StatusBody
+	ApplicationproblemJSON404 *ErrorModel
+	ApplicationproblemJSON422 *ErrorModel
+	ApplicationproblemJSON500 *ErrorModel
+	ApplicationproblemJSON503 *ErrorModel
 }
 
 // Status returns HTTPResponse.Status
@@ -3548,12 +3965,26 @@ func ParseGetV0CityByCityNameAgentsResponse(rsp *http.Response) (*GetV0CityByCit
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest ErrorModel
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.ApplicationproblemJSONDefault = &dest
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
 
 	}
 
@@ -3581,12 +4012,33 @@ func ParseGetV0CityByCityNameConvoyByIdResponse(rsp *http.Response) (*GetV0CityB
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest ErrorModel
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.ApplicationproblemJSONDefault = &dest
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
 
 	}
 
@@ -3614,12 +4066,47 @@ func ParsePostV0CityByCityNameConvoyByIdCloseResponse(rsp *http.Response) (*Post
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorModel
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.ApplicationproblemJSONDefault = &dest
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
 
 	}
 
@@ -3647,12 +4134,40 @@ func ParseGetV0CityByCityNameConvoysResponse(rsp *http.Response) (*GetV0CityByCi
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorModel
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.ApplicationproblemJSONDefault = &dest
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
 
 	}
 
@@ -3680,12 +4195,54 @@ func ParseCreateConvoyResponse(rsp *http.Response) (*CreateConvoyResponse, error
 		}
 		response.JSON201 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorModel
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.ApplicationproblemJSONDefault = &dest
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
 
 	}
 
@@ -3713,12 +4270,40 @@ func ParseGetV0CityByCityNameFormulasResponse(rsp *http.Response) (*GetV0CityByC
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorModel
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.ApplicationproblemJSONDefault = &dest
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
 
 	}
 
@@ -3746,12 +4331,40 @@ func ParseGetV0CityByCityNameMailResponse(rsp *http.Response) (*GetV0CityByCityN
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorModel
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.ApplicationproblemJSONDefault = &dest
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
 
 	}
 
@@ -3779,12 +4392,54 @@ func ParseSendMailResponse(rsp *http.Response) (*SendMailResponse, error) {
 		}
 		response.JSON201 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorModel
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.ApplicationproblemJSONDefault = &dest
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
 
 	}
 
@@ -3812,12 +4467,33 @@ func ParseGetV0CityByCityNameMailByIdResponse(rsp *http.Response) (*GetV0CityByC
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest ErrorModel
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.ApplicationproblemJSONDefault = &dest
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
 
 	}
 
@@ -3845,12 +4521,40 @@ func ParsePostV0CityByCityNameMailByIdArchiveResponse(rsp *http.Response) (*Post
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest ErrorModel
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.ApplicationproblemJSONDefault = &dest
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
 
 	}
 
@@ -3878,12 +4582,40 @@ func ParsePostV0CityByCityNameMailByIdReadResponse(rsp *http.Response) (*PostV0C
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest ErrorModel
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.ApplicationproblemJSONDefault = &dest
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
 
 	}
 
@@ -3911,12 +4643,47 @@ func ParseReplyMailResponse(rsp *http.Response) (*ReplyMailResponse, error) {
 		}
 		response.JSON201 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest ErrorModel
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.ApplicationproblemJSONDefault = &dest
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
 
 	}
 
@@ -3944,12 +4711,54 @@ func ParsePostV0CityByCityNameSessionByIdKillResponse(rsp *http.Response) (*Post
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest ErrorModel
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.ApplicationproblemJSONDefault = &dest
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
 
 	}
 
@@ -3977,12 +4786,54 @@ func ParseSubmitSessionResponse(rsp *http.Response) (*SubmitSessionResponse, err
 		}
 		response.JSON202 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest ErrorModel
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.ApplicationproblemJSONDefault = &dest
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
 
 	}
 
@@ -4010,12 +4861,40 @@ func ParseGetV0CityByCityNameSessionsResponse(rsp *http.Response) (*GetV0CityByC
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorModel
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.ApplicationproblemJSONDefault = &dest
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
 
 	}
 
@@ -4043,12 +4922,54 @@ func ParsePostV0CityByCityNameSlingResponse(rsp *http.Response) (*PostV0CityByCi
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorModel
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.ApplicationproblemJSONDefault = &dest
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
 
 	}
 
@@ -4076,12 +4997,33 @@ func ParseGetV0CityByCityNameStatusResponse(rsp *http.Response) (*GetV0CityByCit
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest ErrorModel
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.ApplicationproblemJSONDefault = &dest
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
 
 	}
 
