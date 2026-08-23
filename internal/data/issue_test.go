@@ -46,6 +46,76 @@ func TestNestingDepth(t *testing.T) {
 	}
 }
 
+func TestParentRelationshipDepth(t *testing.T) {
+	root := &Issue{ID: "root.legacy"}
+	child := &Issue{
+		ID: "child",
+		Dependencies: []Dependency{{
+			IssueID:     "child",
+			DependsOnID: "root.legacy",
+			Type:        "parent-child",
+		}},
+	}
+	grandchild := &Issue{
+		ID: "grandchild.with.dots",
+		Dependencies: []Dependency{{
+			IssueID:     "grandchild.with.dots",
+			DependsOnID: "child",
+			Type:        "parent-child",
+		}},
+	}
+	historicalID := &Issue{ID: "former.child"}
+	missingParent := &Issue{
+		ID: "orphan",
+		Dependencies: []Dependency{{
+			IssueID:     "orphan",
+			DependsOnID: "not-loaded",
+			Type:        "parent-child",
+		}},
+	}
+	nonParentDependency := &Issue{
+		ID: "related",
+		Dependencies: []Dependency{{
+			IssueID:     "related",
+			DependsOnID: root.ID,
+			Type:        "related",
+		}},
+	}
+	cycleA := &Issue{ID: "cycle-a", Dependencies: []Dependency{{IssueID: "cycle-a", DependsOnID: "cycle-b", Type: "parent-child"}}}
+	cycleB := &Issue{ID: "cycle-b", Dependencies: []Dependency{{IssueID: "cycle-b", DependsOnID: "cycle-a", Type: "parent-child"}}}
+	issueMap := map[string]*Issue{
+		root.ID:                root,
+		child.ID:               child,
+		grandchild.ID:          grandchild,
+		historicalID.ID:        historicalID,
+		missingParent.ID:       missingParent,
+		nonParentDependency.ID: nonParentDependency,
+		cycleA.ID:              cycleA,
+		cycleB.ID:              cycleB,
+	}
+
+	tests := []struct {
+		name  string
+		issue *Issue
+		want  int
+	}{
+		{"top level dotted ID", root, 0},
+		{"actual child", child, 1},
+		{"actual grandchild", grandchild, 2},
+		{"historical ID without relationship", historicalID, 0},
+		{"parent not loaded", missingParent, 0},
+		{"non-parent dependency", nonParentDependency, 0},
+		{"cycle stops after loaded parent", cycleA, 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.issue.ParentRelationshipDepth(issueMap); got != tc.want {
+				t.Errorf("ParentRelationshipDepth() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestIsOverdue(t *testing.T) {
 	past := time.Now().Add(-48 * time.Hour)
 	future := time.Now().Add(48 * time.Hour)

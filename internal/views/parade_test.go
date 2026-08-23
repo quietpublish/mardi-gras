@@ -239,6 +239,30 @@ func TestEnsureVisible(t *testing.T) {
 	}
 }
 
+func TestParadeIndentUsesParentRelationships(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "root-001", Title: "Root", Status: data.StatusOpen, Priority: data.PriorityMedium, IssueType: data.TypeTask},
+		{ID: "child001", Title: "Child", Status: data.StatusOpen, Priority: data.PriorityMedium, IssueType: data.TypeTask, Dependencies: []data.Dependency{{IssueID: "child001", DependsOnID: "root-001", Type: "parent-child"}}},
+		{ID: "past.001", Title: "Former child", Status: data.StatusOpen, Priority: data.PriorityMedium, IssueType: data.TypeTask},
+	}
+	p := NewParade(issues, 80, 20, data.DefaultBlockingTypes)
+	positions := make(map[string]int)
+	for _, item := range p.Items {
+		if item.Issue == nil {
+			continue
+		}
+		row := ansi.Strip(p.renderIssue(item, false, 0))
+		positions[item.Issue.ID] = strings.Index(row, item.Issue.ID)
+	}
+
+	if got, want := positions["child001"], positions["root-001"]+2; got != want {
+		t.Errorf("actual child ID starts at column %d, want %d", got, want)
+	}
+	if got, want := positions["past.001"], positions["root-001"]; got != want {
+		t.Errorf("dotted top-level ID starts at column %d, want %d", got, want)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Comment count badge
 // ---------------------------------------------------------------------------
