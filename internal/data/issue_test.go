@@ -234,3 +234,100 @@ func TestAgePositive(t *testing.T) {
 		t.Errorf("Age() = %v, want ~1h", age)
 	}
 }
+
+func hierIssue(id, parent string, status Status, pri Priority) Issue {
+	iss := Issue{ID: id, Title: id, Status: status, Priority: pri, IssueType: TypeTask, CreatedAt: time.Now()}
+	if parent != "" {
+		iss.Dependencies = []Dependency{{IssueID: id, DependsOnID: parent, Type: "parent-child"}}
+	}
+	return iss
+}
+
+// TestOrderHierarchicallyPlacesChildrenUnderParents is the core of the #110
+// fix: sorting is priority-then-recency, so a child could land far from its
+// parent while still being indented — making the indent claim a parent it did
+// not have. Children now follow their parent directly.
+func TestOrderHierarchicallyPlacesChildrenUnderParents(t *testing.T) {
+	// Arrives in priority order, which interleaves two families.
+	issues := []Issue{
+		hierIssue("mg-100", "", StatusOpen, PriorityHigh),
+		hierIssue("mg-200", "", StatusOpen, PriorityHigh),
+		hierIssue("mg-201", "mg-200", StatusOpen, PriorityMedium),
+		hierIssue("mg-101", "mg-100", StatusOpen, PriorityLow),
+	}
+	ordered, depth := OrderHierarchically(issues)
+
+	var ids []string
+	for _, iss := range ordered {
+		ids = append(ids, iss.ID)
+	}
+	want := []string{"mg-100", "mg-101", "mg-200", "mg-201"}
+	if len(ids) != len(want) {
+		t.Fatalf("ordered = %v, want %v", ids, want)
+	}
+	for i := range want {
+		if ids[i] != want[i] {
+			t.Fatalf("ordered = %v, want %v", ids, want)
+		}
+	}
+	for id, wantDepth := range map[string]int{"mg-100": 0, "mg-101": 1, "mg-200": 0, "mg-201": 1} {
+		if depth[id] != wantDepth {
+			t.Errorf("depth[%s] = %d, want %d", id, depth[id], wantDepth)
+		}
+	}
+}
+
+// TestOrderHierarchicallyParentOutsideSection is the cross-section case #110
+// was filed for: a child whose parent is not on screen here must render flat,
+// not indented under whatever unrelated row precedes it.
+func TestOrderHierarchicallyParentOutsideSection(t *testing.T) {
+	issues := []Issue{
+		hierIssue("mg-001", "", StatusInProgress, PriorityHigh),
+		hierIssue("mg-101", "mg-100", StatusInProgress, PriorityMedium), // parent lives elsewhere
+	}
+	_, depth := OrderHierarchically(issues)
+	if depth["mg-101"] != 0 {
+		t.Errorf("depth[mg-101] = %d, want 0 — its parent is not in this section", depth["mg-101"])
+	}
+}
+
+// TestOrderHierarchicallyReparentedKeepsDottedID covers #102's original report:
+// the dotted ID survives reparenting, so only the edge may decide depth.
+func TestOrderHierarchicallyReparentedKeepsDottedID(t *testing.T) {
+	issues := []Issue{
+		hierIssue("mg-100", "", StatusOpen, PriorityHigh),
+		hierIssue("mg-100.20", "", StatusOpen, PriorityMedium), // dotted, but edge removed
+	}
+	_, depth := OrderHierarchically(issues)
+	if depth["mg-100.20"] != 0 {
+		t.Errorf("depth[mg-100.20] = %d, want 0 — the parent-child edge was removed", depth["mg-100.20"])
+	}
+}
+
+// TestOrderHierarchicallyCycleEmitsEveryIssue guards against a malformed graph
+// silently dropping rows from the parade.
+func TestOrderHierarchicallyCycleEmitsEveryIssue(t *testing.T) {
+	issues := []Issue{
+		hierIssue("mg-a", "mg-b", StatusOpen, PriorityHigh),
+		hierIssue("mg-b", "mg-a", StatusOpen, PriorityHigh),
+		hierIssue("mg-c", "", StatusOpen, PriorityHigh),
+	}
+	ordered, _ := OrderHierarchically(issues)
+	if len(ordered) != 3 {
+		t.Fatalf("ordered %d issues, want 3 — a cycle must not drop rows", len(ordered))
+	}
+	seen := map[string]bool{}
+	for _, iss := range ordered {
+		if seen[iss.ID] {
+			t.Fatalf("issue %s emitted twice", iss.ID)
+		}
+		seen[iss.ID] = true
+	}
+}
+
+func TestOrderHierarchicallyEmpty(t *testing.T) {
+	ordered, depth := OrderHierarchically(nil)
+	if len(ordered) != 0 || len(depth) != 0 {
+		t.Errorf("OrderHierarchically(nil) = %v, %v", ordered, depth)
+	}
+}

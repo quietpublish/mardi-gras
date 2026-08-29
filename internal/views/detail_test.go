@@ -163,9 +163,12 @@ func TestSetSizeUpdatesDimensions(t *testing.T) {
 func TestEpicProgressUsesDirectChildren(t *testing.T) {
 	issues := []data.Issue{
 		{ID: "mg-100", Title: "Platform migration", Status: data.StatusOpen, Priority: data.PriorityHigh, IssueType: data.TypeEpic, CreatedAt: time.Now()},
-		{ID: "mg-100.1", Title: "Auth", Status: data.StatusClosed, Priority: data.PriorityMedium, IssueType: data.TypeTask, CreatedAt: time.Now()},
-		{ID: "mg-100.2", Title: "Billing", Status: data.StatusOpen, Priority: data.PriorityMedium, IssueType: data.TypeTask, CreatedAt: time.Now()},
-		{ID: "mg-100.2.1", Title: "Billing schema", Status: data.StatusClosed, Priority: data.PriorityLow, IssueType: data.TypeTask, CreatedAt: time.Now()},
+		{ID: "mg-100.1", Title: "Auth", Status: data.StatusClosed, Priority: data.PriorityMedium, IssueType: data.TypeTask, CreatedAt: time.Now(),
+			Dependencies: []data.Dependency{{IssueID: "mg-100.1", DependsOnID: "mg-100", Type: "parent-child"}}},
+		{ID: "mg-100.2", Title: "Billing", Status: data.StatusOpen, Priority: data.PriorityMedium, IssueType: data.TypeTask, CreatedAt: time.Now(),
+			Dependencies: []data.Dependency{{IssueID: "mg-100.2", DependsOnID: "mg-100", Type: "parent-child"}}},
+		{ID: "mg-100.2.1", Title: "Billing schema", Status: data.StatusClosed, Priority: data.PriorityLow, IssueType: data.TypeTask, CreatedAt: time.Now(),
+			Dependencies: []data.Dependency{{IssueID: "mg-100.2.1", DependsOnID: "mg-100.2", Type: "parent-child"}}},
 	}
 
 	d := NewDetail(80, 30, issues)
@@ -184,8 +187,10 @@ func TestEpicProgressUsesDirectChildren(t *testing.T) {
 func TestEpicProgressRenderingInContent(t *testing.T) {
 	issues := []data.Issue{
 		{ID: "mg-100", Title: "Platform migration", Status: data.StatusOpen, Priority: data.PriorityHigh, IssueType: data.TypeEpic, CreatedAt: time.Now()},
-		{ID: "mg-100.1", Title: "Auth", Status: data.StatusClosed, Priority: data.PriorityMedium, IssueType: data.TypeTask, CreatedAt: time.Now()},
-		{ID: "mg-100.2", Title: "Billing", Status: data.StatusOpen, Priority: data.PriorityMedium, IssueType: data.TypeTask, CreatedAt: time.Now()},
+		{ID: "mg-100.1", Title: "Auth", Status: data.StatusClosed, Priority: data.PriorityMedium, IssueType: data.TypeTask, CreatedAt: time.Now(),
+			Dependencies: []data.Dependency{{IssueID: "mg-100.1", DependsOnID: "mg-100", Type: "parent-child"}}},
+		{ID: "mg-100.2", Title: "Billing", Status: data.StatusOpen, Priority: data.PriorityMedium, IssueType: data.TypeTask, CreatedAt: time.Now(),
+			Dependencies: []data.Dependency{{IssueID: "mg-100.2", DependsOnID: "mg-100", Type: "parent-child"}}},
 	}
 
 	d := NewDetail(80, 30, issues)
@@ -1103,5 +1108,48 @@ func TestRenderMarkdownShowsBlockHTMLLiterally(t *testing.T) {
 				t.Errorf("expected rendered output to contain %q\ngot: %q", tt.want, out)
 			}
 		})
+	}
+}
+
+// TestEpicProgressIgnoresReparentedChild pins the #110 fix: epic progress used
+// to count children by dotted-ID prefix, so an issue reparented away from an
+// epic kept counting toward it. `bd create --parent` writes both the dotted ID
+// and a parent-child edge; removing the edge while keeping the ID is exactly
+// the reparenting case, and the edge is what decides membership now.
+func TestEpicProgressIgnoresReparentedChild(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "mg-100", Title: "Platform migration", Status: data.StatusOpen, Priority: data.PriorityHigh, IssueType: data.TypeEpic, CreatedAt: time.Now()},
+		{ID: "mg-100.1", Title: "Still a child", Status: data.StatusClosed, Priority: data.PriorityMedium, IssueType: data.TypeTask, CreatedAt: time.Now(),
+			Dependencies: []data.Dependency{{IssueID: "mg-100.1", DependsOnID: "mg-100", Type: "parent-child"}}},
+		// Reparented to the top level: dotted ID retained, edge gone.
+		{ID: "mg-100.2", Title: "Moved out", Status: data.StatusOpen, Priority: data.PriorityMedium, IssueType: data.TypeTask, CreatedAt: time.Now()},
+	}
+
+	d := NewDetail(80, 30, issues)
+	progress, ok := d.epicProgress(&issues[0])
+	if !ok {
+		t.Fatal("expected epic progress to be available")
+	}
+	if progress.Total != 1 || progress.Done != 1 {
+		t.Fatalf("epicProgress() = %+v, want done=1 total=1 — the reparented issue must not count", progress)
+	}
+}
+
+// TestEpicProgressCountsEdgeOnlyChild covers the converse: a child linked only
+// by a parent-child edge, with no dotted ID, never counted before.
+func TestEpicProgressCountsEdgeOnlyChild(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "mg-100", Title: "Platform migration", Status: data.StatusOpen, Priority: data.PriorityHigh, IssueType: data.TypeEpic, CreatedAt: time.Now()},
+		{ID: "mg-777", Title: "Adopted child", Status: data.StatusClosed, Priority: data.PriorityMedium, IssueType: data.TypeTask, CreatedAt: time.Now(),
+			Dependencies: []data.Dependency{{IssueID: "mg-777", DependsOnID: "mg-100", Type: "parent-child"}}},
+	}
+
+	d := NewDetail(80, 30, issues)
+	progress, ok := d.epicProgress(&issues[0])
+	if !ok {
+		t.Fatal("expected epic progress for an edge-only child")
+	}
+	if progress.Total != 1 || progress.Done != 1 {
+		t.Fatalf("epicProgress() = %+v, want done=1 total=1", progress)
 	}
 }

@@ -888,9 +888,15 @@ func (d *Detail) epicProgress(issue *data.Issue) (issueProgress, bool) {
 		return issueProgress{}, false
 	}
 
+	// Count children by their current parent-child edge, not by ID shape.
+	// `bd create --parent` writes both the dotted ID and the edge, so normal
+	// children are unaffected — but an issue reparented away keeps its old
+	// dotted ID, and counting that would credit progress to an epic that no
+	// longer owns it. The converse also matters: a child linked only by an
+	// edge, with no dotted ID, now counts where before it never did.
 	progress := issueProgress{}
 	for _, candidate := range d.AllIssues {
-		if candidate.ParentID() != issue.ID {
+		if candidate.ParentRelationshipID() != issue.ID {
 			continue
 		}
 		progress.Total++
