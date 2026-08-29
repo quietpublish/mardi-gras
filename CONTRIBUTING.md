@@ -4,13 +4,14 @@ Thanks for your interest in making the parade better! This guide covers everythi
 
 ## Prerequisites
 
-- **Go 1.25+** ([install](https://go.dev/doc/install))
+- **Go 1.25+** ([install](https://go.dev/doc/install)) — `go.mod` declares `go 1.25.0`, and CI builds on 1.25.x
 - **Git**
-- **golangci-lint** for linting ([install](https://golangci-lint.run/welcome/install/))
+- **golangci-lint** for linting ([install](https://golangci-lint.run/welcome/install/)) — CI pins v2.11
 - A Beads project, or use the included `testdata/sample.jsonl`
 
-Optional (for Gas Town features):
-- **Gas Town** (`gt`) on PATH — enables agent orchestration, convoys, mail
+Optional (for orchestrator features — mg works fine without any of these):
+- **[Gas Town](https://github.com/gastownhall/gastown)** (`gt`) on PATH — enables agent orchestration, convoys, mail
+- **[Gas City](https://github.com/gastownhall/gascity)** (`gc`) — an orchestration-builder SDK from the same org; mg speaks its Supervisor HTTP API as an alternative backend
 - A Gas Town workspace (rig + crew) for full integration testing
 
 ## Getting Started
@@ -29,7 +30,7 @@ make dev
 
 This builds the `mg` binary and launches it with `testdata/sample.jsonl`.
 
-### Testing with Gas Town
+### Testing with an orchestrator
 
 To test Gas Town features locally without a live workspace, use the fake `gt` script:
 
@@ -39,6 +40,12 @@ make dev-gt
 
 This puts `testdata/fake-gt.sh` on PATH, providing canned responses for `gt status`, `gt vitals`, `gt costs`, `gt convoy list`, and `gt mail inbox`. Press `ctrl+g` to open the Gas Town panel with full sample data.
 
+The Gas City path has an HTTP analogue — a fake supervisor in `testdata/fakegc`, no `gc` install needed:
+
+```bash
+make dev-gc
+```
+
 For full integration testing against a real Gas Town environment:
 
 ```bash
@@ -46,23 +53,27 @@ cd ~/gt/<rig>/crew/<name>
 ~/path/to/mardi-gras/mg
 ```
 
-Without `gt` on PATH, Gas Town features are hidden and mg works as a standalone Beads viewer.
+Without an orchestrator, those features are hidden and mg works as a standalone Beads viewer.
 
 ## Development Commands
 
 ```bash
 make build        # compile the mg binary
-make run          # build + run (auto-detects .beads/issues.jsonl)
+make run          # build + run (auto-detects the Beads source)
 make dev          # build + run with sample data
 make dev-gt       # build + run with sample data and fake gt (Gas Town features)
+make dev-gc       # build + run against a fake Gas City supervisor
 make test         # go test ./...
 make lint         # golangci-lint run ./...
 make fmt          # go fmt ./...
 make tidy         # go mod tidy
 make clean        # remove binary and dist/
+make gc-client    # regenerate internal/gastown/gcclient from the pinned OpenAPI spec
 ```
 
-CI runs tests with `-race` and lints with the same `.golangci.yml` config, so run `make test` and `make lint` locally before pushing.
+CI is stricter than `make test`. It runs `go build ./...`, `go vet ./...`, `go test -race` with a **55% coverage floor**, `golangci-lint` with the same `.golangci.yml` config, `govulncheck`, and a `go.sum` drift check (`go mod tidy` must be a no-op) — on both Linux and macOS. Run `make test && make lint && go vet ./...` locally before pushing.
+
+`internal/gastown/gcclient` is generated code. Change the pinned `openapi.json` and re-run `make gc-client` (needs `jq` and `oapi-codegen`) rather than hand-editing `client_gen.go`.
 
 ## Project Structure
 
@@ -71,17 +82,21 @@ cmd/mg/main.go        Entry point (flags, path resolution, bootstrap)
 
 internal/
   app/                Root BubbleTea model (lifecycle, routing, layout)
-  data/               Domain types, JSONL parsing, filtering, file watcher
-  views/              Parade, Detail, Gas Town panel, Problems overlay
-  components/         Header, Footer, Help, Command palette, Toast, Create form
-  agent/              Agent runtime detection (Claude Code, Cursor) and tmux dispatch
-  gastown/            Gas Town integration (status, sling, convoy, mail, problems, recovery, analytics)
+  data/               Domain types, bd CLI + JSONL loading, filtering, file watcher
+  views/              Parade, Detail, Gas Town panel, Problems overlay, bd doctor, Codex transcript
+  components/         Header, Footer, Help, Command palette, Toast, Create/Edit forms, dialogs
+  agent/              Agent runtime detection (Claude Code, Cursor, Codex) and tmux dispatch
+  gastown/            Orchestrator integration behind the Driver seam (Gas Town CLI + Gas City HTTP)
+    gcclient/         GENERATED Gas City API client — see `make gc-client`
+  codexmcp/           JSON-RPC client for `codex mcp-server` (transport, session, protocol)
   tmux/               tmux status line widget (--status mode)
-  ui/                 Theme colors, lipgloss styles, Unicode symbols
+  ui/                 Theme colors, lipgloss styles, Unicode symbols, gradients, sparklines
 
-testdata/             Sample JSONL for development
-docs/                 Architecture docs, internal design docs, screenshots
+testdata/             Sample JSONL, fake gt script, fake Gas City supervisor, vhs tapes
+docs/                 Architecture and integration docs, screenshots
 ```
+
+`docs/internal/` is gitignored — it holds local-only working notes and is never committed.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a deeper walkthrough of the data flow, BubbleTea model structure, package dependencies, and Gas Town integration.
 
@@ -95,7 +110,7 @@ Open a GitHub issue with:
 - Steps to reproduce
 - Terminal emulator and OS
 - Output of `mg --version`
-- Whether Gas Town was active (`gt` on PATH, `GT_ROLE` env var)
+- Which orchestrator was active, if any (`gt` on PATH, `GT_ROLE` set, `gc` on PATH, or `MG_GC_API` set)
 
 ### Suggesting Features
 
@@ -106,11 +121,13 @@ Open an issue describing the feature and why it would be useful. The [README](RE
 1. Fork the repo and create a branch from `main`.
 2. Make your changes.
 3. Add or update tests if the change affects behavior.
-4. Run `make fmt && make lint && make test` and fix any issues.
-5. Write clear commit messages that explain the *why*, not just the *what*.
-6. Open a PR against `main`.
+4. Run `make fmt && make lint && make test && go vet ./...` and fix any issues.
+5. Write clear commit messages that explain the *why*, not just the *what*. Conventional Commit prefixes: `feat:`, `fix:`, `docs:`, `test:`, `chore:`.
+6. Open a PR against `main`. PRs land via squash merge, so the PR title becomes the commit subject on `main`.
 
 Keep PRs focused — one feature or fix per PR makes review faster for everyone.
+
+**Don't edit `CHANGELOG.md` in your PR.** Entries are batched into a separate `chore: prep vX.Y.Z (changelog)` commit at release time — a per-PR edit just creates a conflict.
 
 ## Code Conventions
 
@@ -121,7 +138,7 @@ Keep PRs focused — one feature or fix per PR makes review faster for everyone.
 - **Naming**: follow standard Go conventions. Exported names should be clear without a package prefix.
 - **Errors**: return errors rather than panicking. Use `fmt.Errorf` with `%w` for wrapping.
 - **Tests**: `TestFunctionName` for the happy path, `TestFunctionNameEdgeCase` for variants. Table-driven tests where appropriate. Test files live alongside the code they test.
-- **Dependencies**: Mardi Gras intentionally has a small dependency footprint (Charmbracelet toolkit + clipboard). Propose new dependencies in the PR description with a rationale.
+- **Dependencies**: Mardi Gras intentionally has a small dependency footprint — the Charmbracelet toolkit (bubbletea/bubbles/lipgloss/glamour/ultraviolet), plus a handful of small direct deps (`atotto/clipboard`, `sahilm/fuzzy`, `muesli/termenv`, `yuin/goldmark`, `oapi-codegen/runtime` for the generated Gas City client). Propose new dependencies in the PR description with a rationale.
 
 ### Receivers
 
@@ -156,8 +173,9 @@ Mardi Gras follows the [Elm Architecture](https://guide.elm-lang.org/architectur
 Key design constraints:
 
 - Single binary, no runtime dependencies. Cross-compiles via GoReleaser.
-- **Graceful degradation**: features activate progressively. Beads-only (no `gt`) → Gas Town available (`gt` on PATH) → Inside Gas Town (`GT_ROLE` set). Every feature must work or hide gracefully at each level.
-- **Async caution**: `gt status --json` takes ~9 seconds. Any `exec.Command` call to `gt` should run as a BubbleTea `Cmd` (background goroutine), never blocking the main Update loop. Always handle `nil` status gracefully — the user may interact before the command returns.
+- **Beads is the substrate; orchestration is a layer.** mg always needs Beads. Gas Town and Gas City sit behind the `gastown.Driver` interface, and an operation a backend can't serve returns `ErrUnsupported` so the caller hides the feature rather than erroring.
+- **Graceful degradation**: features activate progressively. Beads-only (no orchestrator) → orchestrator available → inside a Gas Town session (`GT_ROLE` set). Every feature must work or hide gracefully at each level.
+- **Async caution**: `gt status --json` latency is highly variable — seconds to tens of seconds, depending on rig/agent count and whether dolt and the daemon are running. Any `exec.Command` call to `gt`, and any HTTP call to a Gas City supervisor, should run as a BubbleTea `Cmd` (background goroutine), never blocking the main Update loop. Always handle `nil` status gracefully, and gate re-polls behind an in-flight check so an unreachable orchestrator can't spin.
 
 ## Known Gotchas
 
@@ -165,6 +183,8 @@ Key design constraints:
 - Gas Town rig names cannot contain hyphens (use underscores).
 - Crew workspaces have `.beads/redirect` not `issues.jsonl` — mg walks up the directory tree to find the actual data file.
 - `bd edit` opens `$EDITOR` and blocks — never use it from agents or tests. Use `bd update` for field changes.
+- **Driver selection is evidence-based, not a simple env flag.** `SelectDriver()` in `gastown/gc.go` prefers Gas City when `MG_GC_API` is set, otherwise Gas Town whenever there is *any* Gas Town evidence (`GT_*` env vars or `gt` on PATH), otherwise Gas City when `gc` is on PATH or a `city.toml` sits above the cwd, and Gas Town as the final default. If you have `gt` installed you will always get the Gas Town driver unless you set `MG_GC_API`.
+- The UI palette is theme-switchable and rebaked at startup. Never capture palette values, styles, or pre-rendered strings in package-level vars outside `internal/ui` — they freeze the dark theme before `ui.SetTheme` runs.
 
 ## License
 

@@ -3,14 +3,14 @@
 [![CI](https://github.com/quietpublish/mardi-gras/actions/workflows/ci.yml/badge.svg)](https://github.com/quietpublish/mardi-gras/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/tag/quietpublish/mardi-gras?label=release)](https://github.com/quietpublish/mardi-gras/releases/latest)
 [![Go](https://img.shields.io/github/go-mod/go-version/quietpublish/mardi-gras)](https://go.dev/)
-[![Beads](https://img.shields.io/badge/Beads-%E2%89%A5%20v0.60-blueviolet)](https://github.com/steveyegge/beads)
-[![Gas Town](https://img.shields.io/badge/Gas%20Town-%E2%89%A5%20v0.12-blue)](https://github.com/steveyegge/gastown)
+[![Beads](https://img.shields.io/badge/Beads-compatible-blueviolet)](https://github.com/gastownhall/beads)
+[![Gas Town](https://img.shields.io/badge/Gas%20Town-compatible-blue)](https://github.com/gastownhall/gastown)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![codecov](https://codecov.io/gh/quietpublish/mardi-gras/graph/badge.svg)](https://codecov.io/gh/quietpublish/mardi-gras)
 
 **Your Beads issues deserve a parade — not a spreadsheet.**
 
-Mardi Gras is a terminal UI for [Beads](https://github.com/steveyegge/beads) that turns your issue list into a living parade: what's moving, what's waiting, what's blocked, and what's already behind you.
+Mardi Gras is a terminal UI for [Beads](https://github.com/gastownhall/beads) that turns your issue list into a living parade: what's moving, what's waiting, what's blocked, and what's already behind you.
 
 It's fast, visual, and joyful.
 One binary. No config. Just `mg`.
@@ -109,8 +109,10 @@ mg --version
 # Enable debug logging (creates mg-debug.log in cwd)
 MG_DEBUG=1 mg
 
-# Drive Gas City instead of Gas Town (opt-in; auto-discovers the supervisor)
+# Force the Gas City backend (auto-discovers the running supervisor)
 MG_GC_API=auto mg
+# ...or pin the city it drives
+MG_GC_API=auto MG_GC_CITY=mycity mg
 ```
 
 Mardi Gras auto-detects your data source — no daemon, no config file. It supports two modes:
@@ -148,13 +150,22 @@ See the [agent integration guide](docs/agents.md) for runtime detection, tmux di
 
 ## Gas Town Integration
 
-When [Gas Town](https://github.com/steveyegge/gastown) (`gt`) is on your PATH, Mardi Gras lights up with a full agent control surface: agent roster, convoys, mail, cost dashboards, and problem detection. Press `ctrl+g` to open the dashboard. Create issues and assign them to crew members in one step via the create form (`N`).
+When [Gas Town](https://github.com/gastownhall/gastown) (`gt`) is on your PATH, Mardi Gras lights up with a full agent control surface: agent roster, convoys, mail, cost dashboards, and problem detection. Press `ctrl+g` to open the dashboard. Create issues and assign them to crew members in one step via the create form (`N`).
 
 See the [Gas Town integration guide](docs/gastown.md) for the full feature set including sling, nudge, assign, convoys, and operational intelligence.
 
 ## Gas City Integration
 
-Mardi Gras also speaks to [Gas City](https://github.com/gastownhall/gascity) (`gc`) — Gas Town's pack-based successor — through its Supervisor HTTP API. This is **opt-in**: set `MG_GC_API=auto` to point mg at a running supervisor and the agent roster, mail, formulas, nudge, decommission, dispatch (sling), and convoys come over HTTP instead of the `gt` CLI. (On Gas City, `a` prompts for a target agent, since it doesn't auto-pick like gt.)
+Mardi Gras also speaks to [Gas City](https://github.com/gastownhall/gascity) (`gc`) — a separate, actively developed orchestrator that packages multi-agent infrastructure as a configurable toolkit — through its Supervisor HTTP API. On Gas City the agent roster, mail, formulas, nudge, decommission, dispatch (sling), assign, and convoys come over HTTP instead of the `gt` CLI. (There, `a` prompts for a target agent, since Gas City doesn't auto-pick like gt.)
+
+mg chooses a backend at startup from the evidence on your machine:
+
+1. `MG_GC_API` is set → Gas City. You named it, so it wins.
+2. Any Gas Town evidence — a `GT_*` env var, or `gt` on your PATH → Gas Town.
+3. No Gas Town evidence, but Gas City evidence — `gc` on your PATH, or a `city.toml` in a parent directory → Gas City.
+4. Nothing conclusive → Gas Town.
+
+The global default is still Gas Town: rule 3 only fires when there is no sign of `gt` at all. Set `MG_GC_API=auto` to override that and discover a running supervisor; `MG_GC_CITY` pins which city to drive.
 
 See the [Gas City integration guide](docs/gascity.md) for setup, the full capability matrix, and how to regenerate the API client.
 
