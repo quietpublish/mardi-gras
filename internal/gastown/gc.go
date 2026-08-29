@@ -78,17 +78,51 @@ func gcParseSupervisorLog(log string) string {
 	return strings.TrimRight(matches[len(matches)-1][1], "/")
 }
 
-// SelectDriver returns the orchestrator driver mg should use. It defaults to
-// the Gas Town CLI driver and returns a Gas City HTTP driver only when
-// GCEnabled() is true. If the Gas City client cannot be constructed (bad base
-// URL), it falls back to the Gas Town driver so mg still runs.
+// SelectDriver returns the orchestrator driver mg should use, choosing by
+// evidence about the machine rather than by MG_GC_API alone.
+//
+// Precedence:
+//
+//  1. MG_GC_API set — the operator has named Gas City explicitly.
+//  2. Any Gas Town evidence (GT_* env vars, or gt on PATH) — Gas Town.
+//  3. No Gas Town evidence, but Gas City evidence (gc on PATH, or a city.toml
+//     above the cwd) — Gas City. Previously mg ignored this and handed back a
+//     Gas Town driver that shelled out to a gt which may not be installed.
+//  4. Nothing conclusive — Gas Town, the historical default.
+//
+// Rule 3 is deliberately narrow: it fires only when there is NO Gas Town
+// evidence whatsoever, so nobody who has gt installed or is inside a Gas Town
+// session sees a different backend than before. That conservatism is the point
+// — this is a correctness fix for users mg was actively getting wrong, not a
+// change of the global default, which remains Gas Town.
 func SelectDriver() Driver {
-	if !GCEnabled() {
+	return selectDriver(Detect())
+}
+
+// selectDriver is the testable core of SelectDriver, taking the detected
+// environment explicitly so tests need not manipulate PATH or the cwd.
+func selectDriver(env Env) Driver {
+	newGC := func() (Driver, bool) {
+		d, err := NewGCDriver(GCBaseURL(), strings.TrimSpace(os.Getenv(EnvGCCity)))
+		if err != nil {
+			return nil, false
+		}
+		return d, true
+	}
+
+	if GCEnabled() {
+		if d, ok := newGC(); ok {
+			return d
+		}
 		return NewGTDriver()
 	}
-	d, err := NewGCDriver(GCBaseURL(), strings.TrimSpace(os.Getenv(EnvGCCity)))
-	if err != nil {
+	if env.Available || env.Active {
 		return NewGTDriver()
 	}
-	return d
+	if env.GCAvailable || env.GCCityPath != "" {
+		if d, ok := newGC(); ok {
+			return d
+		}
+	}
+	return NewGTDriver()
 }

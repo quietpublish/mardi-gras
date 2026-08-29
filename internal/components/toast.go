@@ -1,10 +1,12 @@
 package components
 
 import (
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/matt-wright86/mardi-gras/internal/ui"
 )
 
@@ -42,6 +44,15 @@ func ShowToast(message string, level ToastLevel, duration time.Duration) (Toast,
 }
 
 // View renders the toast bar.
+//
+// The toast occupies exactly one row — the divider line between the parade and
+// the footer — so the message is collapsed to a single line and truncated to
+// fit. lipgloss's Width() sets a minimum and WRAPS anything longer, which is
+// how a long message used to render as two or three rows and push the layout
+// past the bottom of the terminal. Truncating here fixes every caller at once
+// rather than asking each one to keep its strings short: bd errors reach this
+// via sanitizeErrMsg's 200-character cap, which is far wider than any real
+// terminal's toast row.
 func (t Toast) View(width int) string {
 	if t.Message == "" {
 		return ""
@@ -59,7 +70,25 @@ func (t Toast) View(width int) string {
 		style = ui.ToastInfo
 	}
 
-	return style.Width(width).Render(t.Message)
+	return style.Width(width).Render(fitToastLine(t.Message, width-style.GetHorizontalFrameSize()))
+}
+
+// fitToastLine collapses msg to one line and truncates it to avail display
+// cells, appending an ellipsis when it had to cut. Width is measured in cells,
+// not bytes, so emoji and box-drawing characters in a message are counted the
+// way the terminal renders them.
+func fitToastLine(msg string, avail int) string {
+	msg = strings.Join(strings.Fields(msg), " ")
+	if avail <= 0 {
+		return ""
+	}
+	if lipgloss.Width(msg) <= avail {
+		return msg
+	}
+	if avail == 1 {
+		return "…"
+	}
+	return ansi.Truncate(msg, avail, "…")
 }
 
 // Active returns true if the toast has a message and hasn't expired.

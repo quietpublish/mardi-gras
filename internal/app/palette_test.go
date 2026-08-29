@@ -19,6 +19,11 @@ func initModel(t *testing.T) Model {
 	}
 	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
 	m.startedAt = time.Now().Add(-time.Second) // bypass startup guard
+	// Pin the Gas Town driver. New() selects one from the ambient environment,
+	// so on a host with gc installed and no gt these tests would otherwise run
+	// against a Gas City driver and lose every gt-gated command. Tests that
+	// want Gas City behaviour should set m.driver themselves.
+	m.driver = gastown.NewGTDriver()
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	return model.(Model)
 }

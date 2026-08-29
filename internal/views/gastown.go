@@ -96,6 +96,11 @@ type GasTown struct {
 	// line whenever it is set.
 	loadingFrame string
 
+	// statusErr is the last orchestrator status failure, shown when there is no
+	// status to fall back on. statusErrBackend selects the remediation hint.
+	statusErr        error
+	statusErrBackend string
+
 	// Activity sparkline data (computed from events)
 	agentHistograms map[string][]int // agent name -> bucketed event counts
 	agentEventCount map[string]int   // agent name -> total event count
@@ -159,6 +164,48 @@ func (g *GasTown) Tick() {
 // TickCount returns the current tick for external use.
 func (g *GasTown) TickCount() int {
 	return g.tickCount
+}
+
+// SetStatusError records why the last orchestrator status fetch failed, so the
+// panel can say so instead of showing a loading line forever. backend is the
+// Driver.Backend() name, used only to pick the remediation hint. Pass a nil err
+// to clear (on success, or when a retry starts).
+func (g *GasTown) SetStatusError(err error, backend string) {
+	g.statusErr = err
+	g.statusErrBackend = backend
+}
+
+// renderStatusError explains an unreachable orchestrator and what to check.
+// The hint is backend-specific because the two failure modes look nothing alike:
+// a missing `gt` binary versus a supervisor that is not listening.
+func (g *GasTown) renderStatusError(contentWidth int) string {
+	title := lipgloss.NewStyle().
+		Foreground(ui.BrightGold).
+		Bold(true).
+		Render(ui.SymTown + " Gas Town status unavailable")
+
+	detail := lipgloss.NewStyle().
+		Width(contentWidth).
+		Foreground(ui.Muted).
+		Render(g.statusErr.Error())
+
+	hint := "Check the orchestrator is reachable, then press ctrl+g again to retry."
+	switch g.statusErrBackend {
+	case gastown.BackendGasCity:
+		hint = "The Gas City supervisor did not answer. Check it is running, or point\n" +
+			"mg at it with MG_GC_API=<url> (MG_GC_API=auto reads ~/.gc/supervisor.log).\n" +
+			"Press ctrl+g again to retry."
+	case gastown.BackendGasTown:
+		hint = "The `gt` CLI did not answer. Check gt is installed and on PATH, and that\n" +
+			"this directory is inside a Gas Town workspace.\n" +
+			"Press ctrl+g again to retry."
+	}
+	hintBlock := lipgloss.NewStyle().
+		Width(contentWidth).
+		Foreground(ui.Muted).
+		Render(hint)
+
+	return lipgloss.JoinVertical(lipgloss.Left, title, "", detail, "", hintBlock)
 }
 
 // SetLoadingFrame sets the spinner glyph shown on the loading line while the
@@ -586,6 +633,12 @@ func (g *GasTown) renderContent() string {
 				Width(contentWidth).
 				Foreground(ui.Muted).
 				Render(spin + " Loading Gas Town status…")
+		}
+		// A failed fetch with no data to fall back on. Without this the panel
+		// dropped back to the loading/unavailable line and sat there forever,
+		// so an unreachable orchestrator was indistinguishable from a slow one.
+		if g.statusErr != nil {
+			return g.renderStatusError(contentWidth)
 		}
 		msg := ui.SymTown + " Gas Town not available"
 		if g.env.Available {

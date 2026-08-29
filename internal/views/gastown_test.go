@@ -2,6 +2,7 @@ package views
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -1509,5 +1510,69 @@ func TestGasTownMailMarkAllReadInMailSection(t *testing.T) {
 	msg := cmd().(GasTownActionMsg)
 	if msg.Type != ActionMailMarkAllRead {
 		t.Fatalf("expected mail_mark_all_read, got %s", msg.Type)
+	}
+}
+
+// TestGasTownRendersStatusError pins the fix for a panel that used to show its
+// loading line forever: when the orchestrator status fetch fails and there is
+// no status to fall back on, the panel must say so and name a remedy.
+func TestGasTownRendersStatusError(t *testing.T) {
+	tests := []struct {
+		name     string
+		backend  string
+		wantHint string
+	}{
+		{"gas city", gastown.BackendGasCity, "MG_GC_API"},
+		{"gas town", gastown.BackendGasTown, "gt is installed"},
+		{"unknown backend", "", "orchestrator is reachable"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewGasTown(80, 24)
+			g.SetStatusError(errors.New("connection refused"), tc.backend)
+
+			view := g.View()
+			if strings.Contains(view, "Loading Gas Town status") {
+				t.Error("still shows the loading line after a failed fetch")
+			}
+			if !strings.Contains(view, "unavailable") {
+				t.Errorf("view does not report the failure:\n%s", view)
+			}
+			if !strings.Contains(view, "connection refused") {
+				t.Errorf("view does not surface the underlying error:\n%s", view)
+			}
+			if !strings.Contains(view, tc.wantHint) {
+				t.Errorf("view missing hint %q:\n%s", tc.wantHint, view)
+			}
+		})
+	}
+}
+
+// TestGasTownStatusErrorClearedOnSuccess ensures a later good poll replaces the
+// error rather than leaving it stuck on screen.
+func TestGasTownStatusErrorClearedOnSuccess(t *testing.T) {
+	g := NewGasTown(80, 24)
+	g.SetStatusError(errors.New("connection refused"), gastown.BackendGasCity)
+	g.SetStatusError(nil, "")
+	g.SetStatus(&gastown.TownStatus{
+		Agents: []gastown.AgentRuntime{{Name: "obsidian", Role: "polecat", State: "working", Rig: "r"}},
+	}, gastown.Env{})
+
+	view := g.View()
+	if strings.Contains(view, "unavailable") {
+		t.Errorf("error state persisted after a successful status:\n%s", view)
+	}
+	if !strings.Contains(view, "obsidian") {
+		t.Errorf("view does not show the recovered roster:\n%s", view)
+	}
+}
+
+// TestGasTownLoadingStillShownWhileFetching keeps the spinner for the genuinely
+// slow case — gt status can take tens of seconds and must not read as an error.
+func TestGasTownLoadingStillShownWhileFetching(t *testing.T) {
+	g := NewGasTown(80, 24)
+	g.SetLoadingFrame("|")
+	if view := g.View(); !strings.Contains(view, "Loading Gas Town status") {
+		t.Errorf("expected the loading line while a fetch is in flight:\n%s", view)
 	}
 }

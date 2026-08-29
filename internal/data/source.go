@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -219,14 +220,50 @@ func FetchDoctorDiagnostics() (*DoctorResult, error) {
 	return &result, nil
 }
 
+// briefDepsUnsupported latches once this bd is known to reject --brief-deps, so
+// an older binary costs exactly one wasted probe per process rather than a
+// doubled subprocess call on every detail-panel open.
+var briefDepsUnsupported atomic.Bool
+
 // FetchIssueDetail runs `bd show <id> --long --json` and returns the enriched issue.
 // Returns fields not available from bd list: notes, design, acceptance_criteria.
 // The --long flag requests extended metadata (agent identity, gate fields, etc.).
+//
+// It also passes --brief-deps (bd v1.3.0+) when the binary accepts it. That flag
+// shrinks the inlined `dependencies` array, which matters here because mg parses
+// that array and then throws it away: `bd show` and `bd list` return DIFFERENT
+// dependency shapes — list returns the edge (`issue_id`/`depends_on_id`/`type`,
+// which is what data.Dependency models), while show inlines each dependency as a
+// whole issue plus `dependency_type`. None of show's keys match, so the decoded
+// Dependencies are empty structs, and SetRichDetail deliberately merges only
+// Notes/Design/AcceptanceCriteria. Upstream measured that array at 193 KB of a
+// 214 KB response, so this is a large saving on bytes mg never reads.
+//
+// Do NOT start merging rich.Dependencies without fixing the shape mismatch
+// first — it would overwrite real edges from bd list with blank ones.
 func FetchIssueDetail(issueID string) (*Issue, error) {
-	out, err := runWithTimeout(timeoutShort, "bd", "show", issueID, "--long", "--json")
+	args := []string{"show", issueID, "--long", "--json"}
+	if !briefDepsUnsupported.Load() {
+		out, err := runWithTimeout(timeoutShort, "bd", "show", issueID, "--long", "--brief-deps", "--json")
+		if err == nil {
+			return parseIssueDetail(out)
+		}
+		wrapped := wrapExitError("bd show", err)
+		if !strings.Contains(wrapped.Error(), "unknown flag") {
+			// A real failure, not a capability gap — don't retry and double the cost.
+			return nil, wrapped
+		}
+		briefDepsUnsupported.Store(true)
+	}
+	out, err := runWithTimeout(timeoutShort, "bd", args...)
 	if err != nil {
 		return nil, wrapExitError("bd show", err)
 	}
+	return parseIssueDetail(out)
+}
+
+// parseIssueDetail decodes the single-issue array `bd show --json` returns.
+func parseIssueDetail(out []byte) (*Issue, error) {
 	var issues []Issue
 	if err := json.Unmarshal(out, &issues); err != nil {
 		return nil, fmt.Errorf("bd show parse: %w", err)
