@@ -38,7 +38,12 @@ type Client struct {
 	nextID  atomic.Int64
 	pending sync.Map // map[int]chan response
 
-	eventsCh     chan CodexEvent
+	// eventBuffer sizes each Session's event channel.
+	eventBuffer int
+	// sessions maps a tools/call requestID to the Session that owns it, so
+	// readLoop can route each codex/event directly to its session instead of
+	// having every live session race for one shared channel.
+	sessions     sync.Map
 	eventsClosed atomic.Bool
 
 	serverReqCh chan ServerRequest
@@ -62,7 +67,9 @@ func WithClientVersion(v string) ClientOption {
 	return func(o *clientOptions) { o.clientVersion = v }
 }
 
-// WithEventBuffer sets the buffered channel size for event delivery. Defaults
+// WithEventBuffer sets the buffered channel size for each Session's event
+// delivery. Events are routed per-session by requestID, so this bounds how
+// many events one session may hold before the oldest is dropped. Defaults
 // to 64. A larger buffer reduces backpressure on the reader goroutine when the
 // consumer (e.g. BubbleTea) is slow to drain.
 func WithEventBuffer(n int) ClientOption {
@@ -91,7 +98,7 @@ func Dial(ctx context.Context, t Transport, opts ...ClientOption) (*Client, erro
 		t:           t,
 		dec:         json.NewDecoder(bufio.NewReader(t.Reader())),
 		w:           t.Writer(),
-		eventsCh:    make(chan CodexEvent, o.eventBuffer),
+		eventBuffer: o.eventBuffer,
 		serverReqCh: make(chan ServerRequest, 16),
 		done:        make(chan struct{}),
 	}
@@ -108,13 +115,6 @@ func Dial(ctx context.Context, t Transport, opts ...ClientOption) (*Client, erro
 		return nil, fmt.Errorf("notify initialized: %w", err)
 	}
 	return c, nil
-}
-
-// Events returns a receive channel of `codex/event` notifications. The channel
-// is closed when the client is shut down. Consumers must drain promptly or
-// risk the reader goroutine blocking; the buffer is sized via WithEventBuffer.
-func (c *Client) Events() <-chan CodexEvent {
-	return c.eventsCh
 }
 
 // ServerRequests returns a receive channel of server-initiated JSON-RPC requests
@@ -278,15 +278,24 @@ func marshalParams(params any) (json.RawMessage, error) {
 //   - request (id + method, e.g. elicitation/create) → server-initiated request,
 //     forwarded on serverReqCh.
 //   - response (id, no method) → routed to the matching pending channel.
-//   - notification named codex/event → decoded and forwarded on eventsCh.
+//   - notification named codex/event → decoded and routed to the owning
+//     Session by requestID (see routeEvent).
 //
 // Unknown notifications are dropped.
 func (c *Client) readLoop() {
 	defer func() {
 		if !c.eventsClosed.Swap(true) {
-			close(c.eventsCh)
 			close(c.serverReqCh)
 		}
+		// The transport is gone, so no further events can arrive. Close every
+		// live session's channel or a consumer ranging over Events() would
+		// block forever waiting on a stream that has ended.
+		c.sessions.Range(func(_, v any) bool {
+			if sess, ok := v.(*Session); ok {
+				sess.closeEvents()
+			}
+			return true
+		})
 		close(c.done)
 	}()
 	for {
@@ -320,10 +329,28 @@ func (c *Client) readLoop() {
 		case msg.Method == methodCodexEvent:
 			var ev CodexEvent
 			if err := json.Unmarshal(msg.Params, &ev); err == nil {
-				c.eventsCh <- ev
+				c.routeEvent(ev)
 			}
 		default:
 			// Unknown notification — drop.
 		}
+	}
+}
+
+// routeEvent delivers a codex/event to the session that issued the matching
+// tools/call. An event with no live session — one arriving after its session
+// terminated, or carrying an unknown requestID — is dropped.
+//
+// Routing by requestID here is what makes overlapping sessions safe. Sessions
+// used to each run a demuxer over one shared channel and discard events whose
+// requestID did not match, so a session that had not finished winding down
+// could swallow the next session's events.
+func (c *Client) routeEvent(ev CodexEvent) {
+	v, ok := c.sessions.Load(ev.Meta.RequestID)
+	if !ok {
+		return
+	}
+	if sess, ok := v.(*Session); ok {
+		sess.deliver(ev)
 	}
 }
