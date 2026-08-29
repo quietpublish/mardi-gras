@@ -54,7 +54,7 @@ func TestParseBdStderrEmpty(t *testing.T) {
 }
 
 func TestSchemaSkewHint(t *testing.T) {
-	// The literal message bd emits when the database is ahead of the binary.
+	// v65 is the accidental v1.2.0/v1.2.1 migration: the database is the problem.
 	err := errors.New("bd list --json: schema version mismatch: database is at v65, binary knows up to v53 (12 migrations ahead)")
 	got := SchemaSkewHint(err)
 	if got == "" {
@@ -65,6 +65,43 @@ func TestSchemaSkewHint(t *testing.T) {
 	}
 	if !strings.Contains(got, "BD_IGNORE_SCHEMA_SKEW=1") {
 		t.Errorf("SchemaSkewHint() = %q, want it to name the stopgap", got)
+	}
+}
+
+// TestSchemaSkewHintLegitimateMigration pins the case the old single-message
+// hint got backwards: bd v1.3.0 migrates v53 → v66 by design, so the database
+// is healthy and the BINARY is stale. Telling this user to roll the schema
+// cursor back would damage a correct upgrade.
+func TestSchemaSkewHintLegitimateMigration(t *testing.T) {
+	err := errors.New("bd list --json: schema version mismatch: database is at v66, binary knows up to v53 (13 migrations ahead)")
+	got := SchemaSkewHint(err)
+	if got == "" {
+		t.Fatal("SchemaSkewHint() = empty, want remediation text")
+	}
+	if !strings.Contains(got, "Upgrade THIS bd") {
+		t.Errorf("SchemaSkewHint(v66) = %q, want it to advise upgrading the binary forward", got)
+	}
+	if !strings.Contains(got, "Do NOT roll the schema cursor back") {
+		t.Errorf("SchemaSkewHint(v66) = %q, want it to warn against the rollback recovery", got)
+	}
+	// The rollback runbook must not be offered as the remedy here.
+	if strings.Contains(got, "  2. Roll the schema cursor back per") {
+		t.Errorf("SchemaSkewHint(v66) = %q, must not prescribe the v1.2.1 rollback", got)
+	}
+}
+
+// TestSchemaSkewHintUnknownVersion covers a message shape we cannot parse: keep
+// both remedies on screen rather than guessing one and being wrong.
+func TestSchemaSkewHintUnknownVersion(t *testing.T) {
+	err := errors.New("bd list --json: schema version mismatch (no version reported)")
+	got := SchemaSkewHint(err)
+	if got == "" {
+		t.Fatal("SchemaSkewHint() = empty, want remediation text")
+	}
+	for _, want := range []string{"v65", "v66", "RECOVERY-1.2.1.md"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("SchemaSkewHint(unparseable) = %q, want it to mention %q", got, want)
+		}
 	}
 }
 

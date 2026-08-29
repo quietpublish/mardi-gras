@@ -6,6 +6,8 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -197,23 +199,75 @@ func scrubPaths(s string) string {
 	return strings.Join(words, " ")
 }
 
+// accidentalSkewSchema is the schema version the accidental bd v1.2.0/v1.2.1
+// releases migrate a database to (v53 → v65). A database sitting at exactly
+// this version is the one case that wants a cursor ROLLBACK; anything higher is
+// a legitimate migration and wants the lagging binaries upgraded FORWARD.
+const accidentalSkewSchema = 65
+
+// schemaSkewVersionRe extracts the database's schema version from bd's mismatch
+// message, e.g. "database is at v65, binary knows up to v53".
+var schemaSkewVersionRe = regexp.MustCompile(`database is at v(\d+)`)
+
 // SchemaSkewHint returns remediation text when err carries bd's schema-version
-// mismatch signature, or "" for any other failure. The usual cause is the
-// accidental bd v1.2.0/v1.2.1 release, which migrates the local database from
-// schema v53 to v65; every other bd version then refuses to run against it, so
-// the generic "is the Dolt server running?" advice sends the user the wrong way.
+// mismatch signature, or "" for any other failure.
+//
+// Two different causes produce this error and they want OPPOSITE remedies, so
+// the hint keys on the database version bd reports:
+//
+//   - v65 — the accidental bd v1.2.0/v1.2.1 releases, which migrate v53 → v65
+//     without release testing. The database is the problem: roll the cursor back.
+//   - v66+ — a legitimate migration (bd v1.3.0 moves v53 → v66 on first run).
+//     The database is fine and the BINARY is stale: upgrade the lagging clients.
+//
+// Telling a v1.3.0 fleet to roll its schema back would corrupt a healthy
+// upgrade, which is why this is not one generic message.
 func SchemaSkewHint(err error) string {
 	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "schema version mismatch") {
 		return ""
 	}
-	return "This is a Beads schema skew, not a connection problem — the database is\n" +
-		"ahead of the bd binary reading it. It usually means bd v1.2.0 or v1.2.1 (both\n" +
-		"published by accident, untested) migrated the database on this machine.\n\n" +
+
+	const preamble = "This is a Beads schema skew, not a connection problem — the database is\n" +
+		"ahead of the bd binary reading it.\n\n"
+	const stopgap = "\nNeed bd right now? BD_IGNORE_SCHEMA_SKEW=1 is a documented stopgap.\n"
+
+	const rollback = "Cause: bd v1.2.0 or v1.2.1 (both published by accident, untested) migrated\n" +
+		"this database from schema v53 to v65.\n\n" +
 		"  1. Upgrade every bd install/clone to v1.2.2+ FIRST — a leftover v1.2.1\n" +
 		"     binary will silently re-migrate the database.\n" +
 		"  2. Roll the schema cursor back per docs/RECOVERY-1.2.1.md in the beads repo:\n" +
-		"     https://github.com/gastownhall/beads/blob/v1.2.2/docs/RECOVERY-1.2.1.md\n\n" +
-		"Need bd right now? BD_IGNORE_SCHEMA_SKEW=1 is a documented stopgap.\n"
+		"     https://github.com/gastownhall/beads/blob/v1.2.2/docs/RECOVERY-1.2.1.md\n"
+
+	const upgradeForward = "Cause: this database has been migrated by a NEWER bd than the one running\n" +
+		"here — bd v1.3.0 moves the schema v53 → v66 on first use. The database is\n" +
+		"fine; this binary is behind.\n\n" +
+		"  1. Upgrade THIS bd to match the newest one touching the store.\n" +
+		"  2. Upgrade every other install/clone sharing it — bd's forward skew guard\n" +
+		"     means a mixed-version fleet is a broken fleet.\n\n" +
+		"Do NOT roll the schema cursor back: that recovery is for the accidental\n" +
+		"v1.2.0/v1.2.1 releases (which land at v65), not for a healthy upgrade.\n"
+
+	// An unparseable version keeps both remedies on screen rather than guessing.
+	const ambiguous = "Two different causes produce this, and they want opposite fixes:\n\n" +
+		"  • Database at v65 — the accidental bd v1.2.0/v1.2.1 releases migrated it.\n" +
+		"    Upgrade every install to v1.2.2+, then roll the cursor back per\n" +
+		"    https://github.com/gastownhall/beads/blob/v1.2.2/docs/RECOVERY-1.2.1.md\n" +
+		"  • Database at v66 or higher — a newer bd (v1.3.0+) migrated it legitimately.\n" +
+		"    Upgrade this bd and every clone sharing the store. Do NOT roll back.\n\n" +
+		"Check the version in the message above to tell which applies.\n"
+
+	m := schemaSkewVersionRe.FindStringSubmatch(err.Error())
+	if len(m) != 2 {
+		return preamble + ambiguous + stopgap
+	}
+	dbVersion, convErr := strconv.Atoi(m[1])
+	if convErr != nil {
+		return preamble + ambiguous + stopgap
+	}
+	if dbVersion == accidentalSkewSchema {
+		return preamble + rollback + stopgap
+	}
+	return preamble + upgradeForward + stopgap
 }
 
 // wrapExitError extracts a readable error from an exec.ExitError's stderr,
