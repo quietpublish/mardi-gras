@@ -300,12 +300,10 @@ func TestContractEpicWithChildren(t *testing.T) {
 	if epic.ParentID() != "" {
 		t.Error("epic should have no parent")
 	}
-	assertIntEqual(t, "epic.NestingDepth", epic.NestingDepth(), 0)
 
 	child1 := issues[1]
 	assertEqual(t, "child1.ID", child1.ID, "proj-100.1")
 	assertEqual(t, "child1.ParentID", child1.ParentID(), "proj-100")
-	assertIntEqual(t, "child1.NestingDepth", child1.NestingDepth(), 1)
 
 	child2 := issues[2]
 	assertEqual(t, "child2.ID", child2.ID, "proj-100.2")
@@ -314,7 +312,6 @@ func TestContractEpicWithChildren(t *testing.T) {
 	grandchild := issues[3]
 	assertEqual(t, "grandchild.ID", grandchild.ID, "proj-100.2.1")
 	assertEqual(t, "grandchild.ParentID", grandchild.ParentID(), "proj-100.2")
-	assertIntEqual(t, "grandchild.NestingDepth", grandchild.NestingDepth(), 2)
 }
 
 func TestContractMinimalIssue(t *testing.T) {

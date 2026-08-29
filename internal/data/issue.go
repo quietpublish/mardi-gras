@@ -275,12 +275,6 @@ func (i *Issue) ParentID() string {
 	return i.ID[:idx]
 }
 
-// NestingDepth returns how many dots appear in the issue ID.
-// "mg-007" → 0, "mg-007.2" → 1, "mg-007.2.1" → 2.
-func (i *Issue) NestingDepth() int {
-	return strings.Count(i.ID, ".")
-}
-
 // ParentRelationshipDepth returns the number of loaded parent-child ancestors.
 // Missing parents and cycles stop the walk so an issue is never indented under
 // an unrelated visible row.
