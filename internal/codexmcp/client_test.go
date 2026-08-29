@@ -247,12 +247,18 @@ func TestCallContextCancel(t *testing.T) {
 	}
 }
 
-func TestEventsRoutedToClientChannel(t *testing.T) {
+func TestEventsRoutedToOwningSession(t *testing.T) {
 	c, fs := newFakeServer(t)
-	go fs.SendEvent(1, "thread-A", `{"type":"agent_message","message":"hello"}`)
+	// StartSession takes requestID 1 from the shared counter, so an event
+	// stamped with requestId 1 belongs to it.
+	sess, err := c.StartSession(context.Background(), SessionOptions{Prompt: "hi"})
+	if err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+	go fs.SendEvent(sess.reqID, "thread-A", `{"type":"agent_message","message":"hello"}`)
 	select {
-	case ev := <-c.Events():
-		if ev.Meta.RequestID != 1 || ev.Meta.ThreadID != "thread-A" {
+	case ev := <-sess.Events():
+		if ev.Meta.RequestID != sess.reqID || ev.Meta.ThreadID != "thread-A" {
 			t.Fatalf("bad meta: %+v", ev.Meta)
 		}
 		if ev.EventType() != "agent_message" {
@@ -270,16 +276,50 @@ func TestEventsRoutedToClientChannel(t *testing.T) {
 	}
 }
 
+// TestEventsNotDeliveredToForeignSession pins the routing guarantee that fixes
+// the TestReplyRotatesSession flake: an event addressed to one session must
+// never be consumed by another. Sessions previously each demuxed the same
+// shared channel and silently discarded what did not match, so a session still
+// winding down could swallow the next session's events.
+func TestEventsNotDeliveredToForeignSession(t *testing.T) {
+	c, fs := newFakeServer(t)
+	first, err := c.StartSession(context.Background(), SessionOptions{Prompt: "one"})
+	if err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+	second, err := c.StartSession(context.Background(), SessionOptions{Prompt: "two"})
+	if err != nil {
+		t.Fatalf("StartSession 2: %v", err)
+	}
+	// Address the event to the SECOND session while the first is still live.
+	go fs.SendEvent(second.reqID, "thread-B", `{"type":"agent_message","message":"for-second"}`)
+
+	select {
+	case ev := <-second.Events():
+		if ev.Meta.RequestID != second.reqID {
+			t.Fatalf("second session got requestID %d, want %d", ev.Meta.RequestID, second.reqID)
+		}
+	case ev := <-first.Events():
+		t.Fatalf("first session swallowed an event addressed to the second: %+v", ev.Meta)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout — event reached neither session")
+	}
+}
+
 func TestUnknownNotificationIsDropped(t *testing.T) {
 	c, fs := newFakeServer(t)
+	sess, err := c.StartSession(context.Background(), SessionOptions{Prompt: "hi"})
+	if err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
 	fs.SendRaw(map[string]any{
 		"jsonrpc": "2.0",
 		"method":  "notifications/cancelled",
-		"params":  map[string]any{"requestId": 99},
+		"params":  map[string]any{"requestId": sess.reqID},
 	})
-	fs.SendEvent(2, "t", `{"type":"task_started"}`)
+	fs.SendEvent(sess.reqID, "t", `{"type":"task_started"}`)
 	select {
-	case ev := <-c.Events():
+	case ev := <-sess.Events():
 		if ev.EventType() != "task_started" {
 			t.Fatalf("got %q — was the unknown notification leaked?", ev.EventType())
 		}

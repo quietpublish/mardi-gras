@@ -46,6 +46,11 @@ type Session struct {
 	stop      chan struct{}
 	stopOnce  sync.Once
 	closeOnce sync.Once
+
+	// evMu guards delivery into events against closeEvents, so the client's
+	// readLoop can never send on a channel a terminating session just closed.
+	evMu     sync.Mutex
+	evClosed bool
 }
 
 // SessionResult is the terminal outcome of a session.
@@ -104,7 +109,7 @@ func (c *Client) startToolSession(ctx context.Context, toolName string, args map
 
 	s := &Session{
 		client:     c,
-		events:     make(chan CodexEvent, 128),
+		events:     make(chan CodexEvent, c.eventBuffer),
 		done:       make(chan SessionResult, 1),
 		cancelFunc: cancel,
 		stop:       make(chan struct{}),
@@ -128,14 +133,19 @@ func (c *Client) startToolSession(ctx context.Context, toolName string, args map
 		Method:  methodToolsCall,
 		Params:  rawParams,
 	}
+	// Register BEFORE writing: the server can emit a codex/event for this
+	// request as soon as it reads it, and readLoop drops any event with no
+	// live session. Registering afterwards loses events to a fast server.
+	c.sessions.Store(id, s)
+
 	if err := c.writeJSON(req); err != nil {
+		c.sessions.Delete(id)
 		c.pending.Delete(id)
-		close(s.events) // safe — demuxer never started
+		close(s.events) // safe — nothing was ever routed here
 		cancel()
 		return nil, fmt.Errorf("write tools/call: %w", err)
 	}
 
-	go s.demuxEvents()
 	go s.awaitResponse(callCtx, respCh)
 	return s, nil
 }
@@ -187,55 +197,32 @@ func (s *Session) signalStop() {
 	s.stopOnce.Do(func() { close(s.stop) })
 }
 
-// closeEvents closes the consumer-facing events channel. Called only after
-// demuxEvents has exited.
+// closeEvents closes the consumer-facing events channel. Buffered events
+// already delivered stay readable afterwards, which is what lets a consumer
+// still see a final agent_message emitted just before the tool response.
 func (s *Session) closeEvents() {
-	s.closeOnce.Do(func() { close(s.events) })
+	s.evMu.Lock()
+	defer s.evMu.Unlock()
+	s.closeOnce.Do(func() {
+		s.evClosed = true
+		close(s.events)
+	})
 }
 
-// demuxEvents forwards events whose requestId matches this session. It exits
-// when the client's events channel closes or stop is signaled — but before
-// honoring stop it drains any events already buffered in the client channel,
-// so events that arrived just before the tool response (a normal sequence:
-// codex emits agent_message then the tools/call result) are not lost when
-// awaitResponse's defer signals stop.
-func (s *Session) demuxEvents() {
-	defer s.closeEvents()
-	for {
-		select {
-		case ev, ok := <-s.client.Events():
-			if !ok {
-				return
-			}
-			s.forward(ev)
-		case <-s.stop:
-			s.drainAndExit()
-			return
-		}
-	}
-}
-
-// drainAndExit non-blockingly reads remaining events from the client and
-// forwards them, then returns. Caller is responsible for the closeEvents
-// defer.
-func (s *Session) drainAndExit() {
-	for {
-		select {
-		case ev, ok := <-s.client.Events():
-			if !ok {
-				return
-			}
-			s.forward(ev)
-		default:
-			return
-		}
-	}
-}
-
-// forward filters an event by requestID and pushes it to s.events with
-// drop-oldest behavior on buffer pressure.
-func (s *Session) forward(ev CodexEvent) {
-	if ev.Meta.RequestID != s.reqID {
+// deliver pushes an event to this session's consumer channel with drop-oldest
+// behavior on buffer pressure. It is called from the client's readLoop, which
+// has already routed the event here by requestID.
+//
+// Delivery is serialized with closeEvents under evMu so a session terminating
+// concurrently can never cause a send on a closed channel. Because readLoop is
+// a single goroutine processing messages in wire order, an event emitted just
+// before the tool response (codex's normal `agent_message` then result
+// sequence) is always buffered here before awaitResponse can observe the
+// response — so it survives the close and is still readable afterwards.
+func (s *Session) deliver(ev CodexEvent) {
+	s.evMu.Lock()
+	defer s.evMu.Unlock()
+	if s.evClosed {
 		return
 	}
 	s.setThreadID(ev.Meta.ThreadID)
@@ -254,7 +241,13 @@ func (s *Session) forward(ev CodexEvent) {
 }
 
 func (s *Session) awaitResponse(ctx context.Context, respCh chan response) {
-	defer s.signalStop()
+	defer func() {
+		// Unregister before closing so readLoop stops routing here, then close
+		// so consumers ranging over Events() terminate.
+		s.client.sessions.Delete(s.reqID)
+		s.closeEvents()
+		s.signalStop()
+	}()
 	select {
 	case <-ctx.Done():
 		s.client.pending.Delete(s.reqID)
