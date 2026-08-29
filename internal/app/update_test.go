@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/matt-wright86/mardi-gras/internal/components"
 	"github.com/matt-wright86/mardi-gras/internal/data"
+	"github.com/matt-wright86/mardi-gras/internal/gastown"
 )
 
 // ---------------------------------------------------------------------------
@@ -268,6 +269,12 @@ func TestBuildPaletteCommandsGasTown(t *testing.T) {
 	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	got := model.(Model)
+
+	// Pin the Gas Town driver explicitly. New() picks a driver from the ambient
+	// environment, so on a host with gc installed and no gt this model would
+	// otherwise carry a Gas City driver, which correctly gates the gt-only
+	// commands off and makes the assertion below fail for the wrong reason.
+	got.driver = gastown.NewGTDriver()
 
 	// Baseline without Gas Town.
 	got.gtEnv.Available = false

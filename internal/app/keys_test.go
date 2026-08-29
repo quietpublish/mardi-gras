@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/matt-wright86/mardi-gras/internal/components"
 	"github.com/matt-wright86/mardi-gras/internal/data"
+	"github.com/matt-wright86/mardi-gras/internal/gastown"
 )
 
 // ---------------------------------------------------------------------------
@@ -25,6 +26,10 @@ func setupModel(t *testing.T) Model {
 	}
 	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
 	m.startedAt = time.Now().Add(-time.Second) // bypass startup guard
+	// Pin the Gas Town driver so key handling does not depend on what is
+	// installed on the host: New() selects by environment, and a Gas City
+	// driver makes orchestrator keys live even with gtEnv.Available false.
+	m.driver = gastown.NewGTDriver()
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	return model.(Model)
 }

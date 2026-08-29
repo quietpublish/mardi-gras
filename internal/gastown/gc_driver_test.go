@@ -242,14 +242,58 @@ func TestGCParseSupervisorLog(t *testing.T) {
 	}
 }
 
+// TestSelectDriver covers the one branch of the public entry point that does
+// not depend on what is installed on the host: an explicit MG_GC_API.
+//
+// The unset case is deliberately NOT asserted here. SelectDriver() calls
+// Detect(), so its answer legitimately varies with the machine — on a host with
+// gc installed and no gt it is now "gascity", which is the whole point of the
+// evidence precedence. Those rules are pinned deterministically in
+// TestSelectDriverPrefersEvidence, which injects the environment instead.
 func TestSelectDriver(t *testing.T) {
-	t.Setenv(EnvGCAPI, "")
-	if d := SelectDriver(); d.Backend() != "gastown" {
-		t.Errorf("without %s: Backend() = %q, want gastown", EnvGCAPI, d.Backend())
-	}
 	t.Setenv(EnvGCAPI, "http://127.0.0.1:8080")
 	if d := SelectDriver(); d.Backend() != "gascity" {
 		t.Errorf("with %s: Backend() = %q, want gascity", EnvGCAPI, d.Backend())
+	}
+}
+
+// TestSelectDriverPrefersEvidence pins the precedence rules. Before this,
+// SelectDriver branched on MG_GC_API alone, so a user inside a real Gas City
+// workspace with gc on PATH and no gt installed got a Gas Town driver that
+// shelled out to a binary that was not there — while mg had already computed
+// the evidence in detect.go and never read it.
+func TestSelectDriverPrefersEvidence(t *testing.T) {
+	t.Setenv(EnvGCAPI, "")
+	t.Setenv(EnvGCCity, "")
+
+	cases := []struct {
+		name string
+		env  Env
+		want string
+	}{
+		{"no evidence at all falls back to gastown", Env{}, "gastown"},
+		{"gt on PATH wins", Env{Available: true, GCAvailable: true, GCCityPath: "/tmp/city"}, "gastown"},
+		{"inside a Gas Town session wins", Env{Active: true, GCCityPath: "/tmp/city"}, "gastown"},
+		{"gc on PATH, no gt evidence", Env{GCAvailable: true}, "gascity"},
+		{"city.toml above cwd, no gt evidence", Env{GCCityPath: "/tmp/city"}, "gascity"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := selectDriver(tc.env).Backend(); got != tc.want {
+				t.Errorf("selectDriver(%+v).Backend() = %q, want %q", tc.env, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestSelectDriverExplicitAPIOutranksGasTownEvidence keeps MG_GC_API as the
+// operator's override: naming a supervisor must win even inside a Gas Town rig.
+func TestSelectDriverExplicitAPIOutranksGasTownEvidence(t *testing.T) {
+	t.Setenv(EnvGCAPI, "http://127.0.0.1:8080")
+	t.Setenv(EnvGCCity, "")
+	env := Env{Available: true, Active: true}
+	if got := selectDriver(env).Backend(); got != "gascity" {
+		t.Errorf("with %s set: Backend() = %q, want gascity", EnvGCAPI, got)
 	}
 }
 
