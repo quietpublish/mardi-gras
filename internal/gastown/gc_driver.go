@@ -731,7 +731,16 @@ func (d *GCDriver) ConvoyClose(ctx context.Context, convoyID string) error {
 // See the operation support matrix in
 // docs/internal/gascity-integration-design.md §6.3.
 
-func (*GCDriver) Comments(context.Context, string) ([]Comment, error) { return nil, ErrUnsupported }
+// Comments is NOT an orchestrator operation, despite sitting on this interface:
+// FetchComments shells out to `bd comments`, which is a Beads call and works
+// identically whichever orchestrator is running. Returning ErrUnsupported here
+// cost Gas City users the entire comments panel for data they still had.
+//
+// It stays on Driver for now because that is where the caller reaches for it;
+// the tidier home is internal/data alongside mg's other bd calls.
+func (*GCDriver) Comments(_ context.Context, issueID string) ([]Comment, error) {
+	return FetchComments(issueID)
+}
 
 func (*GCDriver) Unsling(context.Context, string) error { return ErrUnsupported }
 
