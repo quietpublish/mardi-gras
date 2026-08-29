@@ -15,7 +15,9 @@ If you are behind, upgrade (`brew upgrade mardi-gras`, or grab the latest binary
 
 Please report security vulnerabilities through [GitHub's private security advisory feature](https://github.com/quietpublish/mardi-gras/security/advisories/new).
 
-Do not open a public issue for security vulnerabilities. If the advisory link above is unavailable to you, open a public issue containing **no details** — just say you have a security report and need a private channel — and a maintainer will open one.
+Private vulnerability reporting is enabled on this repository, so that link works for anyone with a GitHub account — you do not need write access.
+
+Do not open a public issue for security vulnerabilities.
 
 ### What to include
 
