@@ -2,6 +2,20 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.31.0 (2026-08-29)
+
+A community release: the first outside bug report and the first outside code contribution both land here.
+
+### Fixed
+- **Parade indentation follows real parent-child relationships, not dotted IDs** ([#104](https://github.com/quietpublish/mardi-gras/pull/104), fixing [#102](https://github.com/quietpublish/mardi-gras/issues/102)) — mg indented rows by counting dots in the issue ID, so an issue reparented to the top level while keeping its hierarchical ID stayed indented, appearing to be a child of whatever unrelated row happened to sit above it. Indentation now walks the current `parent-child` dependency chain, stopping at a missing parent or a cycle so a row is never nested under an ancestor mg cannot see. Reported by [@dcaixinha](https://github.com/dcaixinha), fixed by [@pttydou](https://github.com/pttydou).
+
+### Changed
+- **Go dependencies and GitHub Actions updated** ([#109](https://github.com/quietpublish/mardi-gras/pull/109)) — bubbletea 2.0.6 → 2.0.9, lipgloss 2.0.3 → 2.0.6, bubbles 2.1.0 → 2.2.1, oapi-codegen/runtime 1.4.1 → 1.5.0, sahilm/fuzzy 0.1.2 → 0.1.3; checkout, setup-go and codecov-action all v6 → v7. Transitively this moves go-runewidth 0.0.23 → 0.0.27 and x/ansi 0.11.7 → 0.11.8 — the libraries behind the single-row toast truncation added in v0.30.1 — so that path was re-verified by rendering rather than assumed from a green build.
+- **`Issue.NestingDepth` removed.** The indentation fix above left it with no production caller. `Issue.ParentID` remains, since the detail panel's epic progress still parses dotted IDs.
+
+### Known issues
+- **Cross-section nesting and collapse/expand are not addressed** ([#110](https://github.com/quietpublish/mardi-gras/issues/110)) — when a parent and child fall in different parade sections, the child is still indented beneath whatever precedes it in its own section. This predates [#104](https://github.com/quietpublish/mardi-gras/pull/104); `main` behaved identically with dotted IDs. The collapse/expand keybinding requested in [#102](https://github.com/quietpublish/mardi-gras/issues/102) is also still open, as is the same ID-shape assumption in the detail panel's epic progress count.
+
 ## v0.30.1 (2026-08-29)
 
 A correctness release out of an upstream check: six fixes, then a documentation audit that found a seventh bug and a broken security-disclosure path.
