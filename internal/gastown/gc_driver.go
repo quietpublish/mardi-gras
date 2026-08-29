@@ -17,11 +17,15 @@ import (
 // generated gcclient package instead of shelling out to a CLI.
 //
 // The read path (roster), mail, formulas, sling, nudge/decommission, convoys,
-// and assign are implemented. What remains ErrUnsupported is either absent from
-// the supervisor API (comments, unsling, cascade close, convoy land/watch, the
-// molecule DAG trio) or gt-only by nature (vitals/costs/patrol, plus the
-// gt-shaped recovery/handoff/activity features declared on the Feature enum) —
-// callers hide those rather than surfacing an error.
+// assign, and comments are implemented. What remains ErrUnsupported is either
+// absent from the supervisor API (unsling, cascade close, convoy
+// land/watch/unwatch, the molecule DAG trio) or gt-only by nature
+// (vitals/costs/patrol, plus the gt-shaped recovery/handoff/activity features
+// declared on the Feature enum) — callers hide those rather than surfacing an
+// error.
+//
+// Comments is the odd one out: it is on the Driver interface but is a Beads
+// call (`bd comments`), so it works on every backend. See Comments below.
 type GCDriver struct {
 	baseURL string
 	city    string // optional pin; "" = resolve the first running city
@@ -724,12 +728,13 @@ func (d *GCDriver) ConvoyClose(ctx context.Context, convoyID string) error {
 
 // --- unsupported operations -------------------------------------------------
 //
-// These either have no Gas City endpoint (Unsling, ConvoyLand/Watch/Unwatch),
-// require semantic mappings that need validation against a live `gc`
-// (Sling needs a required `target` mg's flow doesn't supply; convoys are
-// modeled as beads), or have no equivalent at all (Vitals/Costs/PatrolScan).
-// See the operation support matrix in
-// docs/internal/gascity-integration-design.md §6.3.
+// These either have no Gas City endpoint (Unsling, CascadeClose,
+// ConvoyLand/Watch/Unwatch, the Molecule trio) or have no equivalent at all
+// (Vitals/Costs/PatrolScan). Sling is NOT in this set — it is implemented, and
+// mg prompts for the target the endpoint requires.
+//
+// The user-facing support matrix lives in docs/gascity.md and is derived from
+// the methods below; keep the two in step when a driver method changes.
 
 // Comments is NOT an orchestrator operation, despite sitting on this interface:
 // FetchComments shells out to `bd comments`, which is a Beads call and works

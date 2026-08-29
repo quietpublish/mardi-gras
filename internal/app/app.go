@@ -391,17 +391,16 @@ func (m Model) startPollImmediate() tea.Cmd {
 }
 
 // orchestratorAvailable reports whether mg has a reachable orchestrator — Gas
-// Town (`gt` on PATH) or the Gas City HTTP driver (selected when MG_GC_API is
-// set). It gates the agent control surface. Because it's true whenever
-// gtEnv.Available is true, existing Gas Town behavior is unchanged; it only
-// additionally lights up the panel on a pure-Gas-City box with no `gt`.
+// Town (`gt` on PATH) or the Gas City HTTP driver (see SelectDriver for how the
+// backend is chosen). It gates the agent control surface. Because it's true
+// whenever gtEnv.Available is true, existing Gas Town behavior is unchanged; it
+// only additionally lights up the panel on a pure-Gas-City box with no `gt`.
 func (m Model) orchestratorAvailable() bool {
 	return m.gtEnv.Available || m.driver.Backend() == "gascity"
 }
 
-// gasTownLoading reports whether the Gas Town panel is open and still waiting
-// on its first status fetch — the window during which the loading spinner runs.
-// gasTownLoading reports whether the panel should animate its loading line.
+// gasTownLoading reports whether the Gas Town panel is open and still waiting on
+// a status fetch — the window during which the loading spinner runs.
 //
 // The townStatusErr term matters: without it this is true whenever the panel is
 // open with no status, so a backend that already failed kept spinning forever

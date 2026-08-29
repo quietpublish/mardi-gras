@@ -20,8 +20,8 @@ Stalled issues show a "next blocker" hint so you can see at a glance what's hold
 Press `enter` on any issue to focus the detail pane. It shows everything about the selected issue:
 
 - **Metadata** — type, priority, assignee, due dates with overdue/due-soon badges
-- **Rich fields** — notes, design, and acceptance criteria fetched on demand via `bd show --long`
-- **Dependencies** — nine types (blocks, conditional-blocks, blocked-by, related, duplicates, supersedes, parent-child, discovered-from, depends-on) grouped by status: waiting, missing, resolved, and non-blocking
+- **Rich fields** — notes, design, and acceptance criteria fetched on demand via `bd show --long --json`. mg adds `--brief-deps` (bd v1.3.0+) to trim a large dependency payload it never reads; a bd that rejects the flag is detected once per process and the call falls back to the plain form
+- **Dependencies** — grouped by status: waiting, missing, resolved, and non-blocking. mg does not hard-code a list of dependency types; whatever `bd` emits is rendered. The types named by `--block-types` (default `blocks` and `conditional-blocks`) count as blockers, and the rest render as non-blocking, with friendly wording for `related`, `duplicates`, `supersedes`, `parent-child`, `discovered-from`, `waits-for`, and `replies-to`
 - **Comments & Timeline** — full conversation history with timestamps
 - **Agent Output** — live tail of the active agent's tmux pane (last 15 lines, ANSI stripped)
 - **Molecule DAG** — multi-step workflows rendered as a visual flow graph with parallel branching (`┌─ ├─ └─`) and connector lines between tiers
@@ -34,21 +34,26 @@ Press `/` and the bottom bar becomes a query input.
 
 - `enter`: keep the query applied and return to list navigation.
 - `esc`: clear the query and exit filter mode.
-- Multiple terms use `AND` semantics (all terms must match).
+- Structured tokens use `AND` semantics — every one of them must match.
+- The right of the bar shows a live `N/M match` count as the query narrows.
 
 Supported query forms:
 
-- Free text: `deploy auth` (matches ID, title, description, assignee, owner, notes, and labels)
-- Type token: `type:bug`, `type:feature`, `type:task`, `type:chore`, `type:epic`
+- Free text: `deploy auth` — a fuzzy, case-insensitive **subsequence** match over ID + title + description + assignee + owner + notes + labels, joined into one haystack per issue. Results are ranked by match quality.
+- Type token: `type:bug`, `type:feature`, `type:task`, `type:chore`, `type:epic`, `type:spike`, `type:story`, `type:milestone`
+- Label token: `label:gt:agent` (case-insensitive, exact match on one of the issue's labels)
 - Priority shorthand: `p0` to `p4`
 - Priority token: `priority:0` to `priority:4`, or `priority:critical|high|medium|low|backlog`
+
+Anything that isn't one of those prefixes (or a `p0`–`p4` shorthand) is free text. Free-text words are **not** ANDed independently — they are joined back into a single fuzzy pattern, so word order matters: `deploy auth` and `auth deploy` are different queries.
 
 Examples:
 
 ```text
 type:feature p1 deploy
 priority:high auth
-type:feature p0 auth deploy     ← matches P0 features containing "auth" AND "deploy"
+label:gt:agent p0
+type:feature p0 auth deploy     ← P0 features fuzzy-matching "auth deploy", in that order
 vv-006
 ```
 
@@ -77,6 +82,9 @@ Press `:` or `Ctrl+K` to open a fuzzy-match command palette. Type to filter avai
 - **Add note** — append a note to the selected issue via `bd note`
 - **Claim next ready** — atomically claim the top-priority ready bead via `bd ready --claim --json` (requires bd v1.0.4+)
 - **Prune preview / Prune closed > 30d** — dry-run or force-delete closed non-ephemeral beads older than 30 days via `bd prune` (requires bd v1.1+)
-- **Create & assign to crew** — open the issue create form with the Gas Town crew field (requires Gas Town)
-- **Cascade close** — close an issue and all its children (requires Gas Town v0.11+)
+- **Create & assign to crew** — open the issue create form with the crew field (requires an orchestrator; works on both Gas Town and Gas City)
+- **Cascade close** — close an issue and all its children (Gas Town only — Gas City reports the operation as unsupported)
+- **Cycle layout** — rotate through the Default / Gas Town / Wide panel arrangements
+- **Recover dead rigs** — release orphans from a dead rig (Gas Town only, and only listed while a dead rig is actually detected)
+- **Resume last Codex session** — `codex resume --last` in a new tmux pane (only when Codex is the active runtime inside tmux)
 - All keybinding actions (close, set priority, sling, nudge, etc.)

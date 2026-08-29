@@ -39,7 +39,7 @@ func main() {
 	showVersion := flag.Bool("version", false, "Print version and exit")
 	noAnimations := flag.Bool("no-animations", false, "Disable confetti and header shimmer animations")
 	cmdTimeout := flag.Int("cmd-timeout", 0, "Command timeout in seconds (scales all external command timeouts; default 30)")
-	agentRuntime := flag.String("agent", "", "Preferred agent runtime: claude or cursor (default: claude if available, else cursor)")
+	agentRuntime := flag.String("agent", "", "Preferred agent runtime: claude, cursor, or codex (default: first on PATH — claude, then cursor, then codex)")
 	themeFlag := flag.String("theme", "", "Color theme: auto, dark, or light (default: MG_THEME env or auto)")
 	flag.Parse()
 

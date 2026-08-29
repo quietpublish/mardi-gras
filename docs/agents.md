@@ -20,7 +20,7 @@ MG_AGENT_RUNTIME=claude mg        # force claude even if you have other tools in
 
 Accepted values are `claude`, `cursor` (or `cursor-agent`), and `codex`. The override is honored only if the matching binary is on PATH — if you request a runtime that isn't installed, mg falls back to the default detection order rather than failing silently. Unknown values are ignored.
 
-The override applies only to mg's local launch path. When Gas Town is available, the `a` key dispatches through `gt sling` and the runtime is chosen by the Gas Town formula (see [Gas Town docs](https://github.com/steveyegge/gastown)). Gas Town v1.1.0+ has first-class codex support via `gt sling --agent codex`; configure the default in your formula or pass it manually until mg's gt-sling integration follows.
+The override applies only to mg's local launch path. When an orchestrator is available, the `a` key dispatches through it (`gt sling`, or the Gas City sling endpoint) and the runtime is chosen by the formula (see [Gas Town docs](https://github.com/gastownhall/gastown)). Gas Town v1.1.0+ has first-class codex support via `gt sling --agent codex`, and mg propagates that automatically — see [Gas Town routing for Codex](#gas-town-routing-for-codex) below.
 
 ## Codex specifics
 
@@ -32,7 +32,13 @@ A few practical gotchas:
 - **Project trust**: codex prompts to trust a directory the first time it sees one. For unattended tmux dispatch, either run codex interactively in the project once (it'll remember in `[projects."<path>"]`), or pre-trust by editing `~/.codex/config.toml`.
 - **nvm-installed codex**: if you installed codex via `npm install -g @openai/codex` under nvm, mg inherits PATH from the shell that launches it — make sure the right Node version is active (e.g. `nvm use 22`) before starting mg, or codex won't resolve. Separately, openai/codex#20906 documents a sandbox-PATH bug specific to nvm installs that can be worked around with `--add-dir $NVM_PATH`; consider a standalone or Homebrew install if you hit it.
 - **AGENTS.md**: codex automatically reads `AGENTS.md` from the project root (and merges with `~/.codex/AGENTS.md`). Keep build/test/convention guidance in `AGENTS.md` — mg's prompt focuses on the specific Beads issue and lets codex pick up project context from the file.
-- **Beads integration on Homebrew bd v1.0.4**: bd's `codex-hook` subcommand (which injects Beads context into codex sessions) shipped on bd main but is missing from the v1.0.4 release (steveyegge/beads#3924). Until v1.0.5 cuts, codex with bd-installed hooks will log "unknown command 'codex-hook'" once per prompt. This is cosmetic for the agent's work but worth knowing.
+- **Beads integration on bd v1.0.4**: bd's `codex-hook` subcommand (which injects Beads context into codex sessions) shipped on bd main but was missing from the v1.0.4 release ([gastownhall/beads#3924](https://github.com/gastownhall/beads/issues/3924)), so codex with bd-installed hooks logs "unknown command 'codex-hook'" once per prompt. Cosmetic for the agent's work, and only relevant if you are pinned to that old release — bd has since moved on to the v1.2.x line.
+
+### In-app transcript (`M`)
+
+`M` on a selected issue opens a live Codex transcript in place of the detail pane. Unlike `a`, this path does not use tmux at all — mg spawns `codex mcp-server`, performs the MCP handshake, and streams the session's events (agent messages, exec commands, tool calls, patches, errors) straight into the panel. It needs `codex` on `PATH`; without it the launch reports the runtime as unavailable.
+
+Because a human is watching, `M` launches with approval policy `on-request` (the tmux and orchestrator paths use `never`), so exec and apply-patch approvals surface as a modal inside mg — `j`/`k` to choose, `enter` to confirm. Press `r` with the transcript open to send a follow-up prompt into the running session, and `M` again to close it.
 
 ### Resuming a prior Codex session
 
@@ -42,17 +48,22 @@ When codex is the active runtime inside tmux, the command palette (`:` or `Ctrl+
 
 When Gas Town is on PATH and `MG_AGENT_RUNTIME=codex` (or `--agent codex`) is active, mg's sling commands pass `--agent codex` to `gt sling`, so the agent preference propagates from mg into Gas Town. Requires gt v1.1.0+ (earlier versions reject the `--agent` flag). For `claude` / `cursor-agent`, mg continues to let gt pick its default agent — the v0.19.0 behavior is unchanged.
 
+The Gas City backend does not carry the override: its sling endpoint is addressed by target agent rather than by runtime, so mg prompts for a target (`sling to>`) and leaves the runtime to the city.
+
 ## Tmux-native dispatch (multi-agent)
 
-When running inside tmux, agents launch in **new tmux windows** instead of suspending the TUI. This means:
+When running inside tmux, agents launch in **new tmux panes** instead of suspending the TUI. mg runs `tmux split-window -h -l 60% -d`, so the agent gets a 60%-wide pane to the right, focus stays on the parade, and each pane is tagged with the `@mg_agent` pane option (set to `mg-<issueID>`) so mg can find, focus, capture, and kill it later. This means:
 
 - The parade stays visible while agents work
 - Multiple agents can run simultaneously on different issues
 - Active agents show a `⚡` badge next to their issue in the parade
 - The header displays the total active agent count
-- Press `a` on an issue with an active agent to **switch** to its tmux window
-- Press `A` to **kill** the active agent on the selected issue
+- Press `a` on an issue with an active agent to **switch** to its tmux pane
+- Press `A` to **stop** the active agent on the selected issue — when an orchestrator is present this asks it to unsling; only without one does mg kill the pane directly
+- The detail panel tails the last 15 lines of the agent's pane (ANSI stripped) under **AGENT OUTPUT**
 - Agent status is polled automatically alongside the file watcher
+
+Claude Code is launched with `--teammate-mode tmux` on this path so it participates in Claude Code's native agent teams. Cursor and Codex get their own flag sets (see above).
 
 ## Fallback (non-tmux)
 
@@ -60,8 +71,8 @@ Outside tmux, the TUI suspends while the agent runs (using BubbleTea's `tea.Exec
 
 ## Requirements
 
-- Requires `claude`, `cursor-agent`, or `codex` on your `PATH`
-- The command palette dynamically shows the detected runtime name (e.g., "Start Claude Code agent", "Start Cursor agent", or "Start Codex agent")
-- If no agent runtime is found, the `a` key silently does nothing
+- A local runtime — `claude`, `cursor-agent`, or `codex` on your `PATH` — is required only for **direct launch** (the tmux pane, or the suspend-and-run path). Orchestrator dispatch does not need one: `gt sling` and Gas City both start the agent themselves.
+- The command palette's **Launch agent** entry names the detected runtime in its description ("Start Claude Code agent on issue", "Start Cursor agent on issue", or "Start Codex agent on issue")
+- With no local runtime installed, `a` on a **single** issue currently does nothing even where dispatch would have worked, while `a` on a **multi-selection** — and `a` on the Gas City backend — dispatches normally. That asymmetry is a known bug rather than intended behaviour: the runtime guard in `handleKey` sits ahead of the Gas Town sling branch instead of only guarding direct launch.
 - Tmux dispatch requires both the `TMUX` env var and `tmux` binary on PATH
 - The prompt includes `bd update` and `bd close` hints so the agent knows how to manage the issue lifecycle

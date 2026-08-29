@@ -26,11 +26,13 @@ const (
 	EnvGCCity = "MG_GC_CITY"
 )
 
-// GCEnabled reports whether the user has opted into the Gas City driver.
+// GCEnabled reports whether MG_GC_API is set — the operator explicitly asking
+// for the Gas City driver.
 //
-// Gas City is opt-in via MG_GC_API: mg defaults to the Gas Town CLI driver and
-// only speaks the Supervisor HTTP API when explicitly told to, so a box with
-// both `gt` and `gc` installed keeps its existing gt workflow untouched.
+// This is only rule 1 of the backend choice, not the whole policy: SelectDriver
+// also picks Gas City from machine evidence when there is no sign of Gas Town.
+// A box with both `gt` and `gc` installed still keeps its existing gt workflow,
+// because Gas Town evidence outranks Gas City evidence.
 func GCEnabled() bool {
 	return strings.TrimSpace(os.Getenv(EnvGCAPI)) != ""
 }

@@ -7,12 +7,12 @@ argument-hint: "[limit, default 30]"
 
 # Upstream Triage
 
-Scan open issues on `steveyegge/beads` and identify ones where our experience with mardi-gras can provide helpful answers.
+Scan open issues on `gastownhall/beads` and identify ones where our experience with mardi-gras can provide helpful answers.
 
 ## Step 1: Fetch open issues
 
 ```bash
-gh issue list --repo steveyegge/beads --state open --limit <limit> --json number,title,comments,createdAt --jq '.[] | "\(.number)\t\(.comments | length)\t\(.title)"'
+gh issue list --repo gastownhall/beads --state open --limit <limit> --json number,title,comments,createdAt --jq '.[] | "\(.number)\t\(.comments | length)\t\(.title)"'
 ```
 
 ## Step 2: Categorize issues
@@ -67,7 +67,7 @@ After presenting findings, append to the triage log in `docs/internal/upstream-c
 For issues we commented on:
 
 ```markdown
-| <date> | [#<number>](https://github.com/steveyegge/beads/issues/<number>) | <brief description> |
+| <date> | [#<number>](https://github.com/gastownhall/beads/issues/<number>) | <brief description> |
 ```
 
 For issues triaged but not commented on, update the "triaged but not commented" table.
@@ -75,7 +75,7 @@ For issues triaged but not commented on, update the "triaged but not commented" 
 ## Important
 
 - Do NOT post comments without explicit user approval
-- Use `gh issue comment --repo steveyegge/beads <number> --body "..."` only after the user confirms
+- Use `gh issue comment --repo gastownhall/beads <number> --body "..."` only after the user confirms
 - Our GitHub identity is visible — keep responses professional and helpful
 - Reference our project (mardi-gras) only when directly relevant to the answer
 
