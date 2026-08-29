@@ -275,6 +275,20 @@ func (i *Issue) ParentID() string {
 	return i.ID[:idx]
 }
 
+// ParentRelationshipID returns the ID this issue names as its parent through a
+// `parent-child` dependency, or "" if it has none. Beads writes this edge when
+// an issue is created with --parent, alongside the dotted ID; removing the edge
+// while keeping the ID is exactly the reparenting case that made dotted-ID
+// depth unreliable. Multi-parent is first-wins.
+func (i *Issue) ParentRelationshipID() string {
+	for _, dep := range i.Dependencies {
+		if dep.Type == "parent-child" {
+			return dep.DependsOnID
+		}
+	}
+	return ""
+}
+
 // ParentRelationshipDepth returns the number of loaded parent-child ancestors.
 // Missing parents and cycles stop the walk so an issue is never indented under
 // an unrelated visible row.
@@ -284,18 +298,11 @@ func (i *Issue) ParentRelationshipDepth(issueMap map[string]*Issue) int {
 	seen := map[string]bool{i.ID: true}
 
 	for {
-		parentID := ""
-		for _, dep := range current.Dependencies {
-			if dep.Type == "parent-child" {
-				parentID = dep.DependsOnID
-				break
-			}
-		}
+		parentID := current.ParentRelationshipID()
 		parent, ok := issueMap[parentID]
 		if parentID == "" || !ok || seen[parentID] {
 			return depth
 		}
-
 		depth++
 		seen[parentID] = true
 		current = parent
@@ -375,4 +382,69 @@ func RelativeAge(d time.Duration) string {
 	default:
 		return fmt.Sprintf("%dw ago", int(d.Hours()/(24*7)))
 	}
+}
+
+// OrderHierarchically reorders one parade section so each child immediately
+// follows its parent, and reports the indent depth of every row.
+//
+// Ordering is depth-first: roots keep the order they arrive in (priority, then
+// recency), and each root is followed by its descendants in that same relative
+// order. Only issues present in this slice can act as parents, so a child whose
+// parent sits in another section — or is filtered out entirely — becomes a root
+// at depth 0 rather than being indented under whichever unrelated row happened
+// to precede it. That is what makes the indent mean "the row above me is my
+// parent" instead of merely "my ID has a dot in it".
+//
+// Cycles are broken by visiting each issue at most once; an issue reachable
+// only through a cycle is emitted as a root so it can never disappear.
+func OrderHierarchically(issues []Issue) (ordered []*Issue, depth map[string]int) {
+	depth = make(map[string]int, len(issues))
+	if len(issues) == 0 {
+		return nil, depth
+	}
+
+	inSection := make(map[string]*Issue, len(issues))
+	for i := range issues {
+		inSection[issues[i].ID] = &issues[i]
+	}
+
+	children := make(map[string][]*Issue, len(issues))
+	var roots []*Issue
+	for i := range issues {
+		iss := &issues[i]
+		parentID := iss.ParentRelationshipID()
+		if parentID == "" || parentID == iss.ID {
+			roots = append(roots, iss)
+			continue
+		}
+		if _, ok := inSection[parentID]; !ok {
+			roots = append(roots, iss) // parent not on screen here
+			continue
+		}
+		children[parentID] = append(children[parentID], iss)
+	}
+
+	ordered = make([]*Issue, 0, len(issues))
+	visited := make(map[string]bool, len(issues))
+	var walk func(iss *Issue, d int)
+	walk = func(iss *Issue, d int) {
+		if visited[iss.ID] {
+			return
+		}
+		visited[iss.ID] = true
+		ordered = append(ordered, iss)
+		depth[iss.ID] = d
+		for _, child := range children[iss.ID] {
+			walk(child, d+1)
+		}
+	}
+	for _, root := range roots {
+		walk(root, 0)
+	}
+	// Anything reachable only through a cycle never got emitted above; surface
+	// it at top level rather than dropping it from the parade.
+	for i := range issues {
+		walk(&issues[i], 0)
+	}
+	return ordered, depth
 }

@@ -45,6 +45,7 @@ type ParadeItem struct {
 	Issue      *data.Issue
 	Eval       *data.DepEval
 	RenderedID string // cached styled ID (heat color)
+	Depth      int    // indent level within this section (see data.OrderHierarchically)
 }
 
 // isSelectable returns true if this item can receive the cursor.
@@ -134,30 +135,34 @@ func (p *Parade) rebuildItems() {
 		// Closed section: show collapsed count or expanded list
 		if sec.Status == data.ParadePastTheStand {
 			if p.ShowClosed {
-				for i := range issues {
-					eval := issues[i].EvaluateDependencies(p.issueMap, p.blockingTypes)
-					ageDays := int(issues[i].Age().Hours() / 24)
+				ordered, depth := data.OrderHierarchically(issues)
+				for _, iss := range ordered {
+					eval := iss.EvaluateDependencies(p.issueMap, p.blockingTypes)
+					ageDays := int(iss.Age().Hours() / 24)
 					agePct := min(ageDays*100/30, 100)
 					idStyle := ui.GradientHeat.At(agePct)
 					p.Items = append(p.Items, ParadeItem{
-						Issue:      &issues[i],
+						Issue:      iss,
 						Section:    sec,
 						Eval:       &eval,
-						RenderedID: idStyle.Render(issues[i].ID),
+						RenderedID: idStyle.Render(iss.ID),
+						Depth:      depth[iss.ID],
 					})
 				}
 			}
 		} else {
-			for i := range issues {
-				eval := issues[i].EvaluateDependencies(p.issueMap, p.blockingTypes)
-				ageDays := int(issues[i].Age().Hours() / 24)
+			ordered, depth := data.OrderHierarchically(issues)
+			for _, iss := range ordered {
+				eval := iss.EvaluateDependencies(p.issueMap, p.blockingTypes)
+				ageDays := int(iss.Age().Hours() / 24)
 				agePct := min(ageDays*100/30, 100)
 				idStyle := ui.GradientHeat.At(agePct)
 				p.Items = append(p.Items, ParadeItem{
-					Issue:      &issues[i],
+					Issue:      iss,
 					Section:    sec,
 					Eval:       &eval,
-					RenderedID: idStyle.Render(issues[i].ID),
+					RenderedID: idStyle.Render(iss.ID),
+					Depth:      depth[iss.ID],
 				})
 			}
 		}
@@ -548,9 +553,11 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 		}
 	}
 
-	// Hierarchical indent follows current parent-child relationships. Historical
-	// dotted IDs may no longer reflect the issue's actual place in the tree.
-	depth := issue.ParentRelationshipDepth(p.issueMap)
+	// Hierarchical indent is computed per section by data.OrderHierarchically,
+	// which places each child directly beneath its parent. It is deliberately
+	// section-relative: a child whose parent sits in another section renders at
+	// depth 0 rather than appearing to belong to whatever row precedes it.
+	depth := item.Depth
 	indent := strings.Repeat("  ", depth)
 	indentWidth := depth * 2
 
