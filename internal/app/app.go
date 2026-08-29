@@ -2137,7 +2137,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 
 		issue := m.parade.SelectedIssue
-		if issue == nil || !m.agentAvail {
+		if issue == nil {
 			return m, nil
 		}
 		if _, active := m.activeAgents[issue.ID]; active && m.inTmux {
@@ -2153,6 +2153,16 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				err := slingWithRuntime(driver, issueID, runtime)
 				return slingResultMsg{issueID: issueID, err: err}
 			}
+		}
+
+		// Only DIRECT launch needs a runtime on this machine — it is mg that
+		// execs the binary. Orchestrator dispatch does not: gt and Gas City
+		// start the agent themselves, which is why the branches above run
+		// without this check. Guarding earlier made `a` inert on a single
+		// issue for anyone driving gt without a local agent installed, while
+		// the multi-select and Gas City paths dispatched fine.
+		if !m.agentAvail {
+			return m, nil
 		}
 
 		deps := issue.EvaluateDependencies(m.detail.IssueMap, m.blockingTypes)

@@ -73,6 +73,6 @@ Outside tmux, the TUI suspends while the agent runs (using BubbleTea's `tea.Exec
 
 - A local runtime — `claude`, `cursor-agent`, or `codex` on your `PATH` — is required only for **direct launch** (the tmux pane, or the suspend-and-run path). Orchestrator dispatch does not need one: `gt sling` and Gas City both start the agent themselves.
 - The command palette's **Launch agent** entry names the detected runtime in its description ("Start Claude Code agent on issue", "Start Cursor agent on issue", or "Start Codex agent on issue")
-- With no local runtime installed, `a` on a **single** issue currently does nothing even where dispatch would have worked, while `a` on a **multi-selection** — and `a` on the Gas City backend — dispatches normally. That asymmetry is a known bug rather than intended behaviour: the runtime guard in `handleKey` sits ahead of the Gas Town sling branch instead of only guarding direct launch.
+- With no local runtime installed, `a` still dispatches through an orchestrator — single issue, multi-selection, and Gas City alike. It is only **direct launch** that goes quiet, since that path needs a binary for mg to exec.
 - Tmux dispatch requires both the `TMUX` env var and `tmux` binary on PATH
 - The prompt includes `bd update` and `bd close` hints so the agent knows how to manage the issue lifecycle

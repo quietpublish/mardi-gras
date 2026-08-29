@@ -626,3 +626,58 @@ func TestKeyAMultiSlingWithSelection(t *testing.T) {
 		t.Fatal("expected selection to be cleared after multi-sling")
 	}
 }
+
+// TestKeyASlingsWithoutLocalRuntime pins the fix for an asymmetry in the `a`
+// handler: the !agentAvail guard sat ahead of the Gas Town sling branch, so on
+// a box with gt but no claude/cursor-agent/codex installed, `a` on a SINGLE
+// issue did nothing while `a` on a multi-selection dispatched fine. Only direct
+// launch needs a local runtime — the orchestrator starts the agent itself.
+func TestKeyASlingsWithoutLocalRuntime(t *testing.T) {
+	got := setupModel(t)
+	got.gtEnv.Available = true
+	got.agentAvail = false // no claude/cursor-agent/codex on PATH
+	got.inTmux = false
+
+	_, cmd := got.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	if cmd == nil {
+		t.Fatal("pressing a on a single issue produced no command; sling does not need a local runtime")
+	}
+}
+
+// TestKeyADirectLaunchStillNeedsRuntime keeps the guard where it belongs: with
+// no orchestrator, `a` execs the agent binary itself, so a missing runtime must
+// still be a no-op rather than a failed exec.
+func TestKeyADirectLaunchStillNeedsRuntime(t *testing.T) {
+	got := setupModel(t)
+	got.gtEnv.Available = false
+	got.driver = gastown.NewGTDriver() // Backend() == "gastown", so no orchestrator
+	got.agentAvail = false
+	got.inTmux = false
+
+	_, cmd := got.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	if cmd != nil {
+		t.Error("expected no command: direct launch needs an agent runtime on PATH")
+	}
+}
+
+// TestKeyASingleAndMultiAgreeWithoutRuntime is the regression in its plainest
+// form — the two selection modes must not disagree about whether `a` works.
+func TestKeyASingleAndMultiAgreeWithoutRuntime(t *testing.T) {
+	single := setupModel(t)
+	single.gtEnv.Available = true
+	single.agentAvail = false
+	single.inTmux = false
+	_, singleCmd := single.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+
+	multi := setupModel(t)
+	multi.gtEnv.Available = true
+	multi.agentAvail = false
+	multi.inTmux = false
+	multi.parade.ToggleSelect() // select the issue under the cursor
+	_, multiCmd := multi.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+
+	if (singleCmd == nil) != (multiCmd == nil) {
+		t.Errorf("single and multi-select disagree: singleCmd nil=%v, multiCmd nil=%v",
+			singleCmd == nil, multiCmd == nil)
+	}
+}
