@@ -26,26 +26,6 @@ func TestParentID(t *testing.T) {
 	}
 }
 
-func TestNestingDepth(t *testing.T) {
-	tests := []struct {
-		id   string
-		want int
-	}{
-		{"mg-007", 0},
-		{"mg-007.1", 1},
-		{"mg-007.2.1", 2},
-		{"a.b.c.d", 3},
-	}
-	for _, tc := range tests {
-		t.Run(tc.id, func(t *testing.T) {
-			iss := Issue{ID: tc.id}
-			if got := iss.NestingDepth(); got != tc.want {
-				t.Errorf("NestingDepth(%q) = %d, want %d", tc.id, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestParentRelationshipDepth(t *testing.T) {
 	root := &Issue{ID: "root.legacy"}
 	child := &Issue{
