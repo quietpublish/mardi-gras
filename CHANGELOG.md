@@ -2,6 +2,22 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.32.0 (2026-08-29)
+
+Two fixes for things that were quietly wrong: the parade's indentation, and Codex replies that could vanish.
+
+### Fixed
+- **Parade indentation stops lying, and children now sort under their parents** ([#113](https://github.com/quietpublish/mardi-gras/pull/113), closing most of [#110](https://github.com/quietpublish/mardi-gras/issues/110)) — indentation claims "the row above me is my parent", but sorting is priority-then-recency, so a child routinely landed nowhere near its parent while still being indented, appearing to belong to whatever unrelated row preceded it. v0.31.0 fixed the dotted-ID half of this; the ordering half is fixed here. Each section is now ordered depth-first — roots keep their priority and recency order, and every child follows its parent directly — and indent depth is computed per section, so a child whose parent sits in a *different* section renders flat rather than nesting under a stranger. A dependency cycle can no longer make rows disappear from the parade.
+- **Epic progress counted the wrong children** ([#113](https://github.com/quietpublish/mardi-gras/pull/113)) — the detail panel measured an epic's progress by dotted-ID prefix, so an issue reparented away still credited progress to the epic it had left, while a child linked only by a `parent-child` edge never counted at all. It now counts by the edge. Verified against `bd` first: `bd create --parent` writes both the dotted ID and the edge, so ordinary children are unaffected; removing the edge while keeping the ID is exactly the reparenting case this fixes.
+- **A Codex reply's output could silently vanish from the transcript** ([#112](https://github.com/quietpublish/mardi-gras/pull/112)) — each session ran its own demuxer over one shared event channel and discarded anything not addressed to it, so whenever two sessions overlapped — which replying does by construction — the wrong demuxer could consume an event and throw it away. Not delay it: destroy it. Events are now routed by request ID directly to the session that owns them. This surfaced as an intermittent CI failure that looked like a flaky test; it was reporting real data loss.
+
+### Changed
+- **The parade's visible order changes if you use hierarchical issues.** Children now appear beneath their parent instead of in flat priority order. This is deliberate — it is what makes the indent truthful — but it is a change you will notice.
+- **`Client.Events()` is removed** from the Codex MCP client, and `WithEventBuffer` now sizes each session's channel rather than a single shared one. With per-session routing the shared accessor had no consumer left.
+
+### Known issues
+- **Collapse/expand for hierarchies is still open** ([#110](https://github.com/quietpublish/mardi-gras/issues/110)) — the keybinding requested in [#102](https://github.com/quietpublish/mardi-gras/issues/102) is not implemented. It is a smaller job now that children sort contiguously under their parent.
+
 ## v0.31.0 (2026-08-29)
 
 A community release: the first outside bug report and the first outside code contribution both land here.
