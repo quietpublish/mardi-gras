@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -537,5 +538,77 @@ func TestBdVersionWarningFitsToastRow(t *testing.T) {
 	toast := components.Toast{Message: data.BdVersionWarning("1.2.1"), Level: components.ToastWarn}
 	if got := strings.Count(toast.View(80), "\n") + 1; got != 1 {
 		t.Errorf("bd version warning renders %d lines at width 80, want 1: %q", got, toast.Message)
+	}
+}
+
+// TestTownStatusErrorStopsLoadingForever pins the root cause of the panel that
+// span indefinitely: gasTownLoading() only checked that townStatus was nil, so
+// a backend that had already failed kept animating its loading line and the
+// error was never shown. A failed poll must end the loading state.
+func TestTownStatusErrorStopsLoadingForever(t *testing.T) {
+	m := initModel(t)
+	m.showGasTown = true
+	m.gtEnv.Available = true // make orchestratorAvailable() true
+
+	if !m.gasTownLoading() {
+		t.Fatal("expected the panel to be loading before any poll result")
+	}
+
+	model, _ := m.Update(townStatusMsg{err: errors.New("connection refused")})
+	got := model.(Model)
+
+	if got.townStatusErr == nil {
+		t.Error("townStatusMsg.err was discarded; the panel can never report it")
+	}
+	if got.gasTownLoading() {
+		t.Error("still loading after a failed poll — this is the spin-forever bug")
+	}
+	if got.gtPollInFlight {
+		t.Error("poll should no longer be in flight")
+	}
+}
+
+// TestTownStatusErrorClearedByNextPoll ensures a retry returns to the spinner
+// rather than showing a stale error while it runs.
+func TestTownStatusErrorClearedByNextPoll(t *testing.T) {
+	m := initModel(t)
+	m.showGasTown = true
+	m.gtEnv.Available = true
+
+	model, _ := m.Update(townStatusMsg{err: errors.New("connection refused")})
+	got := model.(Model)
+	if got.townStatusErr == nil {
+		t.Fatal("expected an error to be recorded")
+	}
+
+	got.gatedPollAgentState()
+	if got.townStatusErr != nil {
+		t.Error("a fresh poll should clear the previous failure")
+	}
+	if !got.gasTownLoading() {
+		t.Error("expected the loading state to resume while retrying")
+	}
+}
+
+// TestTownStatusSuccessClearsError covers recovery: good data must replace the
+// error, not sit behind it.
+func TestTownStatusSuccessClearsError(t *testing.T) {
+	m := initModel(t)
+	m.showGasTown = true
+	m.gtEnv.Available = true
+
+	model, _ := m.Update(townStatusMsg{err: errors.New("connection refused")})
+	got := model.(Model)
+
+	model2, _ := got.Update(townStatusMsg{status: &gastown.TownStatus{
+		Agents: []gastown.AgentRuntime{{Name: "obsidian", Role: "polecat", State: "working", Rig: "r"}},
+	}})
+	got2 := model2.(Model)
+
+	if got2.townStatusErr != nil {
+		t.Error("a successful poll must clear the recorded error")
+	}
+	if got2.townStatus == nil {
+		t.Error("expected the status to be stored")
 	}
 }

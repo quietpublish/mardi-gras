@@ -200,6 +200,11 @@ type Model struct {
 	// Single-flight gate for gt status polls
 	gtPollInFlight bool
 
+	// townStatusErr is the last orchestrator status failure. It stops
+	// gasTownLoading() spinning forever on a backend that will never answer,
+	// and is cleared whenever a fresh poll starts or a poll succeeds.
+	townStatusErr error
+
 	// Gas Town panel liveness tick
 	gasTownTicking bool
 
@@ -396,8 +401,13 @@ func (m Model) orchestratorAvailable() bool {
 
 // gasTownLoading reports whether the Gas Town panel is open and still waiting
 // on its first status fetch — the window during which the loading spinner runs.
+// gasTownLoading reports whether the panel should animate its loading line.
+//
+// The townStatusErr term matters: without it this is true whenever the panel is
+// open with no status, so a backend that already failed kept spinning forever
+// rather than ever reaching the error state.
 func (m Model) gasTownLoading() bool {
-	return m.showGasTown && m.townStatus == nil && m.orchestratorAvailable()
+	return m.showGasTown && m.townStatus == nil && m.townStatusErr == nil && m.orchestratorAvailable()
 }
 
 // activateGasTown shows the Gas Town panel and schedules its data refreshes.
@@ -1359,7 +1369,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case townStatusMsg:
 		m.gtPollInFlight = false
-		if msg.err == nil && msg.status != nil {
+		if msg.err != nil {
+			// Record the failure so the panel can report it. Previously this
+			// error was dropped on the floor, and with no status to fall back
+			// on the panel showed its loading line forever — an unreachable
+			// orchestrator was indistinguishable from a slow one. A successful
+			// poll that already populated townStatus keeps its data; the error
+			// only surfaces when there is nothing to show.
+			m.townStatusErr = msg.err
+			m.gasTown.SetStatusError(msg.err, m.driver.Backend())
+			return m, nil
+		}
+		if msg.status != nil {
+			m.townStatusErr = nil
+			m.gasTown.SetStatusError(nil, "")
 			m.townStatus = msg.status
 			m.activeAgents = msg.status.ActiveAgentMap()
 			m.propagateAgentState()
@@ -3494,6 +3517,10 @@ func (m *Model) gatedPollAgentState() tea.Cmd {
 		var cmds []tea.Cmd
 		if !m.gtPollInFlight {
 			m.gtPollInFlight = true
+			// A fresh attempt clears the previous failure, so the panel returns
+			// to its spinner instead of showing a stale error while retrying.
+			m.townStatusErr = nil
+			m.gasTown.SetStatusError(nil, "")
 			cmds = append(cmds, m.pollGTStatus)
 		}
 		if cmd := m.gatedPollPatrolScan(); cmd != nil {
