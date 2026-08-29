@@ -6,8 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSourceLabelJSONL(t *testing.T) {
@@ -383,5 +385,87 @@ func TestFetchDoctorDiagnosticsExecErrorNoOutput(t *testing.T) {
 	_, err := FetchDoctorDiagnostics()
 	if err == nil {
 		t.Fatal("expected error when no output, got nil")
+	}
+}
+
+// TestFetchIssueDetailUsesBriefDeps covers the capability probe for bd's
+// --brief-deps flag (v1.3.0+). mg parses `bd show`'s inlined dependencies array
+// and discards it — upstream measured that array at 193 KB of a 214 KB
+// response — so shrinking it is worth a probe, but the flag must degrade
+// cleanly on every bd that predates it.
+func TestFetchIssueDetailUsesBriefDeps(t *testing.T) {
+	briefDepsUnsupported.Store(false)
+	t.Cleanup(func() { briefDepsUnsupported.Store(false) })
+
+	calls, restore := mockRunCapture([]byte(bdShowDetailIssue), nil)
+	defer restore()
+
+	if _, err := FetchIssueDetail("proj-042"); err != nil {
+		t.Fatalf("FetchIssueDetail() error = %v", err)
+	}
+	if len(*calls) != 1 {
+		t.Fatalf("made %d calls, want 1", len(*calls))
+	}
+	if !slices.Contains((*calls)[0], "--brief-deps") {
+		t.Errorf("call = %v, want it to carry --brief-deps", (*calls)[0])
+	}
+}
+
+// TestFetchIssueDetailFallsBackWhenBriefDepsUnknown pins the older-bd path:
+// one wasted probe, then a clean retry, then the flag is never tried again.
+func TestFetchIssueDetailFallsBackWhenBriefDepsUnknown(t *testing.T) {
+	briefDepsUnsupported.Store(false)
+	t.Cleanup(func() { briefDepsUnsupported.Store(false) })
+
+	var calls [][]string
+	orig := runWithTimeout
+	runWithTimeout = func(_ time.Duration, name string, args ...string) ([]byte, error) {
+		calls = append(calls, append([]string{name}, args...))
+		if slices.Contains(args, "--brief-deps") {
+			// What bd v1.1.0 actually says, verified against the real binary.
+			return nil, errors.New("unknown flag: --brief-deps")
+		}
+		return []byte(bdShowDetailIssue), nil
+	}
+	defer func() { runWithTimeout = orig }()
+
+	issue, err := FetchIssueDetail("proj-042")
+	if err != nil {
+		t.Fatalf("FetchIssueDetail() error = %v", err)
+	}
+	if issue.ID != "proj-042" {
+		t.Errorf("ID = %q, want proj-042", issue.ID)
+	}
+	if len(calls) != 2 {
+		t.Fatalf("made %d calls, want 2 (probe then fallback)", len(calls))
+	}
+	if slices.Contains(calls[1], "--brief-deps") {
+		t.Errorf("retry = %v, must not carry --brief-deps", calls[1])
+	}
+
+	// The capability gap is latched: no second probe on the next fetch.
+	before := len(calls)
+	if _, err := FetchIssueDetail("proj-043"); err != nil {
+		t.Fatalf("second FetchIssueDetail() error = %v", err)
+	}
+	if got := len(calls) - before; got != 1 {
+		t.Errorf("second fetch made %d calls, want 1 — the probe should not repeat", got)
+	}
+}
+
+// TestFetchIssueDetailRealErrorDoesNotRetry keeps a genuine failure from
+// costing two subprocess calls.
+func TestFetchIssueDetailRealErrorDoesNotRetry(t *testing.T) {
+	briefDepsUnsupported.Store(false)
+	t.Cleanup(func() { briefDepsUnsupported.Store(false) })
+
+	calls, restore := mockRunCapture(nil, errors.New("issue not found"))
+	defer restore()
+
+	if _, err := FetchIssueDetail("proj-999"); err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if len(*calls) != 1 {
+		t.Errorf("made %d calls, want 1 — a real error must not trigger the fallback", len(*calls))
 	}
 }
