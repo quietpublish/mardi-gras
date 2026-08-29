@@ -548,8 +548,9 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 		}
 	}
 
-	// Hierarchical indent based on dot-separated ID depth
-	depth := issue.NestingDepth()
+	// Hierarchical indent follows current parent-child relationships. Historical
+	// dotted IDs may no longer reflect the issue's actual place in the tree.
+	depth := issue.ParentRelationshipDepth(p.issueMap)
 	indent := strings.Repeat("  ", depth)
 	indentWidth := depth * 2
 

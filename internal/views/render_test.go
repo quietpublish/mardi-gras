@@ -500,7 +500,9 @@ func TestRenderIssueDeferredDim(t *testing.T) {
 func TestRenderIssueHierarchicalIndent(t *testing.T) {
 	parent := testIssue("mg-007", data.StatusOpen)
 	child := testIssue("mg-007.1", data.StatusOpen)
+	child.Dependencies = []data.Dependency{{IssueID: child.ID, DependsOnID: parent.ID, Type: "parent-child"}}
 	grandchild := testIssue("mg-007.1.1", data.StatusOpen)
+	grandchild.Dependencies = []data.Dependency{{IssueID: grandchild.ID, DependsOnID: child.ID, Type: "parent-child"}}
 
 	issues := []data.Issue{parent, child, grandchild}
 	p := NewParade(issues, 100, 30, data.DefaultBlockingTypes)

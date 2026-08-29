@@ -281,6 +281,33 @@ func (i *Issue) NestingDepth() int {
 	return strings.Count(i.ID, ".")
 }
 
+// ParentRelationshipDepth returns the number of loaded parent-child ancestors.
+// Missing parents and cycles stop the walk so an issue is never indented under
+// an unrelated visible row.
+func (i *Issue) ParentRelationshipDepth(issueMap map[string]*Issue) int {
+	depth := 0
+	current := i
+	seen := map[string]bool{i.ID: true}
+
+	for {
+		parentID := ""
+		for _, dep := range current.Dependencies {
+			if dep.Type == "parent-child" {
+				parentID = dep.DependsOnID
+				break
+			}
+		}
+		parent, ok := issueMap[parentID]
+		if parentID == "" || !ok || seen[parentID] {
+			return depth
+		}
+
+		depth++
+		seen[parentID] = true
+		current = parent
+	}
+}
+
 // IsOverdue returns true if DueAt is set, in the past, and the issue is not closed.
 func (i *Issue) IsOverdue() bool {
 	return i.DueAt != nil && i.Status != StatusClosed && i.DueAt.Before(time.Now())
