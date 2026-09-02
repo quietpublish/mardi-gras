@@ -12,7 +12,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/lucasb-eyer/go-colorful v1.4.1
 	github.com/muesli/termenv v0.16.0
-	github.com/oapi-codegen/runtime v1.5.0
+	github.com/oapi-codegen/runtime v1.7.0
 	github.com/sahilm/fuzzy v0.1.3
 	github.com/yuin/goldmark v1.8.2
 	gopkg.in/yaml.v3 v3.0.1
