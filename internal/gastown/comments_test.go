@@ -8,8 +8,8 @@ import (
 
 func TestCommentParsing(t *testing.T) {
 	raw := `[
-		{"id":"c-1","author":"claude (Toast)","body":"JWT validation needs refresh token handling","created_at":"2025-02-22T10:30:00Z"},
-		{"id":"c-2","author":"overseer","body":"Approved, ship it","created_at":"2025-02-22T11:15:00Z"}
+		{"id":"c-1","author":"claude (Toast)","text":"JWT validation needs refresh token handling","created_at":"2025-02-22T10:30:00Z"},
+		{"id":"c-2","author":"overseer","text":"Approved, ship it","created_at":"2025-02-22T11:15:00Z"}
 	]`
 
 	var comments []Comment

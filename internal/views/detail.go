@@ -681,8 +681,6 @@ func (d *Detail) renderComments() string {
 
 	timeStyle := lipgloss.NewStyle().Foreground(ui.Muted)
 	authorStyle := lipgloss.NewStyle().Foreground(ui.Light).Bold(true)
-	bodyStyle := lipgloss.NewStyle().Foreground(ui.Light)
-	bodyWidth := max(d.Width-12, 20)
 
 	for _, c := range d.Comments {
 		// Author + time
@@ -695,11 +693,11 @@ func (d *Detail) renderComments() string {
 			timeStyle.Render(timeLabel))
 		lines = append(lines, header)
 
-		// Body (wrapped)
+		// Body (markdown rendered)
 		if c.Body != "" {
-			wrapped := wordWrap(c.Body, bodyWidth)
-			for _, bline := range strings.Split(wrapped, "\n") {
-				lines = append(lines, "    "+bodyStyle.Render(bline))
+			rendered := d.renderMarkdown(c.Body)
+			for _, bline := range strings.Split(rendered, "\n") {
+				lines = append(lines, "    "+bline)
 			}
 		}
 		lines = append(lines, "") // blank line between comments

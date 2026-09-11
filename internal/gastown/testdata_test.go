@@ -107,13 +107,13 @@ const gtCommentsJSON = `[
 	{
 		"id": "cmt-001",
 		"author": "alice",
-		"body": "Starting work on this.",
+		"text": "Starting work on this.",
 		"created_at": "2026-03-15T10:00:00Z"
 	},
 	{
 		"id": "cmt-002",
 		"author": "polecat-nux",
-		"body": "Implementation complete, ready for review.",
+		"text": "Implementation complete, ready for review.",
 		"created_at": "2026-03-15T14:00:00Z"
 	}
 ]`

@@ -9,7 +9,7 @@ import (
 type Comment struct {
 	ID     string `json:"id"`
 	Author string `json:"author"`
-	Body   string `json:"body"`
+	Body   string `json:"text"`
 	Time   string `json:"created_at"`
 }
 
