@@ -114,7 +114,10 @@ jobs:
           check-latest: true
 
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        # Pinned, not @latest: x/vuln v1.8.0 (2026-09-08) requires Go 1.26, and
+        # with go-version "1.25" + GOTOOLCHAIN=local the install itself fails
+        # before any scan runs. Bump this alongside the Go line above.
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
 
       - name: Run govulncheck
         run: govulncheck ./...
