@@ -1153,3 +1153,44 @@ func TestEpicProgressCountsEdgeOnlyChild(t *testing.T) {
 		t.Fatalf("epicProgress() = %+v, want done=1 total=1", progress)
 	}
 }
+
+func TestCommentsRenderingMarkdown(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "mg-001", Title: "Commented Issue", Status: data.StatusInProgress,
+			Priority: data.PriorityMedium, IssueType: data.TypeTask,
+			CreatedAt: time.Now()},
+	}
+	d := NewDetail(60, 40, issues)
+	d.SetIssue(&issues[0])
+
+	d.SetComments("mg-001", []gastown.Comment{
+		{ID: "c-1", Author: "reviewer", Time: "2025-02-22T10:30:00Z",
+			Body: "Needs **refresh token** handling:\n\n- rotate on use\n- revoke on logout\n\n" +
+				strings.Repeat("long ", 40)},
+	})
+
+	plain := ansi.Strip(d.renderComments())
+
+	// Markdown is rendered, not shown as raw markup.
+	if strings.Contains(plain, "**") {
+		t.Errorf("comment body should render bold, not show literal ** markers:\n%s", plain)
+	}
+	if !strings.Contains(plain, "refresh token") {
+		t.Errorf("comment body text missing from rendered output:\n%s", plain)
+	}
+	if !strings.Contains(plain, "rotate on use") || !strings.Contains(plain, "revoke on logout") {
+		t.Errorf("list items missing from rendered output:\n%s", plain)
+	}
+	if strings.Contains(plain, "- rotate") {
+		t.Errorf("list should render with a bullet, not a literal dash:\n%s", plain)
+	}
+
+	// Indented, wrapped comment lines must still fit inside the viewport
+	// (panel width minus the left border and padding).
+	limit := d.Width - 2
+	for _, line := range strings.Split(plain, "\n") {
+		if w := ansi.StringWidth(line); w > limit {
+			t.Errorf("comment line width %d exceeds viewport width %d: %q", w, limit, line)
+		}
+	}
+}

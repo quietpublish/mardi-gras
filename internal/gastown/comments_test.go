@@ -58,6 +58,12 @@ func TestFetchCommentsHappy(t *testing.T) {
 	if comments[0].Author != "alice" {
 		t.Errorf("Author = %q, want alice", comments[0].Author)
 	}
+	// bd serializes the comment body as "text", not "body". The struct tag
+	// pointed at "body" for a long time and nothing caught it because this
+	// test only checked Author, so the body silently parsed as empty.
+	if comments[0].Body != "Starting work on this." {
+		t.Errorf("Body = %q, want %q", comments[0].Body, "Starting work on this.")
+	}
 }
 
 func TestFetchCommentsExecError(t *testing.T) {
@@ -76,5 +82,18 @@ func TestFetchCommentsArgs(t *testing.T) {
 	// Should be: bd comments mg-42 --json
 	if len(args) != 4 || args[0] != "bd" || args[1] != "comments" || args[2] != "mg-42" || args[3] != "--json" {
 		t.Errorf("args = %v", args)
+	}
+}
+
+func TestCommentParsingIgnoresBodyKey(t *testing.T) {
+	// A "body" key is not what bd emits; it must not populate Body. This pins
+	// the field name so the tag cannot quietly drift back.
+	raw := `[{"id":"c-1","author":"alice","body":"wrong key","created_at":"2025-02-22T10:30:00Z"}]`
+	var comments []Comment
+	if err := json.Unmarshal([]byte(raw), &comments); err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if comments[0].Body != "" {
+		t.Errorf("Body = %q, want empty: only the \"text\" key carries the comment body", comments[0].Body)
 	}
 }
