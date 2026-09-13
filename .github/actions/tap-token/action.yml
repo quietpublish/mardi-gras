@@ -1,0 +1,64 @@
+name: Homebrew tap token
+description: >-
+  Mint a short-lived installation token from the mardi-gras-tap-bot GitHub
+  App and prove it can push to matt-wright86/homebrew-tap. Used by the
+  release preflight and the weekly tap-token-check workflow so the two
+  cannot drift apart.
+
+inputs:
+  app-id:
+    description: GitHub App ID (secrets.TAP_APP_ID)
+    required: true
+  private-key:
+    description: GitHub App private key PEM (secrets.TAP_APP_PRIVATE_KEY)
+    required: true
+
+outputs:
+  token:
+    description: Installation token scoped to the tap repo; dies with the run.
+    value: ${{ steps.mint.outputs.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Mint tap token
+      id: mint
+      uses: actions/create-github-app-token@v2
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        owner: matt-wright86
+        repositories: homebrew-tap
+
+    # Installation tokens report every repository permission as false on
+    # GET /repos/{owner}/{repo} (that field describes a *user*), so a real
+    # write is the only honest proof of push access: create a throwaway ref
+    # at the default branch head, then delete it. No commit, nothing left.
+    - name: Verify push access to the tap
+      shell: bash
+      env:
+        TOKEN: ${{ steps.mint.outputs.token }}
+        PROBE: tap-token-probe-${{ github.run_id }}-${{ github.run_attempt }}
+      run: |
+        set -euo pipefail
+        REPO=matt-wright86/homebrew-tap
+        API=https://api.github.com/repos/$REPO
+        auth=(-H "Authorization: Bearer ${TOKEN}" -H "Accept: application/vnd.github+json")
+
+        repos=$(curl -sS "${auth[@]}" https://api.github.com/installation/repositories)
+        if ! printf '%s' "$repos" | jq -e --arg r "$REPO" '.repositories[]? | select(.full_name == $r)' >/dev/null; then
+          echo "::error::tap token cannot see $REPO (app uninstalled, or the repo was deselected from it)"; exit 1
+        fi
+
+        default=$(curl -sS "${auth[@]}" "$API" | jq -r .default_branch)
+        sha=$(curl -sS "${auth[@]}" "$API/git/ref/heads/$default" | jq -r .object.sha)
+        code=$(curl -sS -o "$RUNNER_TEMP/probe.json" -w '%{http_code}' "${auth[@]}" -X POST "$API/git/refs" \
+          -d "{\"ref\":\"refs/heads/${PROBE}\",\"sha\":\"${sha}\"}")
+        if [ "$code" != "201" ]; then
+          echo "::error::tap token cannot push to $REPO (HTTP $code creating a probe ref): $(jq -r .message "$RUNNER_TEMP/probe.json")"; exit 1
+        fi
+        code=$(curl -sS -o /dev/null -w '%{http_code}' "${auth[@]}" -X DELETE "$API/git/refs/heads/${PROBE}")
+        if [ "$code" != "204" ]; then
+          echo "::warning::probe ref ${PROBE} was created but not deleted (HTTP $code); remove it by hand"
+        fi
+        echo "tap token OK: push access to $REPO verified"

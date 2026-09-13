@@ -11,36 +11,19 @@ on:
     - cron: "17 9 * * 1" # Mondays 09:17 UTC
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  contents: read # checkout, for the local composite action
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - name: Mint Homebrew tap token
-        id: tap-token
-        uses: actions/create-github-app-token@v2
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions/tap-token
+
+      - name: Mint and verify Homebrew tap token
+        uses: ./.github/actions/tap-token
         with:
           app-id: ${{ secrets.TAP_APP_ID }}
           private-key: ${{ secrets.TAP_APP_PRIVATE_KEY }}
-          owner: matt-wright86
-          repositories: homebrew-tap
-
-      - name: Check Homebrew tap token
-        env:
-          HOMEBREW_TAP_TOKEN: ${{ steps.tap-token.outputs.token }}
-        run: |
-          set -euo pipefail
-          resp=$(curl -sS -w '\n%{http_code}' \
-            -H "Authorization: Bearer ${HOMEBREW_TAP_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/matt-wright86/homebrew-tap)
-          code=${resp##*$'\n'}
-          body=${resp%$'\n'*}
-          if [ "$code" != "200" ]; then
-            echo "::error::tap token rejected by GitHub (HTTP $code)"; exit 1
-          fi
-          if ! printf '%s' "$body" | jq -e '.permissions.push == true' >/dev/null; then
-            echo "::error::tap token has no push access to matt-wright86/homebrew-tap"; exit 1
-          fi
-          echo "tap token OK"

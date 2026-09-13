@@ -31,40 +31,16 @@ jobs:
       # Mint a short-lived installation token from the mardi-gras-tap-bot
       # GitHub App instead of holding a PAT: the previous PAT expired after
       # 90 days and v0.32.1 (2026-09-13) ended half-done, release published,
-      # cask push 401. App keys do not expire. The token is scoped to the
-      # tap repo only and dies with the run.
-      - name: Mint Homebrew tap token
+      # cask push 401. App keys do not expire. The action also proves push
+      # access with a write probe, so a broken app fails here, before
+      # anything is published. goreleaser pushes the cask only after the
+      # GitHub Release and assets exist.
+      - name: Mint and verify Homebrew tap token
         id: tap-token
-        uses: actions/create-github-app-token@v2
+        uses: ./.github/actions/tap-token
         with:
           app-id: ${{ secrets.TAP_APP_ID }}
           private-key: ${{ secrets.TAP_APP_PRIVATE_KEY }}
-          owner: matt-wright86
-          repositories: homebrew-tap
-
-      # Fail here, before anything is published, if the minted token cannot
-      # push to the tap (app uninstalled, permission changed). goreleaser
-      # pushes the cask after the GitHub Release and assets already exist,
-      # so this is the backstop; tap-token-check.yml is the weekly early
-      # warning.
-      - name: Check Homebrew tap token
-        env:
-          HOMEBREW_TAP_TOKEN: ${{ steps.tap-token.outputs.token }}
-        run: |
-          set -euo pipefail
-          resp=$(curl -sS -w '\n%{http_code}' \
-            -H "Authorization: Bearer ${HOMEBREW_TAP_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/matt-wright86/homebrew-tap)
-          code=${resp##*$'\n'}
-          body=${resp%$'\n'*}
-          if [ "$code" != "200" ]; then
-            echo "::error::tap token rejected by GitHub (HTTP $code)"; exit 1
-          fi
-          if ! printf '%s' "$body" | jq -e '.permissions.push == true' >/dev/null; then
-            echo "::error::tap token has no push access to matt-wright86/homebrew-tap"; exit 1
-          fi
-          echo "tap token OK"
 
       - uses: goreleaser/goreleaser-action@v7
         with:
