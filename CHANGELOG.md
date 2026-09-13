@@ -2,6 +2,16 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.32.1 (2026-09-12)
+
+A patch release: comment bodies were invisible in the detail panel, and CI had gone red on its own.
+
+### Fixed
+- **Comment bodies now show in the detail panel** ([#118](https://github.com/quietpublish/mardi-gras/pull/118)) — `bd comments --json` has always serialized the comment text under `text`, but mg's struct tag read `body`, so every comment rendered its author and timestamp above nothing. This dates back to when comments were first added. The tag is fixed, and comment bodies now go through the same markdown renderer as the description, so bold, lists and code fences in a comment render instead of showing as raw markup. Tests now assert the body from a `bd`-shaped fixture and reject the old key, so the field name cannot quietly drift back — the previous parse test only checked the author, which is how this went unnoticed. Reported and fixed by [@djha-skin](https://github.com/djha-skin).
+
+### Changed
+- **CI pins govulncheck to v1.7.0** ([#119](https://github.com/quietpublish/mardi-gras/pull/119)) — `govulncheck@latest` had started resolving to x/vuln v1.8.0, which requires Go 1.26. With the workflow's Go 1.25 the install step failed before any scan ran, so every CI run since 2026-09-08 was red regardless of the code under test. The pin is documented to move together with the Go line.
+
 ## v0.32.0 (2026-08-29)
 
 Two fixes for things that were quietly wrong: the parade's indentation, and Codex replies that could vanish.
