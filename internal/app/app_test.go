@@ -124,6 +124,7 @@ func TestFileChangedMsgQueuesDetailRefetchesForPendingSelection(t *testing.T) {
 	got := model.(Model)
 
 	got.pendingSelectID = "open-2"
+	got.inTmux = false // no agent pane capture, whatever terminal the tests run in
 	got.gtEnv.Available = true
 	got.gtPollInFlight = true     // suppress gt status polling
 	got.patrolScanInFlight = true // suppress patrol scan polling

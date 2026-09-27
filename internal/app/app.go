@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -202,6 +203,11 @@ type Model struct {
 
 	// Single-flight gate for gt status polls
 	gtPollInFlight bool
+
+	// Agent pane capture: captureWanted asks Update to capture the selected
+	// issue's pane; captureInFlight keeps it to one capture at a time.
+	captureWanted   bool
+	captureInFlight bool
 
 	// townStatusErr is the last orchestrator status failure. It stops
 	// gasTownLoading() spinning forever on a backend that will never answer,
@@ -683,8 +689,20 @@ type gasTownTickMsg struct{}
 // headerShimmerMsg drives the bead string shimmer animation.
 type headerShimmerMsg struct{}
 
-// Update implements tea.Model.
+// Update implements tea.Model. It wraps update so that an agent pane
+// capture asked for anywhere during the update (a selection change, an agent
+// poll) is issued from one place, one at a time.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(msg)
+	nm, ok := next.(Model)
+	if !ok || !nm.captureWanted || nm.captureInFlight {
+		return next, cmd
+	}
+	capture := nm.startAgentCapture()
+	return nm, tea.Batch(cmd, capture)
+}
+
+func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	logMsg(msg)
 
 	if model, cmd, ok := m.updateBackground(msg); ok {
@@ -1130,8 +1148,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleRefreshResult(msg)
 
 	case agentLaunchedMsg:
-		m.activeAgents[msg.issueID] = msg.windowName
-		m.propagateAgentState()
+		agents := make(map[string]string, len(m.activeAgents)+1)
+		maps.Copy(agents, m.activeAgents)
+		agents[msg.issueID] = msg.windowName
+		m.setActiveAgents(agents)
 		toast, cmd := components.ShowToast(
 			fmt.Sprintf("Agent launched for %s", msg.issueID),
 			components.ToastSuccess, toastDuration,
@@ -1249,11 +1269,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.toast = toast
 			return m, cmd
 		}
-		return m, nil
-
-	case agentStatusMsg:
-		m.activeAgents = msg.activeAgents
-		m.propagateAgentState()
 		return m, nil
 
 	case slingResultMsg:
@@ -2172,22 +2187,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "X": // Clear all selections
 			m.parade.ClearSelection()
 		case "g":
-			m.parade.Cursor = 0
-			m.parade.ScrollOffset = 0
-			for i, item := range m.parade.Items {
-				if !item.IsHeader {
-					m.parade.Cursor = i
-					break
-				}
-			}
+			m.parade.MoveToTop()
 			m.syncSelection()
 		case "G":
-			for i := len(m.parade.Items) - 1; i >= 0; i-- {
-				if !m.parade.Items[i].IsHeader {
-					m.parade.Cursor = i
-					break
-				}
-			}
+			m.parade.MoveToBottom()
 			m.syncSelection()
 		case "enter":
 			m.activPane = PaneDetail
@@ -2938,25 +2941,64 @@ func (m *Model) diffIssues(newIssues []data.Issue) int {
 }
 
 // syncSelection updates the detail panel with the currently selected issue.
+// It runs on every refresh and keypress, so it never shells out: it drops
+// agent output that no longer belongs on screen (before rendering, so the
+// drop is drawn) and asks Update for a capture when the selection lands on
+// an agent whose output is not showing yet.
 func (m *Model) syncSelection() {
-	if m.parade.SelectedIssue != nil {
-		m.detail.SetIssue(m.parade.SelectedIssue)
-		// Capture agent output if an agent pane is active for this issue
-		id := m.parade.SelectedIssue.ID
-		if m.inTmux {
-			if _, active := m.activeAgents[id]; active {
-				m.detail.AgentOutput = agent.CapturePane(id, 15)
-				m.detail.AgentOutputID = id
-			} else {
-				m.detail.AgentOutput = nil
-				m.detail.AgentOutputID = ""
-			}
-		}
-		return
+	sel := m.parade.SelectedIssue
+	if sel == nil || m.detail.AgentOutputID != sel.ID || !m.capturable(sel.ID) {
+		m.detail.AgentOutput = nil
+		m.detail.AgentOutputID = ""
 	}
-	m.detail.SetIssue(nil)
-	m.detail.AgentOutput = nil
-	m.detail.AgentOutputID = ""
+	m.detail.SetIssue(sel)
+	if sel != nil && m.detail.AgentOutputID != sel.ID && m.capturable(sel.ID) {
+		m.captureWanted = true
+	}
+}
+
+// setActiveAgents installs a new issue -> agent map, whatever it came from:
+// the tmux poll, orchestrator status, or a launch. A dead agent's output is
+// dropped before the re-render, and a live one asks for a fresh capture, so
+// the output tails the pane at the agent poll's pace.
+func (m *Model) setActiveAgents(agents map[string]string) {
+	m.activeAgents = agents
+	if id := m.detail.AgentOutputID; id != "" && !m.capturable(id) {
+		m.detail.AgentOutput = nil
+		m.detail.AgentOutputID = ""
+	}
+	m.propagateAgentState()
+	if sel := m.parade.SelectedIssue; sel != nil && m.capturable(sel.ID) {
+		m.captureWanted = true
+	}
+}
+
+// capturable reports whether issueID has a live agent in a tmux pane mg can
+// read. Under an orchestrator the map holds agent names, not panes.
+func (m Model) capturable(issueID string) bool {
+	return m.inTmux && agent.IsPaneID(m.activeAgents[issueID])
+}
+
+// agentOutputMsg carries the tail of an agent's tmux pane.
+type agentOutputMsg struct {
+	issueID string
+	lines   []string
+}
+
+// startAgentCapture clears the capture request and, when the selected issue
+// still has a pane to read, returns the Cmd that reads it off the UI
+// goroutine.
+func (m *Model) startAgentCapture() tea.Cmd {
+	m.captureWanted = false
+	sel := m.parade.SelectedIssue
+	if sel == nil || !m.capturable(sel.ID) {
+		return nil
+	}
+	m.captureInFlight = true
+	id, pane := sel.ID, m.activeAgents[sel.ID]
+	return func() tea.Msg {
+		return agentOutputMsg{issueID: id, lines: agent.CapturePane(pane, 15)}
+	}
 }
 
 // maybeFetchMolecule returns a Cmd to fetch molecule data if the selected issue

@@ -196,6 +196,32 @@ func (p *Parade) MoveDown() {
 	}
 }
 
+// MoveToTop moves the cursor to the first issue, scrolled to the top.
+func (p *Parade) MoveToTop() {
+	p.ScrollOffset = 0
+	for i := range p.Items {
+		if p.Items[i].isSelectable() {
+			p.Cursor = i
+			p.SelectedIssue = p.Items[i].Issue
+			p.ensureVisible()
+			return
+		}
+	}
+}
+
+// MoveToBottom moves the cursor to the last issue, skipping headers and
+// footers.
+func (p *Parade) MoveToBottom() {
+	for i := len(p.Items) - 1; i >= 0; i-- {
+		if p.Items[i].isSelectable() {
+			p.Cursor = i
+			p.SelectedIssue = p.Items[i].Issue
+			p.ensureVisible()
+			return
+		}
+	}
+}
+
 // ToggleClosed shows or hides closed issues.
 func (p *Parade) ToggleClosed() {
 	p.ShowClosed = !p.ShowClosed

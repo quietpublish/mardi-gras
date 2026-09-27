@@ -258,6 +258,9 @@ func TestKeyGJumpsToTop(t *testing.T) {
 	if got.parade.Items[got.parade.Cursor].IsHeader {
 		t.Fatal("expected cursor to be on a non-header item after pressing g")
 	}
+	if item := got.parade.Items[got.parade.Cursor]; item.Issue == nil || got.parade.SelectedIssue != item.Issue {
+		t.Fatalf("expected the selection to follow the cursor, got %+v", got.parade.SelectedIssue)
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -275,17 +278,21 @@ func TestKeyGGJumpsToBottom(t *testing.T) {
 	model, _ = got.Update(tea.KeyPressMsg{Code: 'G', Text: "G"})
 	got = model.(Model)
 
-	// The cursor should be on the last non-header item
+	// The cursor should be on the last issue: not a header, not a section
+	// footer, and the selection should follow it.
 	if got.parade.Cursor >= len(got.parade.Items) {
 		t.Fatal("cursor out of range")
 	}
-	if got.parade.Items[got.parade.Cursor].IsHeader {
-		t.Fatal("expected cursor to be on a non-header item after pressing G")
+	item := got.parade.Items[got.parade.Cursor]
+	if item.IsHeader || item.IsFooter || item.Issue == nil {
+		t.Fatalf("expected cursor on an issue after pressing G, got %+v", item)
 	}
-	// Verify no non-header items exist after the cursor
+	if got.parade.SelectedIssue != item.Issue {
+		t.Fatalf("expected the selection to follow the cursor, got %+v", got.parade.SelectedIssue)
+	}
 	for i := got.parade.Cursor + 1; i < len(got.parade.Items); i++ {
-		if !got.parade.Items[i].IsHeader {
-			t.Fatalf("expected no non-header items after cursor at %d, but item %d is selectable", got.parade.Cursor, i)
+		if it := got.parade.Items[i]; !it.IsHeader && !it.IsFooter {
+			t.Fatalf("expected no issues after cursor at %d, but item %d is one", got.parade.Cursor, i)
 		}
 	}
 }

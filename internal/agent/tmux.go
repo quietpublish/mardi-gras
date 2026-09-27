@@ -1,10 +1,12 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 )
@@ -114,20 +116,25 @@ func KillAgentWindow(issueID string) error {
 	return exec.Command("tmux", "kill-pane", "-t", paneID).Run()
 }
 
-// CapturePane captures the last maxLines of output from an agent's tmux pane.
-// Returns sanitized lines (ANSI stripped, trailing blanks trimmed).
-// Returns nil if the agent pane is not found or capture fails.
-func CapturePane(issueID string, maxLines int) []string {
-	agents, err := ListAgentWindows()
-	if err != nil {
-		return nil
-	}
-	paneID, ok := agents[issueID]
-	if !ok {
-		return nil
-	}
+// captureTimeout bounds one capture-pane call, so a wedged tmux server
+// cannot leave captures blocked forever.
+const captureTimeout = 2 * time.Second
+
+// IsPaneID reports whether s is a tmux pane ID ("%12"). mg's agent map holds
+// pane IDs for agents it launched in tmux, and agent names under an
+// orchestrator, which have no pane mg can read.
+func IsPaneID(s string) bool {
+	return len(s) > 1 && s[0] == '%'
+}
+
+// CapturePane captures the last maxLines of output from a tmux pane.
+// Returns sanitized lines (ANSI stripped, trailing blanks trimmed), or nil
+// if the pane is gone or the capture fails or times out.
+func CapturePane(paneID string, maxLines int) []string {
+	ctx, cancel := context.WithTimeout(context.Background(), captureTimeout)
+	defer cancel()
 	// capture-pane -p prints to stdout, -S -N starts N lines from the end
-	out, err := exec.Command("tmux", "capture-pane",
+	out, err := exec.CommandContext(ctx, "tmux", "capture-pane",
 		"-t", paneID, "-p", "-S", fmt.Sprintf("-%d", maxLines+20)).Output()
 	if err != nil {
 		return nil

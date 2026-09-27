@@ -14,7 +14,7 @@ import (
 // Update forwards every other message to it, and a modal drops what it does
 // not understand. Each message here closes an in-flight gate or re-arms a
 // timer, so losing one would stall its loop for the rest of the session: no
-// more reloads, status polls or animation.
+// more reloads, agent captures, status polls or animation.
 func (m Model) updateBackground(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	var model tea.Model
 	var cmd tea.Cmd
@@ -43,6 +43,10 @@ func (m Model) updateBackground(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		model, cmd = m.handleToastDismiss()
 	case changeIndicatorExpiredMsg:
 		model, cmd = m.handleChangeIndicatorExpired()
+	case agentStatusMsg:
+		model, cmd = m.handleAgentStatus(msg)
+	case agentOutputMsg:
+		model, cmd = m.handleAgentOutput(msg)
 	default:
 		return m, nil, false
 	}
@@ -67,8 +71,7 @@ func (m Model) handleTownStatus(msg townStatusMsg) (tea.Model, tea.Cmd) {
 		m.townStatusErr = nil
 		m.gasTown.SetStatusError(nil, "")
 		m.townStatus = msg.status
-		m.activeAgents = msg.status.ActiveAgentMap()
-		m.propagateAgentState()
+		m.setActiveAgents(msg.status.ActiveAgentMap())
 		if m.showGasTown {
 			m.gasTown.SetStatus(m.townStatus, m.gtEnv)
 			m.recomputeVelocity()
@@ -136,5 +139,22 @@ func (m Model) handleToastDismiss() (tea.Model, tea.Cmd) {
 func (m Model) handleChangeIndicatorExpired() (tea.Model, tea.Cmd) {
 	m.changedIDs = make(map[string]bool)
 	m.parade.ChangedIDs = nil
+	return m, nil
+}
+
+// handleAgentStatus absorbs a tmux agent poll.
+func (m Model) handleAgentStatus(msg agentStatusMsg) (tea.Model, tea.Cmd) {
+	m.setActiveAgents(msg.activeAgents)
+	return m, nil
+}
+
+// handleAgentOutput shows a finished pane capture. A capture that lands after
+// the selection moved on or the agent went away is dropped; Update issues a
+// fresh one if one is still wanted.
+func (m Model) handleAgentOutput(msg agentOutputMsg) (tea.Model, tea.Cmd) {
+	m.captureInFlight = false
+	if sel := m.parade.SelectedIssue; sel != nil && sel.ID == msg.issueID && m.capturable(msg.issueID) {
+		m.detail.SetAgentOutput(msg.issueID, msg.lines)
+	}
 	return m, nil
 }
