@@ -2,6 +2,7 @@ package app
 
 import (
 	"testing"
+	"time"
 
 	"github.com/matt-wright86/mardi-gras/internal/data"
 	"github.com/matt-wright86/mardi-gras/internal/gastown"
@@ -117,65 +118,49 @@ func TestOverlayStrings(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDiffIssuesEmptyPrev(t *testing.T) {
-	m := Model{
-		prevIssueMap: map[string]data.Status{},
-		changedIDs:   make(map[string]bool),
-	}
+	m := Model{changedIDs: make(map[string]time.Time)}
 	issues := []data.Issue{testIssue("a", data.StatusOpen)}
-	if got := m.diffIssues(issues); got != 0 {
-		t.Errorf("empty prevIssueMap: got %d changes, want 0", got)
+	if changed, removed := m.diffIssues(issues); len(changed) != 0 || removed != 0 {
+		t.Errorf("nothing loaded before: got %v changed, %d removed; want none", changed, removed)
 	}
 }
 
 func TestDiffIssuesStatusChanged(t *testing.T) {
 	m := Model{
-		prevIssueMap: map[string]data.Status{
-			"a": data.StatusOpen,
-		},
-		changedIDs: make(map[string]bool),
+		issues:     []data.Issue{testIssue("a", data.StatusOpen)},
+		changedIDs: make(map[string]time.Time),
 	}
-	issues := []data.Issue{testIssue("a", data.StatusInProgress)}
-	got := m.diffIssues(issues)
-	if got != 1 {
-		t.Errorf("status changed: got %d changes, want 1", got)
+	changed, removed := m.diffIssues([]data.Issue{testIssue("a", data.StatusInProgress)})
+	if len(changed) != 1 || removed != 0 {
+		t.Errorf("status changed: got %v changed, %d removed; want [a], 0", changed, removed)
 	}
-	if !m.changedIDs["a"] {
+	if _, ok := m.changedIDs["a"]; !ok {
 		t.Error("expected changedIDs to contain 'a'")
 	}
 }
 
 func TestDiffIssuesNewAndRemoved(t *testing.T) {
 	m := Model{
-		prevIssueMap: map[string]data.Status{
-			"old": data.StatusOpen,
-		},
-		changedIDs: make(map[string]bool),
+		issues:     []data.Issue{testIssue("old", data.StatusOpen)},
+		changedIDs: make(map[string]time.Time),
 	}
-	issues := []data.Issue{testIssue("new", data.StatusOpen)}
-	got := m.diffIssues(issues)
-	// 1 new issue + 1 removed issue = 2
-	if got != 2 {
-		t.Errorf("new+removed: got %d changes, want 2", got)
+	changed, removed := m.diffIssues([]data.Issue{testIssue("new", data.StatusOpen)})
+	if len(changed) != 1 || removed != 1 {
+		t.Errorf("new+removed: got %v changed, %d removed; want [new], 1", changed, removed)
 	}
-	if !m.changedIDs["new"] {
+	if _, ok := m.changedIDs["new"]; !ok {
 		t.Error("expected changedIDs to contain 'new'")
 	}
 }
 
 func TestDiffIssuesNoChange(t *testing.T) {
-	m := Model{
-		prevIssueMap: map[string]data.Status{
-			"a": data.StatusOpen,
-			"b": data.StatusClosed,
-		},
-		changedIDs: make(map[string]bool),
-	}
 	issues := []data.Issue{
 		testIssue("a", data.StatusOpen),
 		testIssue("b", data.StatusClosed),
 	}
-	if got := m.diffIssues(issues); got != 0 {
-		t.Errorf("no change: got %d changes, want 0", got)
+	m := Model{issues: issues, changedIDs: make(map[string]time.Time)}
+	if changed, removed := m.diffIssues(issues); len(changed) != 0 || removed != 0 {
+		t.Errorf("no change: got %v changed, %d removed; want none", changed, removed)
 	}
 }
 

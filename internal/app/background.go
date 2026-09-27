@@ -137,8 +137,13 @@ func (m Model) handleToastDismiss() (tea.Model, tea.Cmd) {
 // handleChangeIndicatorExpired clears change indicators that have reached
 // their lifetime.
 func (m Model) handleChangeIndicatorExpired() (tea.Model, tea.Cmd) {
-	m.changedIDs = make(map[string]bool)
-	m.parade.ChangedIDs = nil
+	cutoff := time.Now().Add(-changeIndicatorDuration)
+	for id, at := range m.changedIDs {
+		if !at.After(cutoff) {
+			delete(m.changedIDs, id)
+		}
+	}
+	m.parade.ChangedIDs = m.changedSet()
 	return m, nil
 }
 

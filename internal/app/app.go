@@ -91,10 +91,9 @@ type Model struct {
 	// Confetti animation
 	confetti Confetti
 
-	// Change indicators: track recently changed issue IDs
-	changedIDs   map[string]bool
-	changedAt    time.Time
-	prevIssueMap map[string]data.Status // issueID -> previous status for diffing
+	// Change indicators: issue ID -> when a reload last saw it change. Each
+	// dot expires changeIndicatorDuration after its own change.
+	changedIDs map[string]time.Time
 
 	// Focus mode
 	focusMode bool
@@ -293,12 +292,6 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 	ti.Placeholder = "Filter type:bug, label:foo, p1, or fuzzy text..."
 	ti.SetWidth(50)
 
-	// Build initial status snapshot for change detection
-	prevMap := make(map[string]data.Status, len(issues))
-	for _, iss := range issues {
-		prevMap[iss.ID] = iss.Status
-	}
-
 	gtEnv := gastown.Detect()
 	metaSchema := data.LoadMetadataSchema(projectDir)
 
@@ -321,8 +314,7 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 		gtEnv:          gtEnv,
 		driver:         gastown.SelectDriver(),
 		gtPollInFlight: gtEnv.Available || gastown.GCEnabled(), // Init() launches the first poll; gate subsequent ones
-		changedIDs:     make(map[string]bool),
-		prevIssueMap:   prevMap,
+		changedIDs:     make(map[string]time.Time),
 		sourceMode:     source.Mode,
 		metadataSchema: metaSchema,
 		startedAt:      time.Now(),
@@ -1589,6 +1581,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toast = toast
 		if msg.action == "noted" {
 			m.detail.RichIssueID = ""
+		}
+		// Refetch the COMMENTS list with the reload below, rather than
+		// leaving mg's own comment out until the selection changes.
+		if msg.action == "comment added" && m.detail.CommentsIssueID == msg.issueID {
+			m.detail.CommentsIssueID = ""
 		}
 		if msg.claimedID != "" {
 			m.pendingSelectID = msg.claimedID
@@ -2909,35 +2906,32 @@ func (m Model) handleRecoveryResult(msg recoveryResultMsg) (tea.Model, tea.Cmd) 
 	return m, tea.Batch(cmd, m.pollGTStatus)
 }
 
-// diffIssues compares new issues against the previous snapshot and returns the count of changes.
-func (m *Model) diffIssues(newIssues []data.Issue) int {
-	if len(m.prevIssueMap) == 0 {
-		return 0
+// diffIssues compares a fresh load against the issues on screen, marks the
+// ones that changed (see data.DiffIssues for what counts) with the current
+// time, and returns them along with how many issues disappeared. With nothing
+// loaded before there is nothing to compare, so nothing is marked.
+func (m *Model) diffIssues(newIssues []data.Issue) (changed []string, removed int) {
+	if len(m.issues) == 0 {
+		return nil, 0
 	}
-
-	changed := 0
-	newMap := make(map[string]data.Status, len(newIssues))
-	for _, iss := range newIssues {
-		newMap[iss.ID] = iss.Status
+	changed, gone := data.DiffIssues(m.issues, newIssues)
+	now := time.Now()
+	for _, id := range changed {
+		m.changedIDs[id] = now
 	}
+	return changed, len(gone)
+}
 
-	// Check for status changes or new issues
-	for id, newStatus := range newMap {
-		oldStatus, existed := m.prevIssueMap[id]
-		if !existed || oldStatus != newStatus {
-			m.changedIDs[id] = true
-			changed++
-		}
+// changedSet is the parade's view of the change indicators.
+func (m Model) changedSet() map[string]bool {
+	if len(m.changedIDs) == 0 {
+		return nil
 	}
-
-	// Check for removed issues
-	for id := range m.prevIssueMap {
-		if _, exists := newMap[id]; !exists {
-			changed++
-		}
+	set := make(map[string]bool, len(m.changedIDs))
+	for id := range m.changedIDs {
+		set[id] = true
 	}
-
-	return changed
+	return set
 }
 
 // syncSelection updates the detail panel with the currently selected issue.
@@ -3192,7 +3186,7 @@ func (m *Model) rebuildParade() {
 	}
 
 	// Propagate change indicators to parade
-	m.parade.ChangedIDs = m.changedIDs
+	m.parade.ChangedIDs = m.changedSet()
 
 	m.detail.AllIssues = m.issues
 	m.detail.IssueMap = detailIssueMap

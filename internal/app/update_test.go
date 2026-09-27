@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/matt-wright86/mardi-gras/internal/components"
@@ -155,14 +156,39 @@ func TestChangeIndicatorExpired(t *testing.T) {
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	got := model.(Model)
 
-	// Populate changedIDs with some data.
-	got.changedIDs["open-1"] = true
+	// A change exactly one indicator lifetime old has expired.
+	got.changedIDs["open-1"] = time.Now().Add(-changeIndicatorDuration)
 
 	model, _ = got.Update(changeIndicatorExpiredMsg{})
 	got = model.(Model)
 
 	if len(got.changedIDs) != 0 {
 		t.Fatalf("expected changedIDs to be empty after changeIndicatorExpiredMsg, got %d entries", len(got.changedIDs))
+	}
+	if got.parade.ChangedIDs != nil {
+		t.Fatalf("expected no parade change dots, got %v", got.parade.ChangedIDs)
+	}
+}
+
+func TestChangeIndicatorExpiredKeepsRecent(t *testing.T) {
+	issues := []data.Issue{testIssue("open-1", data.StatusOpen), testIssue("open-2", data.StatusOpen)}
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
+	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	got := model.(Model)
+
+	// open-1 changed a full lifetime ago; open-2 changed a moment ago. The
+	// timer from open-1's change must not take open-2's dot with it.
+	got.changedIDs["open-1"] = time.Now().Add(-changeIndicatorDuration)
+	got.changedIDs["open-2"] = time.Now()
+
+	model, _ = got.Update(changeIndicatorExpiredMsg{})
+	got = model.(Model)
+
+	if _, ok := got.changedIDs["open-1"]; ok {
+		t.Fatal("expected open-1's indicator to expire")
+	}
+	if !got.parade.ChangedIDs["open-2"] {
+		t.Fatal("expected open-2's recent indicator to survive")
 	}
 }
 
