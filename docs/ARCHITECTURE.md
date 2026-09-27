@@ -244,7 +244,7 @@ type Model struct {
 - Header shimmer + spinner ticks, unless `--no-animations`
 - In CLI mode only: `fetchCurrentIssue`, `fetchDoctorDiagnostics`, and `fetchBeadsContext` (the last also carries the `bd` version, which feeds `data.BdVersionWarning`)
 
-**Update(msg)** routes messages. The main ones:
+**Update(msg)** routes messages. Results of background work (refresh ticks and results, the bd health check, gt status and patrol scans, and the animation and toast timers) go first through `updateBackground` (`internal/app/background.go`). Every other message goes to an open modal (palette, form, dialog, text input) when there is one, and a modal drops what it doesn't understand. Each background message closes an in-flight gate or re-arms a timer, so losing one to a modal would stall its loop for the session. The main ones:
 
 | Message | Handler |
 |---|---|

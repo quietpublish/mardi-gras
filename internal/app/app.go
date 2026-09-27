@@ -687,6 +687,10 @@ type headerShimmerMsg struct{}
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	logMsg(msg)
 
+	if model, cmd, ok := m.updateBackground(msg); ok {
+		return model, cmd
+	}
+
 	skipDeferredKeyBuffer := false
 	if deferred, ok := msg.(deferredKeyMsg); ok {
 		var key tea.KeyPressMsg
@@ -1125,59 +1129,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case refreshResultMsg:
 		return m.handleRefreshResult(msg)
 
-	case data.FileChangedMsg:
-		m.sourceHealth = m.sourceHealth.RecordSuccess()
-		cmds := m.applyIssues(msg)
-		cmds = append(cmds, m.refreshDone(), m.gatedPollAgentState())
-		return m, tea.Batch(cmds...)
-
-	case data.FileUnchangedMsg:
-		if !msg.LastMod.IsZero() {
-			m.lastFileMod = msg.LastMod
-		}
-		refresh := m.refreshDone()
-		return m, tea.Batch(refresh, m.gatedPollAgentState())
-
-	case data.FileWatchErrorMsg:
-		m.sourceHealth = m.sourceHealth.RecordFailure(msg.Err)
-		cmds := []tea.Cmd{m.gatedPollAgentState()}
-
-		// Toast suppression: only show on the first failure.
-		if m.sourceHealth.ShouldShowToast() {
-			label := fmt.Sprintf("Load failed: %s", msg.Err)
-			if m.sourceMode == data.SourceCLI {
-				label = fmt.Sprintf("bd list failed: %s", msg.Err)
-			}
-			toast, toastCmd := components.ShowToast(label, components.ToastError, toastDuration)
-			m.toast = toast
-			cmds = append(cmds, toastCmd)
-		}
-
-		// On entering degraded: probe for a fresh JSONL fallback file.
-		if m.sourceHealth.State == data.HealthDegraded && m.sourceHealth.ConsecFailures == data.DegradeThreshold {
-			if path, _, ok := data.ProbeJSONLFallback(m.projectDir); ok {
-				m.sourceHealth.State = data.HealthFallback
-				m.jsonlPath = path
-				m.sourceMode = data.SourceJSONL
-				m.watchPath = path
-				if !m.healthChecking {
-					m.healthChecking = true
-					cmds = append(cmds, data.CLIHealthCheck(m.projectDir))
-				}
-				toast, toastCmd := components.ShowToast(
-					"Switched to issues.jsonl fallback (bd unavailable)",
-					components.ToastWarn, toastDuration,
-				)
-				m.toast = toast
-				cmds = append(cmds, toastCmd)
-			}
-			// If JSONL probe fails: stay degraded with last-good data.
-		}
-		// Continue the loop after any switch above, so the next fetch
-		// targets the source now in effect.
-		cmds = append(cmds, m.refreshDone())
-		return m, tea.Batch(cmds...)
-
 	case agentLaunchedMsg:
 		m.activeAgents[msg.issueID] = msg.windowName
 		m.propagateAgentState()
@@ -1304,86 +1255,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.activeAgents = msg.activeAgents
 		m.propagateAgentState()
 		return m, nil
-
-	case townStatusMsg:
-		m.gtPollInFlight = false
-		if msg.err != nil {
-			// Record the failure so the panel can report it. Previously this
-			// error was dropped on the floor, and with no status to fall back
-			// on the panel showed its loading line forever — an unreachable
-			// orchestrator was indistinguishable from a slow one. A successful
-			// poll that already populated townStatus keeps its data; the error
-			// only surfaces when there is nothing to show.
-			m.townStatusErr = msg.err
-			m.gasTown.SetStatusError(msg.err, m.driver.Backend())
-			return m, nil
-		}
-		if msg.status != nil {
-			m.townStatusErr = nil
-			m.gasTown.SetStatusError(nil, "")
-			m.townStatus = msg.status
-			m.activeAgents = msg.status.ActiveAgentMap()
-			m.propagateAgentState()
-			if m.showGasTown {
-				m.gasTown.SetStatus(m.townStatus, m.gtEnv)
-				m.recomputeVelocity()
-			}
-			if m.showProblems {
-				m.problems.SetProblems(m.allProblems())
-			}
-			// Check if selected issue now has an agent → fetch molecule
-			if cmd := m.maybeFetchMolecule(); cmd != nil {
-				return m, cmd
-			}
-		}
-		return m, nil
-
-	case patrolScanMsg:
-		m.patrolScanInFlight = false
-		if msg.err != nil {
-			// Clear stale patrol data and update TTL to prevent hot-loop retries
-			m.patrolScan = nil
-			m.lastPatrolScan = time.Now()
-			m.header.ProblemCount = len(m.allProblems())
-			if m.showProblems {
-				m.problems.SetProblems(m.allProblems())
-			}
-			return m, nil
-		}
-		if msg.scan != nil {
-			m.patrolScan = msg.scan
-			m.lastPatrolScan = time.Now()
-			m.header.ProblemCount = len(m.allProblems())
-			if m.showProblems {
-				m.problems.SetProblems(m.allProblems())
-			}
-		}
-		return m, nil
-
-	case data.CLIHealthCheckMsg:
-		if msg.Err != nil {
-			m.sourceHealth = m.sourceHealth.RecordFailure(msg.Err)
-			// Keep probing until CLI recovers.
-			return m, data.CLIHealthCheck(m.projectDir)
-		}
-		m.sourceHealth = m.sourceHealth.RecordSuccess()
-		if m.sourceHealth.State == data.HealthHealthy {
-			// Recovery complete: switch back to CLI. Restarting the loop
-			// drops any JSONL fetch still in flight and retires its timer.
-			m.sourceMode = data.SourceCLI
-			m.watchPath = ""
-			m.healthChecking = false
-			cmds := m.applyIssues(data.FileChangedMsg{Issues: msg.Issues, LastMod: time.Now()})
-			toast, toastCmd := components.ShowToast(
-				"bd recovered \u2014 switched back to CLI",
-				components.ToastSuccess, toastDuration,
-			)
-			m.toast = toast
-			cmds = append(cmds, m.restartRefresh(), m.gatedPollAgentState(), toastCmd)
-			return m, tea.Batch(cmds...)
-		}
-		// Still recovering (1 success counted); keep probing.
-		return m, data.CLIHealthCheck(m.projectDir)
 
 	case slingResultMsg:
 		label := fmt.Sprintf("Slung %s to polecat", msg.issueID)
@@ -1735,28 +1606,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
-
-	case gasTownTickMsg:
-		m.gasTown.Tick()
-		// Keep ticking while panel is visible
-		if m.showGasTown {
-			return m, gasTownTickCmd()
-		}
-		m.gasTownTicking = false
-		return m, nil
-
-	case headerShimmerMsg:
-		m.beadOffset++
-		return m, headerShimmerCmd()
-
-	case components.ToastDismissMsg:
-		m.toast = components.Toast{}
-		return m, nil
-
-	case changeIndicatorExpiredMsg:
-		m.changedIDs = make(map[string]bool)
-		m.parade.ChangedIDs = nil
-		return m, nil
 
 	case currentIssueMsg:
 		if msg.issueID == "" {

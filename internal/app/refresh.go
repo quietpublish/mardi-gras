@@ -206,3 +206,91 @@ func (m *Model) applyIssues(msg data.FileChangedMsg) []tea.Cmd {
 	cmds = append(cmds, m.detailFetchBatch()...)
 	return cmds
 }
+
+// handleIssuesLoaded absorbs a successful reload and continues the refresh loop.
+func (m Model) handleIssuesLoaded(msg data.FileChangedMsg) (tea.Model, tea.Cmd) {
+	m.sourceHealth = m.sourceHealth.RecordSuccess()
+	cmds := m.applyIssues(msg)
+	cmds = append(cmds, m.refreshDone(), m.gatedPollAgentState())
+	return m, tea.Batch(cmds...)
+}
+
+// handleIssuesUnchanged continues the refresh loop after a JSONL check found no change.
+func (m Model) handleIssuesUnchanged(msg data.FileUnchangedMsg) (tea.Model, tea.Cmd) {
+	if !msg.LastMod.IsZero() {
+		m.lastFileMod = msg.LastMod
+	}
+	refresh := m.refreshDone()
+	return m, tea.Batch(refresh, m.gatedPollAgentState())
+}
+
+// handleLoadError records a failed reload, falls back to JSONL when bd has
+// been failing long enough, and continues the refresh loop.
+func (m Model) handleLoadError(msg data.FileWatchErrorMsg) (tea.Model, tea.Cmd) {
+	m.sourceHealth = m.sourceHealth.RecordFailure(msg.Err)
+	cmds := []tea.Cmd{m.gatedPollAgentState()}
+
+	// Toast suppression: only show on the first failure.
+	if m.sourceHealth.ShouldShowToast() {
+		label := fmt.Sprintf("Load failed: %s", msg.Err)
+		if m.sourceMode == data.SourceCLI {
+			label = fmt.Sprintf("bd list failed: %s", msg.Err)
+		}
+		toast, toastCmd := components.ShowToast(label, components.ToastError, toastDuration)
+		m.toast = toast
+		cmds = append(cmds, toastCmd)
+	}
+
+	// On entering degraded: probe for a fresh JSONL fallback file.
+	if m.sourceHealth.State == data.HealthDegraded && m.sourceHealth.ConsecFailures == data.DegradeThreshold {
+		if path, _, ok := data.ProbeJSONLFallback(m.projectDir); ok {
+			m.sourceHealth.State = data.HealthFallback
+			m.jsonlPath = path
+			m.sourceMode = data.SourceJSONL
+			m.watchPath = path
+			if !m.healthChecking {
+				m.healthChecking = true
+				cmds = append(cmds, data.CLIHealthCheck(m.projectDir))
+			}
+			toast, toastCmd := components.ShowToast(
+				"Switched to issues.jsonl fallback (bd unavailable)",
+				components.ToastWarn, toastDuration,
+			)
+			m.toast = toast
+			cmds = append(cmds, toastCmd)
+		}
+		// If JSONL probe fails: stay degraded with last-good data.
+	}
+	// Continue the loop after any switch above, so the next fetch
+	// targets the source now in effect.
+	cmds = append(cmds, m.refreshDone())
+	return m, tea.Batch(cmds...)
+}
+
+// handleHealthCheck handles a bd probe made while in JSONL fallback,
+// switching back to the CLI once bd has recovered.
+func (m Model) handleHealthCheck(msg data.CLIHealthCheckMsg) (tea.Model, tea.Cmd) {
+	if msg.Err != nil {
+		m.sourceHealth = m.sourceHealth.RecordFailure(msg.Err)
+		// Keep probing until CLI recovers.
+		return m, data.CLIHealthCheck(m.projectDir)
+	}
+	m.sourceHealth = m.sourceHealth.RecordSuccess()
+	if m.sourceHealth.State == data.HealthHealthy {
+		// Recovery complete: switch back to CLI. Restarting the loop
+		// drops any JSONL fetch still in flight and retires its timer.
+		m.sourceMode = data.SourceCLI
+		m.watchPath = ""
+		m.healthChecking = false
+		cmds := m.applyIssues(data.FileChangedMsg{Issues: msg.Issues, LastMod: time.Now()})
+		toast, toastCmd := components.ShowToast(
+			"bd recovered \u2014 switched back to CLI",
+			components.ToastSuccess, toastDuration,
+		)
+		m.toast = toast
+		cmds = append(cmds, m.restartRefresh(), m.gatedPollAgentState(), toastCmd)
+		return m, tea.Batch(cmds...)
+	}
+	// Still recovering (1 success counted); keep probing.
+	return m, data.CLIHealthCheck(m.projectDir)
+}
