@@ -239,7 +239,7 @@ type Model struct {
 ### Lifecycle
 
 **Init()** batches the startup commands:
-- `m.startPoll()` — JSONL mode: `data.WatchFile(path, lastMod)` polls every 1.2s; CLI mode: `data.PollCLI(projectDir)` runs `bd list --json` every 5s
+- The first refresh timer (`refreshTimer`) — every 1.2s in JSONL mode, every 5s in CLI mode; see "4. Live updates" below
 - Agent state poll — `pollGTStatus` when an orchestrator is available, otherwise `pollTmuxAgentState` when running in tmux, otherwise nothing. Subsequent polls use a single-flight gate (`gtPollInFlight`) to prevent overlapping status calls, which are slow; Init bypasses the gate for the first poll, and calls from the watcher and user actions go through `gatedPollAgentState()`.
 - Header shimmer + spinner ticks, unless `--no-animations`
 - In CLI mode only: `fetchCurrentIssue`, `fetchDoctorDiagnostics`, and `fetchBeadsContext` (the last also carries the `bd` version, which feeds `data.BdVersionWarning`)
@@ -429,15 +429,15 @@ DepEval.IsBlocked = len(BlockingIDs) > 0 || len(MissingIDs) > 0
 
 mg does not enforce a fixed vocabulary of dependency types — whatever string `bd` puts in `type` is carried through. The `--block-types` flag (or `MG_BLOCK_TYPES`) names the types treated as blockers; everything else is non-blocking. The default set is `data.DefaultBlockingTypes` = `blocks` and `conditional-blocks`. The detail pane has friendly wording for `related`, `duplicates`, `supersedes`, `parent-child`, `discovered-from`, `waits-for` and `replies-to`, and falls back to printing the raw type for anything else.
 
-### 4. Live updates (data/watcher.go, source.go)
+### 4. Live updates (app/refresh.go, data/watcher.go, source.go)
 
-Two polling strategies, selected by `sourceMode`:
+One refresh loop per session (`refreshLoop` in `internal/app/refresh.go`) owns every reload: a single armed timer and at most one fetch in flight. Each fetch is a one-shot Cmd chosen by source:
 
-**JSONL mode** (`data.WatchFile`): polls file modtime every 1.2s, emits `FileChangedMsg` on change, `FileUnchangedMsg` when unchanged.
+**JSONL mode** (`data.CheckFile`): stats the file every 1.2s (`data.WatchInterval`), emits `FileChangedMsg` on change, `FileUnchangedMsg` when unchanged.
 
-**CLI mode** (`data.PollCLI`): runs `bd list --json --limit 0 --all` every 5s, always emits `FileChangedMsg` (the app's `diffIssues()` detects no-ops). Errors emit `FileWatchErrorMsg` and show a toast.
+**CLI mode** (`data.FetchIssuesNow`): runs `bd list --json --limit 0 --all` every 5s (`data.CLIPollInterval`), always emits `FileChangedMsg` (the app's `diffIssues()` detects no-ops). Errors emit `FileWatchErrorMsg` and show a toast.
 
-Both use `startPoll()` and `startPollImmediate()` helpers so message handlers are mode-agnostic. After mutations (status change, issue create), `startPollImmediate()` triggers an instant re-fetch regardless of mode.
+Results arrive wrapped in `refreshResultMsg`, tagged with the source generation they were fetched against, so a result from a source mg has since left (JSONL fallback → CLI recovery) is dropped. Mutation handlers (status change, create, claim, prune, agent finished) call `requestRefresh()`: it fetches immediately, or, while a fetch is in flight, marks the loop dirty so exactly one follow-up fetch runs when it lands. A burst of mutations therefore coalesces instead of each starting a poll of its own. Timers carry a generation too, so only the newest one can start a fetch.
 
 On `FileChangedMsg`, the app reloads issues, rebuilds parade groups, diffs against `prevIssueMap` to detect status changes (for change indicator badges), and syncs the selected issue — preserving cursor position and scroll state.
 
@@ -686,7 +686,7 @@ Plus:
 
 ## Data Source Abstraction
 
-`data/source.go` holds the small config value that tells the app where issues come from. It is worth being precise about what this is and is not: `SourceMode` is an **enum on a plain config struct**, not a pluggable interface. There is no `Source` interface and no registry — the modes are switched on explicitly in `startPoll()`, `startPollImmediate()` and `resolveSource()`. What the shape buys is that every mode emits the same messages, so the app layer stays mode-agnostic; adding a mode still means touching each of those switches.
+`data/source.go` holds the small config value that tells the app where issues come from. It is worth being precise about what this is and is not: `SourceMode` is an **enum on a plain config struct**, not a pluggable interface. There is no `Source` interface and no registry — the modes are switched on explicitly in `usingCLI()`/`startFetch()` (`internal/app/refresh.go`) and `resolveSource()`. What the shape buys is that every mode emits the same messages, so the app layer stays mode-agnostic; adding a mode still means touching each of those switches.
 
 ```go
 type SourceMode int
@@ -708,7 +708,7 @@ type Source struct {
 
 ### Source health and JSONL fallback (source_health.go)
 
-`SourceHealth` is a small immutable state machine — value receivers returning a new value, so it composes with BubbleTea's model pattern — that tracks consecutive `bd list` failures: `Healthy → Degraded → Fallback → Recovering → Healthy`. While `InFallback()` is true, `startPoll()` watches the JSONL file even in CLI mode, so a dead Dolt server degrades to stale-but-readable data instead of an empty parade. A separate 15s `CLIHealthCheck` tick probes whether the CLI has come back, and the footer renders the degraded state.
+`SourceHealth` is a small immutable state machine — value receivers returning a new value, so it composes with BubbleTea's model pattern — that tracks consecutive `bd list` failures: `Healthy → Degraded → Fallback → Recovering → Healthy`. While `InFallback()` is true, the refresh loop watches the JSONL file even in CLI mode, so a dead Dolt server degrades to stale-but-readable data instead of an empty parade. A separate 15s `CLIHealthCheck` tick probes whether the CLI has come back, and the footer renders the degraded state.
 
 ### Adding a new source mode
 
@@ -716,8 +716,8 @@ To add a new mode (e.g., `SourceDolt` for direct Dolt MySQL connection):
 
 1. Add constant to `SourceMode` in `data/source.go`
 2. Add fetch function returning `([]Issue, error)` in `data/source.go`
-3. Add poll function returning `tea.Cmd` in `data/watcher.go`
-4. Extend `startPoll()` / `startPollImmediate()` in `internal/app/app.go`
+3. Add a one-shot fetch function returning `tea.Cmd` in `data/watcher.go` or `data/source.go`
+4. Extend `usingCLI()` / `refreshInterval()` / `startFetch()` in `internal/app/refresh.go`
 5. Add case to `resolveSource()` in `cmd/mg/main.go`
 6. Update `Source.Label()` for footer display
 

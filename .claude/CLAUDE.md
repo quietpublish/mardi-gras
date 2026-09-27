@@ -12,6 +12,7 @@ make fmt          # go fmt ./...
 make dev          # Build and run with testdata/sample.jsonl
 make dev-gt       # Same, with testdata/fake-gt.sh on PATH (fake Gas Town)
 make dev-gc       # Same, against testdata/fakegc (fake Gas City supervisor)
+make dev-bd       # CLI mode against testdata/fake-bd (fake bd; MG_FAKE_BD_LOG=<file> logs calls)
 make gc-client    # Regenerate the Gas City API client (internal/gastown/gcclient) from the pinned spec
 ```
 

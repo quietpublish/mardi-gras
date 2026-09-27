@@ -1,0 +1,39 @@
+#!/bin/bash
+# Fake bd binary for local TUI testing in CLI mode (make dev-bd).
+# Serves testdata/sample.jsonl as the workspace's issues; mutations succeed
+# without changing anything. Set MG_FAKE_BD_LOG=<file> to log every
+# invocation with a timestamp, e.g. to count how often mg runs bd list.
+
+SAMPLE="$(cd "$(dirname "$0")/../.." && pwd)/sample.jsonl"
+
+if [ -n "$MG_FAKE_BD_LOG" ]; then
+  echo "$(date +%s) $*" >> "$MG_FAKE_BD_LOG"
+fi
+
+case "$1" in
+  list)
+    printf '['; paste -sd, "$SAMPLE"; printf ']\n'
+    ;;
+  show)
+    [ "$2" = "--current" ] && exit 1
+    line=$(grep -F "\"id\":\"$2\"" "$SAMPLE")
+    [ -z "$line" ] && { echo "Error: no issue found matching \"$2\"" >&2; exit 1; }
+    printf '[%s]\n' "$line"
+    ;;
+  context)
+    echo '{"bd_version":"1.1.0","database":"fake","backend":"dolt","dolt_mode":"embedded"}'
+    ;;
+  doctor)
+    echo '{"overall_ok":true,"diagnostics":[]}'
+    ;;
+  comments)
+    [ "$2" = "add" ] && exit 0
+    echo '[]'
+    ;;
+  --version|version)
+    echo 'bd version 1.1.0 (fake)'
+    ;;
+  *)
+    exit 0
+    ;;
+esac

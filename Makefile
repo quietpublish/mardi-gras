@@ -4,7 +4,7 @@ GO := go
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -ldflags "-s -w -X main.version=$(VERSION)"
 
-.PHONY: build run run-sample test clean dev dev-gt dev-gc screenshot screenshots-gc screenshot-light demo-gif tidy fmt lint gc-client
+.PHONY: build run run-sample test clean dev dev-gt dev-gc dev-bd screenshot screenshots-gc screenshot-light demo-gif tidy fmt lint gc-client
 
 # GCDIR is the generated Gas City client package.
 GCDIR := internal/gastown/gcclient
@@ -30,6 +30,14 @@ dev: build
 
 dev-gt: build
 	PATH="$(CURDIR)/testdata:$(PATH)" ./$(BINARY) --path testdata/sample.jsonl
+
+# dev-bd runs mg in CLI mode (the bd list refresh loop) against a fake bd
+# (testdata/fake-bd/bin/bd) that serves testdata/sample.jsonl. The .beads/
+# directory is created here because .gitignore excludes every .beads/.
+# Set MG_FAKE_BD_LOG=<file> to log each bd invocation.
+dev-bd: build
+	mkdir -p testdata/fake-bd/.beads
+	cd testdata/fake-bd && PATH="$(CURDIR)/testdata/fake-bd/bin:$(PATH)" $(CURDIR)/$(BINARY)
 
 # dev-gc runs mg against a fake Gas City supervisor (testdata/fakegc) — the
 # HTTP analogue of dev-gt. Press ctrl+g for the Gas City panel. Good for
