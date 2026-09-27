@@ -95,15 +95,15 @@ func TestJournalFollowerHeadFound(t *testing.T) {
 func TestJournalFollowerProbed(t *testing.T) {
 	f := following(t)
 
-	got, act := f.Probed(nil, nil, t0)
+	got, act := f.Probed(nil, nil, t0, t0)
 	if act != JournalNoAction || got.Anchor.Seq != 10 {
 		t.Errorf("nothing new: got %v, anchor %d", act, got.Anchor.Seq)
 	}
-	got, act = f.Probed([]JournalRecord{rec(11, "a"), rec(12, "b")}, nil, t0)
+	got, act = f.Probed([]JournalRecord{rec(11, "a"), rec(12, "b")}, nil, t0, t0)
 	if act != JournalRefresh || got.Anchor.Seq != 12 || got.Anchor.Ref == nil || got.Anchor.Ref.IssueID != "b" {
 		t.Errorf("new records: got %v, anchor %+v; want a reload and the anchor on 12", act, got.Anchor)
 	}
-	got, act = f.Probed([]JournalRecord{wisp(11, "w")}, nil, t0)
+	got, act = f.Probed([]JournalRecord{wisp(11, "w")}, nil, t0, t0)
 	if act != JournalNoAction || got.Anchor.Seq != 11 {
 		t.Errorf("wisps only: got %v, anchor %d; want no reload but the anchor moved", act, got.Anchor.Seq)
 	}
@@ -115,8 +115,14 @@ func TestJournalFollowerProbedFullPage(t *testing.T) {
 	for i := range page {
 		page[i] = rec(int64(11+i), "a")
 	}
-	if _, act := f.Probed(page, nil, t0); act != JournalProbeNow {
-		t.Fatalf("got %v, want an immediate re-probe", act)
+	// A backlog: re-anchor at the head, whose reload covers it, rather than
+	// page through it.
+	got, act := f.Probed(page, nil, t0, t0)
+	if got.Phase != JournalBaselining || act != JournalFindHead {
+		t.Fatalf("got %v, %v; want a head search", got.Phase, act)
+	}
+	if got, act = got.HeadFound(JournalAnchor{Seq: 900}, nil, t0); act != JournalRefresh {
+		t.Fatalf("head found: got %v, want the reload that covers the backlog", act)
 	}
 }
 
@@ -126,7 +132,7 @@ func TestJournalFollowerProbedResync(t *testing.T) {
 		"truncated": &JournalTruncatedError{Since: 9, Floor: 20, Head: 30},
 	} {
 		t.Run(name, func(t *testing.T) {
-			got, act := following(t).Probed(nil, err, t0)
+			got, act := following(t).Probed(nil, err, t0, t0)
 			if got.Phase != JournalBaselining || act != JournalFindHead {
 				t.Fatalf("got %v, %v; want a new head search", got.Phase, act)
 			}
@@ -135,7 +141,7 @@ func TestJournalFollowerProbedResync(t *testing.T) {
 }
 
 func TestJournalFollowerProbedUnsupported(t *testing.T) {
-	got, _ := following(t).Probed(nil, ErrJournalUnsupported, t0)
+	got, _ := following(t).Probed(nil, ErrJournalUnsupported, t0, t0)
 	if got.Phase != JournalOff {
 		t.Fatalf("got %v, want off", got.Phase)
 	}
@@ -145,11 +151,11 @@ func TestJournalFollowerProbedFailures(t *testing.T) {
 	f := following(t)
 	boom := errors.New("timeout")
 	for i := 1; i < journalMaxFailures; i++ {
-		if f, _ = f.Probed(nil, boom, t0); !f.Live() {
+		if f, _ = f.Probed(nil, boom, t0, t0); !f.Live() {
 			t.Fatalf("backed off after %d failures, want %d", i, journalMaxFailures)
 		}
 	}
-	if f, _ = f.Probed(nil, boom, t0); f.Phase != JournalBackoff {
+	if f, _ = f.Probed(nil, boom, t0, t0); f.Phase != JournalBackoff {
 		t.Fatalf("got %v after %d failures, want backoff", f.Phase, journalMaxFailures)
 	}
 	f, act := f.Tick(f.RetryAt)
@@ -177,9 +183,9 @@ func TestJournalFollowerBackoffDoubles(t *testing.T) {
 	// A successful baseline resets the backoff.
 	f, _ = f.Enabled(true, nil, now)
 	f, _ = f.HeadFound(JournalAnchor{}, nil, now)
-	f, _ = f.Probed(nil, errors.New("a"), now)
-	f, _ = f.Probed(nil, errors.New("b"), now)
-	f, _ = f.Probed(nil, errors.New("c"), now)
+	f, _ = f.Probed(nil, errors.New("a"), now, now)
+	f, _ = f.Probed(nil, errors.New("b"), now, now)
+	f, _ = f.Probed(nil, errors.New("c"), now, now)
 	if got := f.RetryAt.Sub(now); got != journalRetryMin {
 		t.Fatalf("delay after recovery = %v, want %v", got, journalRetryMin)
 	}
@@ -190,33 +196,33 @@ func TestJournalFollowerPartial(t *testing.T) {
 	now := t0.Add(time.Minute)
 
 	// A change whose record was probed is explained.
-	f, _ = f.Probed([]JournalRecord{rec(11, "a")}, nil, now)
+	f, _ = f.Probed([]JournalRecord{rec(11, "a")}, nil, now, now)
 	f = f.Reloaded([]string{"a"}, now, now)
-	f, _ = f.Probed(nil, nil, now)
+	f, _ = f.Probed(nil, nil, now, now)
 	if f.Partial {
 		t.Fatal("a journaled change must not mark the journal partial")
 	}
 
 	// A change whose record lands in the next probe is explained too.
 	f = f.Reloaded([]string{"b"}, now, now)
-	f, _ = f.Probed([]JournalRecord{rec(12, "b")}, nil, now)
+	f, _ = f.Probed([]JournalRecord{rec(12, "b")}, nil, now, now)
 	if f.Partial {
 		t.Fatal("a change explained by the next probe must not mark the journal partial")
 	}
 
 	// A change no record ever explains marks it partial.
 	f = f.Reloaded([]string{"c"}, now, now)
-	f, _ = f.Probed(nil, nil, now)
+	f, _ = f.Probed(nil, nil, now, now)
 	if !f.Partial {
 		t.Fatal("expected an unexplained change to mark the journal partial")
 	}
 
 	// Partial decays after a quiet spell.
-	f, _ = f.Probed(nil, nil, now.Add(journalPartialDecay-time.Second))
+	f, _ = f.Probed(nil, nil, now.Add(journalPartialDecay-time.Second), now.Add(journalPartialDecay-time.Second))
 	if !f.Partial {
 		t.Fatal("partial cleared too early")
 	}
-	f, _ = f.Probed(nil, nil, now.Add(journalPartialDecay))
+	f, _ = f.Probed(nil, nil, now.Add(journalPartialDecay), now.Add(journalPartialDecay))
 	if f.Partial {
 		t.Fatal("expected partial to clear after a quiet spell")
 	}
@@ -224,12 +230,12 @@ func TestJournalFollowerPartial(t *testing.T) {
 
 func TestJournalFollowerPartialSeenWindow(t *testing.T) {
 	f := following(t)
-	f, _ = f.Probed([]JournalRecord{rec(11, "a")}, nil, t0)
+	f, _ = f.Probed([]JournalRecord{rec(11, "a")}, nil, t0, t0)
 
 	// A record probed long ago does not explain a fresh change to that issue.
 	later := t0.Add(journalSeenWindow + time.Second)
 	f = f.Reloaded([]string{"a"}, later, later)
-	f, _ = f.Probed(nil, nil, later)
+	f, _ = f.Probed(nil, nil, later, later)
 	if !f.Partial {
 		t.Fatal("a stale record must not explain a new change")
 	}
@@ -245,13 +251,13 @@ func TestJournalFollowerReloadedBaseline(t *testing.T) {
 	f = f.Reloaded([]string{"early"}, t0.Add(-time.Second), t0)
 	// The first reload after it shows changes recorded below the anchor.
 	f = f.Reloaded([]string{"below-anchor"}, t0, t0.Add(time.Second))
-	f, _ = f.Probed(nil, nil, t0.Add(2*time.Second))
+	f, _ = f.Probed(nil, nil, t0.Add(2*time.Second), t0.Add(2*time.Second))
 	if f.Partial {
 		t.Fatal("the baseline reload must not be judged")
 	}
 	// Reloads after the baseline are.
 	f = f.Reloaded([]string{"unjournaled"}, t0.Add(3*time.Second), t0.Add(3*time.Second))
-	f, _ = f.Probed(nil, nil, t0.Add(4*time.Second))
+	f, _ = f.Probed(nil, nil, t0.Add(4*time.Second), t0.Add(4*time.Second))
 	if !f.Partial {
 		t.Fatal("expected reloads after the baseline to be judged")
 	}
@@ -283,7 +289,24 @@ func TestJournalFollowerStaleResults(t *testing.T) {
 		t.Error("a head search result outside baselining must be ignored")
 	}
 	off, _ := NewJournalFollower(true)
-	if got, act := off.Probed([]JournalRecord{rec(1, "a")}, nil, t0); act != JournalNoAction || got.Phase != JournalOff {
+	if got, act := off.Probed([]JournalRecord{rec(1, "a")}, nil, t0, t0); act != JournalNoAction || got.Phase != JournalOff {
 		t.Error("a probe result outside following must be ignored")
+	}
+}
+
+func TestJournalFollowerSuspectsWaitForLaterProbe(t *testing.T) {
+	f := following(t)
+	reloadDone := t0.Add(time.Minute)
+	f = f.Reloaded([]string{"x"}, reloadDone.Add(-time.Second), reloadDone)
+
+	// A probe that started before the reload landed may predate x's record.
+	f, _ = f.Probed(nil, nil, reloadDone.Add(-500*time.Millisecond), reloadDone.Add(time.Second))
+	if f.Partial {
+		t.Fatal("a probe that started before the reload landed must not judge it")
+	}
+	// The next probe, started after, returns x's record: explained.
+	f, _ = f.Probed([]JournalRecord{rec(11, "x")}, nil, reloadDone.Add(2*time.Second), reloadDone.Add(2*time.Second))
+	if f.Partial {
+		t.Fatal("expected x to be explained by the later probe")
 	}
 }

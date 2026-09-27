@@ -352,3 +352,30 @@ func TestJournalAnchorAt(t *testing.T) {
 		t.Fatal("anchor must not alias the records slice")
 	}
 }
+
+func TestProbeJournalPrunedAnchor(t *testing.T) {
+	// Still pruned to nothing: caught up.
+	pruned := &fakeJournal{floor: 13, head: 12}
+	restore := pruned.install()
+	records, err := ProbeJournal(JournalAnchor{Seq: 12}, 500)
+	restore()
+	if err != nil || len(records) != 0 {
+		t.Fatalf("pruned: got %v, %v; want caught up", records, err)
+	}
+
+	// Reset below the anchor (a fresh clone restarting at seq 1).
+	reset := &fakeJournal{floor: 1, head: 3, gen: 1}
+	restore = reset.install()
+	_, err = ProbeJournal(JournalAnchor{Seq: 12}, 500)
+	restore()
+	if !errors.Is(err, ErrJournalReset) {
+		t.Fatalf("reset: err = %v, want ErrJournalReset", err)
+	}
+
+	// Reset and pruned again below the anchor.
+	resetPruned := &fakeJournal{floor: 3, head: 2, gen: 1}
+	defer resetPruned.install()()
+	if _, err := ProbeJournal(JournalAnchor{Seq: 12}, 500); !errors.Is(err, ErrJournalReset) {
+		t.Fatalf("reset and pruned: err = %v, want ErrJournalReset", err)
+	}
+}

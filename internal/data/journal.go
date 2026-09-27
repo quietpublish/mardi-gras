@@ -163,10 +163,16 @@ func parseJournalRecords(out []byte) ([]JournalRecord, error) {
 // ProbeJournal returns up to limit records after anchor. It re-reads the
 // anchor's own record first and returns ErrJournalReset when that record is
 // gone or different; a checkpoint above a reset journal's head would
-// otherwise read as "caught up" forever.
+// otherwise read as "caught up" forever. An anchor without a record gets the
+// same guarantee from verifyPrunedAnchor, at the cost of a second read when
+// nothing is new.
 func ProbeJournal(anchor JournalAnchor, limit int) ([]JournalRecord, error) {
 	if anchor.Ref == nil {
-		return TailJournal(anchor.Seq, limit)
+		records, err := TailJournal(anchor.Seq, limit)
+		if err != nil || len(records) > 0 || anchor.Seq == 0 {
+			return records, err
+		}
+		return nil, verifyPrunedAnchor(anchor)
 	}
 	records, err := TailJournal(anchor.Seq-1, limit+1)
 	if err != nil {
@@ -176,6 +182,26 @@ func ProbeJournal(anchor JournalAnchor, limit int) ([]JournalRecord, error) {
 		return nil, ErrJournalReset
 	}
 	return records[1:], nil
+}
+
+// verifyPrunedAnchor checks an anchor with no record to fingerprint, left
+// by a journal pruned to nothing. While the journal stays that way, a read
+// from 0 reports it truncated with the anchor as head. Any other answer
+// means the journal was reset below the anchor, where every probe would
+// read as caught up forever.
+func verifyPrunedAnchor(anchor JournalAnchor) error {
+	_, err := TailJournal(0, 1)
+	var trunc *JournalTruncatedError
+	switch {
+	case errors.As(err, &trunc):
+		if trunc.Head < anchor.Seq {
+			return ErrJournalReset
+		}
+		return nil
+	case err != nil:
+		return err
+	}
+	return ErrJournalReset
 }
 
 // FindJournalHead locates the newest journal record, so mg can follow from

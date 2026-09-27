@@ -26,7 +26,6 @@ const (
 	JournalCheckEnabled               // run JournalEnabled and feed Enabled
 	JournalFindHead                   // run FindJournalHead and feed HeadFound
 	JournalRefresh                    // reload issues (bd list)
-	JournalProbeNow                   // probe again without waiting: a full page came back
 )
 
 // Tuning for the journal follower.
@@ -73,10 +72,12 @@ type JournalFollower struct {
 	retryDelay time.Duration
 
 	// seen maps issue IDs named by probed records to when they were probed.
-	// suspects holds IDs a reload changed that nothing in seen explained;
-	// the next probe is their last chance.
+	// suspects holds IDs a reload changed that nothing in seen explained,
+	// as of suspectsAt; the first probe that starts after that is their last
+	// chance.
 	seen            map[string]time.Time
 	suspects        map[string]bool
+	suspectsAt      time.Time
 	lastUnexplained time.Time
 }
 
@@ -141,8 +142,9 @@ func (f JournalFollower) HeadFound(anchor JournalAnchor, err error, now time.Tim
 	return f, JournalRefresh
 }
 
-// Probed feeds the result of ProbeJournal from the current anchor.
-func (f JournalFollower) Probed(records []JournalRecord, err error, now time.Time) (JournalFollower, JournalAction) {
+// Probed feeds the result of ProbeJournal from the current anchor, and when
+// that probe started.
+func (f JournalFollower) Probed(records []JournalRecord, err error, startedAt, now time.Time) (JournalFollower, JournalAction) {
 	if f.Phase != JournalFollowing {
 		return f, JournalNoAction
 	}
@@ -164,6 +166,13 @@ func (f JournalFollower) Probed(records []JournalRecord, err error, now time.Tim
 	}
 
 	f.failures = 0
+	if len(records) >= JournalProbeLimit {
+		// A backlog (a laptop waking, a bulk import). Paging through it
+		// only to learn "something changed" is wasted work: re-anchor at
+		// the head, and the head search's reload covers everything below.
+		f.Phase = JournalBaselining
+		return f, JournalFindHead
+	}
 	f.Anchor = f.Anchor.AnchorAt(records)
 	relevant := false
 	for _, r := range records {
@@ -177,18 +186,20 @@ func (f JournalFollower) Probed(records []JournalRecord, err error, now time.Tim
 		f.seen[r.IssueID] = now
 		delete(f.suspects, r.IssueID)
 	}
-	if len(f.suspects) > 0 {
+	switch {
+	case len(f.suspects) > 0 && startedAt.Before(f.suspectsAt):
+		// This probe read the journal before the reload that raised the
+		// suspects landed, so it may predate their records. Wait for one
+		// that starts after.
+	case len(f.suspects) > 0:
 		f.Partial = true
 		f.lastUnexplained = now
-	} else if f.Partial && now.Sub(f.lastUnexplained) >= journalPartialDecay {
+		f.suspects = nil
+	case f.Partial && now.Sub(f.lastUnexplained) >= journalPartialDecay:
 		f.Partial = false
 	}
-	f.suspects = nil
 
-	switch {
-	case len(records) >= JournalProbeLimit:
-		return f, JournalProbeNow
-	case relevant:
+	if relevant {
 		return f, JournalRefresh
 	}
 	return f, JournalNoAction
@@ -223,6 +234,7 @@ func (f JournalFollower) Reloaded(changed []string, startedAt, now time.Time) Jo
 			f.suspects = make(map[string]bool)
 		}
 		f.suspects[id] = true
+		f.suspectsAt = now
 	}
 	return f
 }
