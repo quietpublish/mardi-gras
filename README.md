@@ -161,13 +161,15 @@ mg polls. No file watchers, no daemon, no background service.
 
 Edits from agents, scripts, and `bd` commands all show up on the next tick. Your selection, filter, and fold state survive the refresh. Every issue that changed gets a ◈ mark for 30 seconds, whether its status, title, labels, dependencies or comments moved.
 
-**Faster with the bd events journal.** bd 1.2.1+ can keep an ordered journal of every change made through `bd`. When a workspace has it on, mg checks the journal every 2 seconds and reloads only when something changed, so edits land in about two seconds and an idle mg runs `bd list` twice a minute instead of twelve times. The footer shows `(cli ∿ live)`. Turn it on per workspace:
+**Faster with the bd events journal.** bd 1.2.1+ can keep an ordered journal of every change made through `bd`. When a workspace has it on, mg checks the journal instead of reloading on a timer, and reloads only when something changed. While things are changing it checks every 2 seconds, so edits land in about two; after a quiet minute it relaxes to every 5, and an idle mg runs `bd list` twice a minute instead of twelve times, for less work than plain polling. The footer shows `(cli ∿ live)`. Turn it on per workspace:
 
 ```bash
 bd config set events-journal true
 ```
 
 Know what that does before you run it: it edits `.beads/config.yaml` (a tracked file), and from then on every `bd` command in that workspace, agents' included, writes a journal record. mg never turns it on for you. `bd list` keeps running every 30 seconds as a safety net for writes the journal can't see, such as `bd dolt pull` or programs using the beads Go library. If mg spots one, the footer adds `partial` and it falls back to the 5-second poll until things are quiet again. Under Gas Town or Gas City mg doesn't use the journal at all and keeps the 5-second poll, since orchestrator writes can bypass it. `MG_EVENTS=off` keeps plain polling.
+
+mg's background reads (`bd list`, journal checks, detail fetches) run with `BD_DISABLE_METRICS=1`, so its polling isn't counted as bd usage; the writes it makes for you keep your own bd metrics setting.
 
 ## Themes
 

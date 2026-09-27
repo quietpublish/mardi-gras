@@ -63,8 +63,15 @@ var execWithTimeout = func(timeout time.Duration, name string, args ...string) e
 // output into the envelope form that mg does not yet parse, and pins
 // `BD_DOLT_AUTO_COMMIT=off` for read-only subcommands so each query does
 // not fire a no-op `dolt_commit()` that costs a fresh connection per call
-// (mirrors gt's `bdReadOnlyEnv` pattern from GH#3596). For other commands
-// it returns nil (inherits parent env).
+// (mirrors gt's `bdReadOnlyEnv` pattern from GH#3596).
+//
+// Read-only subcommands also get `BD_DISABLE_METRICS=1`. bd 1.3.0+ queues a
+// usage event per invocation, and mg's background reads (the reload poll,
+// journal probes, detail fetches) are machine polling, not someone using bd:
+// tens of thousands of events a day that skew bd's usage data and fill the
+// user's event queue. Writes mg makes on the user's behalf keep the user's
+// own metrics setting. For other commands it returns nil (inherits parent
+// env).
 //
 // Beads v2.0 will default to envelope mode; that's the migration window for
 // mg to handle both shapes. Until then, pin legacy.
@@ -80,14 +87,14 @@ func bdChildEnv(name string, args []string) []string {
 		if strings.HasPrefix(kv, "BD_JSON_ENVELOPE=") {
 			continue
 		}
-		if readOnly && strings.HasPrefix(kv, "BD_DOLT_AUTO_COMMIT=") {
+		if readOnly && (strings.HasPrefix(kv, "BD_DOLT_AUTO_COMMIT=") || strings.HasPrefix(kv, "BD_DISABLE_METRICS=")) {
 			continue
 		}
 		filtered = append(filtered, kv)
 	}
 	filtered = append(filtered, "BD_JSON_ENVELOPE=0")
 	if readOnly {
-		filtered = append(filtered, "BD_DOLT_AUTO_COMMIT=off")
+		filtered = append(filtered, "BD_DOLT_AUTO_COMMIT=off", "BD_DISABLE_METRICS=1")
 	}
 	return filtered
 }

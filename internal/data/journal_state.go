@@ -30,8 +30,17 @@ const (
 
 // Tuning for the journal follower.
 const (
-	JournalProbeInterval = 2 * time.Second // between probes while following
-	JournalProbeLimit    = 500             // records per probe
+	JournalProbeLimit = 500 // records per probe
+
+	// Probes run every journalActiveProbe while the journal has shown
+	// activity within journalActiveWindow, and every journalIdleProbe
+	// otherwise. A probe costs about half a bd list, almost all of it
+	// process start-up, so probing fast around the clock would cost more
+	// than the 5s poll it replaces on a small workspace. At rest this
+	// matches the old poll's latency for well under its cost.
+	journalActiveProbe  = 2 * time.Second
+	journalIdleProbe    = 5 * time.Second
+	journalActiveWindow = time.Minute
 
 	journalMaxFailures  = 3               // consecutive probe failures before backing off
 	journalRetryMin     = time.Minute     // first backoff delay, doubling
@@ -63,6 +72,7 @@ type JournalFollower struct {
 
 	permanent  bool      // Off for good: opted out, or bd has no journal
 	recheckAt  time.Time // Following: when to re-ask bd whether the journal is still on
+	activeAt   time.Time // when a probe last found records, or the head was found
 	baselineAt time.Time // when the current anchor came from a head search
 	// baselined is set once a reload started after baselineAt has landed.
 	// Only reloads after that one are diffed against a snapshot that is
@@ -93,6 +103,15 @@ func NewJournalFollower(optedOut bool) (JournalFollower, JournalAction) {
 // Live reports whether reloads are currently driven by the journal.
 func (f JournalFollower) Live() bool {
 	return f.Phase == JournalFollowing
+}
+
+// ProbeInterval is how long to wait before the next probe: short while the
+// journal is busy, the old poll's period once it has been quiet a while.
+func (f JournalFollower) ProbeInterval(now time.Time) time.Duration {
+	if now.Sub(f.activeAt) < journalActiveWindow {
+		return journalActiveProbe
+	}
+	return journalIdleProbe
 }
 
 // Enabled feeds the result of JournalEnabled.
@@ -133,6 +152,7 @@ func (f JournalFollower) HeadFound(anchor JournalAnchor, err error, now time.Tim
 	f.Phase = JournalFollowing
 	f.Anchor = anchor
 	f.baselineAt = now
+	f.activeAt = now
 	f.baselined = false
 	f.recheckAt = now.Add(journalRecheckEvery)
 	f.failures = 0
@@ -174,6 +194,9 @@ func (f JournalFollower) Probed(records []JournalRecord, err error, startedAt, n
 		return f, JournalFindHead
 	}
 	f.Anchor = f.Anchor.AnchorAt(records)
+	if len(records) > 0 {
+		f.activeAt = now
+	}
 	relevant := false
 	for _, r := range records {
 		if r.Ephemeral() {

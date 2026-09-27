@@ -126,7 +126,7 @@ func (m *Model) scheduleJournal() tea.Cmd {
 	var d time.Duration
 	switch {
 	case f.Live():
-		d = data.JournalProbeInterval
+		d = f.ProbeInterval(time.Now())
 	case (f.Phase == data.JournalBackoff || f.Phase == data.JournalOff) && !f.RetryAt.IsZero():
 		d = max(time.Until(f.RetryAt), 0)
 	default:
