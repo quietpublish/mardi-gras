@@ -242,3 +242,25 @@ func TestMutateResultMsgCommentAdded(t *testing.T) {
 		t.Fatal("expected mg's own comment to invalidate the cached COMMENTS list")
 	}
 }
+
+func TestApplyIssuesKeepsMutationToast(t *testing.T) {
+	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
+	m := selectedDetailModel(t, issues)
+
+	// mg adds a comment: its confirmation toast shows...
+	model, _ := m.Update(mutateResultMsg{issueID: "open-1", action: "comment added"})
+	got := model.(Model)
+	confirmation := got.toast
+
+	// ...and the reload that follows sees the comment count move.
+	next := []data.Issue{testIssue("open-1", data.StatusOpen)}
+	next[0].CommentCount = 1
+	model, _ = got.Update(data.FileChangedMsg{Issues: next})
+	got = model.(Model)
+	if got.toast != confirmation {
+		t.Fatal("expected the reload not to replace the write's own toast")
+	}
+	if _, ok := got.changedIDs["open-1"]; !ok {
+		t.Fatal("expected the change still to be marked")
+	}
+}

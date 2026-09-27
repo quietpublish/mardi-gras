@@ -168,12 +168,17 @@ func (m *Model) applyIssues(msg data.FileChangedMsg) []tea.Cmd {
 	// Diff against the issues on screen for change indicators
 	changed, removed := m.diffIssues(msg.Issues)
 	if changes := len(changed) + removed; changes > 0 {
-		toast, toastCmd := components.ShowToast(
-			fmt.Sprintf("%d issue%s changed", changes, plural(changes)),
-			components.ToastInfo, toastDuration,
-		)
-		m.toast = toast
-		cmds = append(cmds, toastCmd)
+		// The ◈ marks carry the news. Only toast when nothing else is
+		// showing: the reload right after mg's own write would otherwise
+		// replace that write's confirmation or error almost at once.
+		if !m.toast.Active() {
+			toast, toastCmd := components.ShowToast(
+				fmt.Sprintf("%d issue%s changed", changes, plural(changes)),
+				components.ToastInfo, toastDuration,
+			)
+			m.toast = toast
+			cmds = append(cmds, toastCmd)
+		}
 		cmds = append(cmds, tea.Tick(changeIndicatorDuration, func(time.Time) tea.Msg {
 			return changeIndicatorExpiredMsg{}
 		}))
