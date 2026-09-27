@@ -26,16 +26,21 @@ type FileWatchErrorMsg struct {
 	Err error
 }
 
-const watchInterval = 1200 * time.Millisecond
-const cliPollInterval = 5 * time.Second
+// Refresh intervals. The app owns the timer (one per session, see
+// internal/app/refresh.go); these only say how long it waits between fetches.
+const (
+	WatchInterval   = 1200 * time.Millisecond // re-stat a JSONL issues file
+	CLIPollInterval = 5 * time.Second         // re-run bd list
+)
 
-// WatchFile polls a JSONL file and emits a single message (changed, unchanged, or error).
-// Callers should schedule it again after handling the returned message.
-func WatchFile(path string, lastMod time.Time) tea.Cmd {
+// CheckFile stats a JSONL issues file once and emits a single message:
+// changed (with the reloaded issues), unchanged, or error. It returns nil when
+// path is empty.
+func CheckFile(path string, lastMod time.Time) tea.Cmd {
 	if path == "" {
 		return nil
 	}
-	return tea.Tick(watchInterval, func(time.Time) tea.Msg {
+	return func() tea.Msg {
 		info, err := os.Stat(path)
 		if err != nil {
 			return FileWatchErrorMsg{Err: err}
@@ -51,19 +56,7 @@ func WatchFile(path string, lastMod time.Time) tea.Cmd {
 			return FileWatchErrorMsg{Err: err}
 		}
 		return FileChangedMsg{Issues: issues, LastMod: modTime, Skipped: skipped}
-	})
-}
-
-// PollCLI polls bd list --json --flat on a timer and emits FileChangedMsg or FileWatchErrorMsg.
-// The app's diffIssues() handles no-op detection when nothing changed.
-func PollCLI(projectDir string) tea.Cmd {
-	return tea.Tick(cliPollInterval, func(time.Time) tea.Msg {
-		issues, err := FetchIssuesCLI(projectDir)
-		if err != nil {
-			return FileWatchErrorMsg{Err: err}
-		}
-		return FileChangedMsg{Issues: issues, LastMod: time.Now()}
-	})
+	}
 }
 
 // FileModTime returns the file's modification time.

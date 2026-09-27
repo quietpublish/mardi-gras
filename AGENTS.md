@@ -15,6 +15,7 @@
 - `testdata/sample.jsonl`: fixture for tests and local demo runs.
 - `testdata/fake-gt.sh`: fake `gt` binary for local Gas Town testing (`make dev-gt`).
 - `testdata/fakegc/`: fake Gas City supervisor for local Gas City testing (`make dev-gc`).
+- `testdata/fake-bd/`: fake `bd` binary serving `sample.jsonl`, for testing CLI mode (`make dev-bd`).
 - `docs/`: Architecture and integration docs, screenshots. `docs/internal/` is gitignored and local-only — never commit it.
 
 ## Beads Data Contract
@@ -47,6 +48,7 @@
 - `make run-sample` (or `make dev`): run against `testdata/sample.jsonl`.
 - `make dev-gt`: run with sample data and fake `gt` on PATH (Gas Town features).
 - `make dev-gc`: run against `testdata/fakegc`, a fake Gas City supervisor (Gas City features, no `gc` install needed).
+- `make dev-bd`: run in CLI mode against `testdata/fake-bd`, a fake `bd` serving the sample data (`MG_FAKE_BD_LOG=<file>` logs each invocation).
 - `make test`: execute `go test ./...` across all packages.
 - `make fmt`: apply standard Go formatting (`go fmt ./...`).
 - `make lint`: run static analysis with `golangci-lint run ./...`.
