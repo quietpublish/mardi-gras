@@ -167,7 +167,7 @@ Edits from agents, scripts, and `bd` commands all show up on the next tick. Your
 bd config set events-journal true
 ```
 
-Know what that does before you run it: it edits `.beads/config.yaml` (a tracked file), and from then on every `bd` command in that workspace, agents' included, writes a journal record. mg never turns it on for you. `bd list` keeps running every 30 seconds as a safety net for writes the journal can't see, such as `bd dolt pull` or programs using the beads Go library. If mg spots one, the footer adds `partial` and it falls back to the 5-second poll until things are quiet again. Under Gas Town or Gas City it keeps the 5-second poll throughout, since orchestrator writes can bypass the journal. `MG_EVENTS=off` keeps plain polling.
+Know what that does before you run it: it edits `.beads/config.yaml` (a tracked file), and from then on every `bd` command in that workspace, agents' included, writes a journal record. mg never turns it on for you. `bd list` keeps running every 30 seconds as a safety net for writes the journal can't see, such as `bd dolt pull` or programs using the beads Go library. If mg spots one, the footer adds `partial` and it falls back to the 5-second poll until things are quiet again. Under Gas Town or Gas City mg doesn't use the journal at all and keeps the 5-second poll, since orchestrator writes can bypass it. `MG_EVENTS=off` keeps plain polling.
 
 ## Themes
 

@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -18,6 +19,8 @@ func newCLIModel(t *testing.T, issues []data.Issue) Model {
 	m := New(issues, data.Source{Mode: data.SourceCLI, ProjectDir: t.TempDir()}, data.DefaultBlockingTypes)
 	m.gtEnv = gastown.Env{}
 	m.driver = gastown.NewGTDriver()
+	// New may have kept the journal off for an orchestrator it found here.
+	m.journal = newJournalLoop(data.SourceCLI, false)
 	return m
 }
 
@@ -116,18 +119,31 @@ func TestJournalDisabledStaysPolling(t *testing.T) {
 	}
 }
 
-func TestJournalBackstopWithOrchestrator(t *testing.T) {
+func TestNewJournalOffUnderOrchestrator(t *testing.T) {
+	t.Setenv("MG_EVENTS", "")
+	fakeGT, err := filepath.Abs("../../testdata") // testdata/gt: a fake Gas Town
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", fakeGT)
+	m := New(nil, data.Source{Mode: data.SourceCLI, ProjectDir: t.TempDir()}, data.DefaultBlockingTypes)
+	if m.journal.follower.Phase != data.JournalOff || m.journal.busy {
+		t.Fatalf("phase %v busy %v: orchestrator writes can bypass the journal, so it stays off", m.journal.follower.Phase, m.journal.busy)
+	}
+}
+
+func TestRefreshIntervalWhileFailing(t *testing.T) {
 	m := liveModel(t, []data.Issue{testIssue("a", data.StatusOpen)})
-	m.gtEnv = gastown.Env{Available: true}
+	m.sourceHealth = m.sourceHealth.RecordFailure(errors.New("dolt: connection refused"))
 	if got := m.refreshInterval(); got != data.CLIPollInterval {
-		t.Fatalf("interval %v, want the legacy %v under an orchestrator", got, data.CLIPollInterval)
+		t.Fatalf("interval %v while bd list fails, want retries at %v", got, data.CLIPollInterval)
 	}
 }
 
 func TestJournalProbeTriggersReload(t *testing.T) {
 	issues := []data.Issue{testIssue("a", data.StatusOpen)}
 	m := liveModel(t, issues)
-	m.refresh.startedAt = time.Now().Add(-time.Minute) // the last reload was long ago
+	m.refresh.landedAt = time.Now().Add(-time.Minute) // the last reload was long ago
 
 	model, _ := m.Update(journalProbeMsg{records: []data.JournalRecord{probeRecord(11, "a")}})
 	got := model.(Model)
@@ -144,7 +160,7 @@ func TestJournalProbeTriggersReload(t *testing.T) {
 
 func TestJournalProbeSpacesReloads(t *testing.T) {
 	m := liveModel(t, []data.Issue{testIssue("a", data.StatusOpen)})
-	m.refresh.startedAt = time.Now() // a reload just started and landed
+	m.refresh.landedAt = time.Now() // a reload just landed
 
 	model, cmd := m.Update(journalProbeMsg{records: []data.JournalRecord{probeRecord(11, "a")}})
 	got := model.(Model)
@@ -158,7 +174,7 @@ func TestJournalProbeSpacesReloads(t *testing.T) {
 
 func TestJournalProbeIgnoresWisps(t *testing.T) {
 	m := liveModel(t, []data.Issue{testIssue("a", data.StatusOpen)})
-	m.refresh.startedAt = time.Now().Add(-time.Minute)
+	m.refresh.landedAt = time.Now().Add(-time.Minute)
 	var wisp data.JournalRecord
 	line := `{"seq":11,"ts":"t","op":"create","issue_id":"fx-wisp-1","issue":{"id":"fx-wisp-1","ephemeral":true}}`
 	if err := json.Unmarshal([]byte(line), &wisp); err != nil {
@@ -178,7 +194,7 @@ func TestJournalProbeIgnoresWisps(t *testing.T) {
 func TestJournalLearnsHiddenIssues(t *testing.T) {
 	issues := []data.Issue{testIssue("a", data.StatusOpen)}
 	m := liveModel(t, issues)
-	m.refresh.startedAt = time.Now().Add(-time.Minute)
+	m.refresh.landedAt = time.Now().Add(-time.Minute)
 
 	// A record for an issue bd list never returns (a template, say).
 	model, _ := m.Update(journalProbeMsg{records: []data.JournalRecord{probeRecord(11, "tmpl-1")}})
@@ -192,7 +208,7 @@ func TestJournalLearnsHiddenIssues(t *testing.T) {
 		t.Fatal("expected an issue the reload did not return to be ignored from now on")
 	}
 
-	got.refresh.startedAt = time.Now().Add(-time.Minute)
+	got.refresh.landedAt = time.Now().Add(-time.Minute)
 	model, _ = got.Update(journalProbeMsg{records: []data.JournalRecord{probeRecord(12, "tmpl-1")}})
 	if model.(Model).refresh.inFlight {
 		t.Fatal("expected an ignored issue's records not to reload")
@@ -217,23 +233,122 @@ func TestJournalPendingWaitsForLaterReload(t *testing.T) {
 	}
 }
 
-func TestRefreshAfterMutationProbesFirst(t *testing.T) {
-	m := liveModel(t, []data.Issue{testIssue("a", data.StatusOpen)})
+func TestRefreshAfterMutation(t *testing.T) {
+	issues := []data.Issue{testIssue("a", data.StatusOpen), testIssue("b", data.StatusOpen)}
+	m := liveModel(t, issues)
+	m.refresh.landedAt = time.Now().Add(-time.Minute)
 
 	model, _ := m.Update(mutateResultMsg{issueID: "a", action: "claimed"})
 	got := model.(Model)
-	if !got.journal.busy || got.refresh.inFlight {
-		t.Fatalf("busy %v inFlight %v, want a probe before the reload", got.journal.busy, got.refresh.inFlight)
+	if !got.refresh.inFlight {
+		t.Fatal("expected mg's own write to reload right away, not wait on a probe")
+	}
+	if !got.journal.busy {
+		t.Fatal("expected a probe alongside, to move the anchor past mg's own record")
 	}
 
-	// The probe returns mg's own record: exactly one reload, right away.
-	model, _ = got.Update(journalProbeMsg{records: []data.JournalRecord{probeRecord(11, "a")}, afterMutation: true})
+	// The probe returns mg's own record: the reload under way covers it.
+	model, _ = got.Update(journalProbeMsg{records: []data.JournalRecord{probeRecord(11, "a")}})
 	got = model.(Model)
-	if !got.refresh.inFlight || got.refresh.dirty {
-		t.Fatalf("inFlight %v dirty %v, want exactly one reload", got.refresh.inFlight, got.refresh.dirty)
+	if got.refresh.dirty || got.refresh.spaced {
+		t.Fatal("expected mg's own record not to ask for a second reload")
 	}
 	if got.journal.follower.Anchor.Seq != 11 {
 		t.Fatal("expected the anchor past mg's own record")
+	}
+
+	// Another writer's record still counts.
+	model, _ = got.Update(journalProbeMsg{records: []data.JournalRecord{probeRecord(12, "b")}})
+	if got = model.(Model); !got.refresh.spaced {
+		t.Fatal("expected another writer's record to ask for a reload")
+	}
+}
+
+func TestRefreshAfterMutationOwnRecordConsumed(t *testing.T) {
+	m := liveModel(t, []data.Issue{testIssue("a", data.StatusOpen)})
+	m.journal.own = map[string]time.Time{"a": time.Now()}
+	m.refresh.landedAt = time.Now().Add(-time.Minute)
+
+	model, _ := m.Update(journalProbeMsg{records: []data.JournalRecord{probeRecord(11, "a")}})
+	got := model.(Model)
+	if got.refresh.inFlight {
+		t.Fatal("expected mg's own record to be covered")
+	}
+	// A later write to the same issue, by someone else, reloads.
+	model, _ = got.Update(journalProbeMsg{records: []data.JournalRecord{probeRecord(12, "a")}})
+	if !model.(Model).refresh.inFlight {
+		t.Fatal("expected only the one record to be covered")
+	}
+}
+
+func TestJournalProbeSpacedWhileInFlight(t *testing.T) {
+	m := liveModel(t, []data.Issue{testIssue("a", data.StatusOpen)})
+	m.requestRefresh() // a reload is in flight
+
+	model, _ := m.Update(journalProbeMsg{records: []data.JournalRecord{probeRecord(11, "a")}})
+	got := model.(Model)
+	if got.refresh.dirty || !got.refresh.spaced {
+		t.Fatalf("dirty %v spaced %v: want the request spaced, not an immediate follow-up", got.refresh.dirty, got.refresh.spaced)
+	}
+
+	// The reload lands: the next one waits CLIPollInterval rather than
+	// starting back to back.
+	model, _ = got.Update(refreshResultMsg{gen: got.refresh.fetchGen, msg: data.FileChangedMsg{Issues: got.issues}})
+	got = model.(Model)
+	if got.refresh.inFlight {
+		t.Fatal("expected no back-to-back reload")
+	}
+	if due := time.Until(got.refresh.dueAt); due > data.CLIPollInterval || due <= 0 {
+		t.Fatalf("next reload due in %v, want within %v", due, data.CLIPollInterval)
+	}
+}
+
+func TestJournalTransitionKeepsPulledInTimer(t *testing.T) {
+	m := liveModel(t, []data.Issue{testIssue("a", data.StatusOpen)})
+	m.refresh.landedAt = time.Now().Add(-2 * time.Second)
+
+	// A record pulls the next reload in to ~3s.
+	model, _ := m.Update(journalProbeMsg{records: []data.JournalRecord{probeRecord(11, "a")}})
+	got := model.(Model)
+	pulledIn := got.refresh.dueAt
+
+	// Then partial decays off, changing the backstop interval: the pulled
+	// in reload must not be pushed out to 30s.
+	got.journal.follower.Partial = true
+	before := got.journal.follower
+	got.journal.follower.Partial = false
+	got.journalTransition(before)
+	if got.refresh.dueAt.After(pulledIn) {
+		t.Fatalf("reload pushed from %v to %v", pulledIn, got.refresh.dueAt)
+	}
+}
+
+func TestJournalProbeIgnoresWispDelete(t *testing.T) {
+	m := liveModel(t, []data.Issue{testIssue("a", data.StatusOpen)})
+	m.refresh.landedAt = time.Now().Add(-time.Minute)
+	var create, del data.JournalRecord
+	for line, rec := range map[string]*data.JournalRecord{
+		`{"seq":11,"ts":"t","op":"create","issue_id":"w-1","issue":{"id":"w-1","ephemeral":true}}`: &create,
+		`{"seq":12,"ts":"t","op":"delete","issue_id":"w-1","issue":null}`:                          &del,
+	} {
+		if err := json.Unmarshal([]byte(line), rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	model, _ := m.Update(journalProbeMsg{records: []data.JournalRecord{create}})
+	model, _ = model.(Model).Update(journalProbeMsg{records: []data.JournalRecord{del}})
+	if model.(Model).refresh.inFlight {
+		t.Fatal("a wisp's delete record (issue null) must not reload")
+	}
+}
+
+func TestJournalReloadedSkipsFallback(t *testing.T) {
+	m := liveModel(t, []data.Issue{testIssue("a", data.StatusOpen)})
+	m.journal.pending = map[string]time.Time{"x": time.Now().Add(-time.Minute)}
+	m.sourceHealth.State = data.HealthFallback // reloading from issues.jsonl
+	m.journalReloaded(nil, []string{"a"})
+	if m.journal.ignore["x"] || len(m.journal.pending) != 1 {
+		t.Fatal("a JSONL fallback reload must not feed the journal's bookkeeping")
 	}
 }
 

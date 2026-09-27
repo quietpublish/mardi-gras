@@ -298,7 +298,7 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 	gtEnv := gastown.Detect()
 	metaSchema := data.LoadMetadataSchema(projectDir)
 
-	return Model{
+	m := Model{
 		issues:         issues,
 		groups:         groups,
 		activPane:      PaneParade,
@@ -325,8 +325,9 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 		oscGuard:       guard,
 		noAnimations:   noAnimations,
 		codexSessions:  make(map[string]*codexSession),
-		journal:        newJournalLoop(source.Mode, journalOptedOut()),
 	}
+	m.journal = newJournalLoop(source.Mode, journalOptedOut() || m.orchestratorAvailable())
+	return m
 }
 
 // Init implements tea.Model.
@@ -1539,7 +1540,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !msg.dryRun {
 			// Force refresh so the parade drops any pruned issues.
 			m.lastFileMod = time.Time{}
-			refresh := m.refreshAfterMutation()
+			refresh := m.refreshAfterMutation("")
 			return m, tea.Batch(cmd, refresh)
 		}
 		return m, cmd
@@ -1569,7 +1570,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingSelectID = msg.issue.ID
 		m.detail.RichIssueID = ""
 		m.lastFileMod = time.Time{}
-		refresh := m.refreshAfterMutation()
+		refresh := m.refreshAfterMutation(msg.issue.ID)
 		return m, tea.Batch(toastCmd, refresh)
 
 	case mutateResultMsg:
@@ -1600,7 +1601,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Force reload: reset lastFileMod for JSONL, or immediate fetch for CLI
 		m.lastFileMod = time.Time{}
-		cmds := []tea.Cmd{toastCmd, m.refreshAfterMutation()}
+		cmds := []tea.Cmd{toastCmd, m.refreshAfterMutation(msg.issueID)}
 		// Trigger confetti on close
 		isClose := strings.HasPrefix(msg.action, "closed")
 		if !m.noAnimations && isClose && m.width > 0 && m.height > 0 {
@@ -1680,7 +1681,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agentFinishedMsg:
 		// Reset lastFileMod to force reload on next poll cycle.
 		m.lastFileMod = time.Time{}
-		refresh := m.refreshAfterMutation()
+		refresh := m.requestRefresh()
 		return m, tea.Batch(refresh, m.gatedPollAgentState())
 	}
 

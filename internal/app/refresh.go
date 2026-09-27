@@ -32,9 +32,15 @@ type refreshLoop struct {
 	// flight. It is honoured by exactly one follow-up fetch, so a burst of
 	// mutations coalesces instead of queueing.
 	dirty bool
-	// startedAt is when the latest fetch started; dueAt is when the armed
-	// timer fires (zero for the first timer, which Init arms).
+	// spaced records a reload the journal asked for while a fetch was in
+	// flight. refreshDone honours it no sooner than CLIPollInterval later,
+	// unlike dirty, so a stream of writes never reloads back to back.
+	spaced bool
+	// startedAt is when the latest fetch started, landedAt when the latest
+	// one finished, and dueAt when the armed timer fires (zero for the first
+	// timer, which Init arms).
 	startedAt time.Time
+	landedAt  time.Time
 	dueAt     time.Time
 }
 
@@ -59,14 +65,15 @@ func (m Model) usingCLI() bool {
 }
 
 // refreshInterval is the timer's period. While the events journal drives
-// reloads, bd list runs only as a backstop, unless the journal has been
-// seen missing writes or an orchestrator (whose writes it may not see) is
-// present.
+// reloads, bd list runs only as a backstop, unless the journal has been seen
+// missing writes, or bd list itself is failing and needs retrying at the
+// usual pace.
 func (m Model) refreshInterval() time.Duration {
 	if !m.usingCLI() {
 		return data.WatchInterval
 	}
-	if f := m.journal.follower; f.Live() && !f.Partial && !m.orchestratorAvailable() {
+	if f := m.journal.follower; f.Live() && !f.Partial &&
+		m.sourceHealth.ConsecFailures == 0 && !m.sourceHealth.IsDegraded() {
 		return journalBackstopInterval
 	}
 	return data.CLIPollInterval
@@ -92,14 +99,23 @@ func (m *Model) scheduleRefresh() tea.Cmd {
 	return m.refreshTimer(m.refresh.tickGen)
 }
 
-// refreshWithin makes the next reload start no later than d from now:
-// immediately when d has passed, otherwise by pulling the timer in. It never
-// postpones a timer that is already due sooner.
-func (m *Model) refreshWithin(d time.Duration) tea.Cmd {
+// refreshSpaced reloads for the journal, but no more often than the old
+// poll ran: CLIPollInterval after the last reload landed, pulling the timer
+// in (never pushing it out). While a fetch is in flight it only notes the
+// request, and refreshDone honours it on the same terms.
+func (m *Model) refreshSpaced() tea.Cmd {
 	if m.refresh.inFlight {
-		m.refresh.dirty = true
+		m.refresh.spaced = true
 		return nil
 	}
+	return m.refreshBy(data.CLIPollInterval - time.Since(m.refresh.landedAt))
+}
+
+// refreshBy makes the next reload start no later than d from now:
+// immediately when d has passed, otherwise by pulling the timer in. It never
+// postpones a timer that is already due sooner. Call it only with no fetch
+// in flight.
+func (m *Model) refreshBy(d time.Duration) tea.Cmd {
 	if d <= 0 {
 		return m.requestRefresh()
 	}
@@ -152,11 +168,20 @@ func (m *Model) startFetch() tea.Cmd {
 // next fetch sees the updated lastFileMod.
 func (m *Model) refreshDone() tea.Cmd {
 	m.refresh.inFlight = false
+	m.refresh.landedAt = time.Now()
 	if m.refresh.dirty {
 		m.refresh.dirty = false
+		m.refresh.spaced = false
 		return m.requestRefresh()
 	}
-	return m.scheduleRefresh()
+	timer := m.scheduleRefresh()
+	if m.refresh.spaced {
+		m.refresh.spaced = false
+		if sooner := m.refreshBy(data.CLIPollInterval); sooner != nil {
+			return sooner
+		}
+	}
+	return timer
 }
 
 // restartRefresh abandons any fetch in flight, since its result belongs to
@@ -166,6 +191,7 @@ func (m *Model) restartRefresh() tea.Cmd {
 	m.refresh.fetchGen++
 	m.refresh.inFlight = false
 	m.refresh.dirty = false
+	m.refresh.spaced = false
 	return m.scheduleRefresh()
 }
 

@@ -34,7 +34,15 @@ type journalLoop struct {
 	// types bd list hides), so their records stop triggering reloads.
 	pending map[string]time.Time
 	ignore  map[string]bool
+	// own maps issues mg itself just wrote to when. The reload that write
+	// started already covers them, so their records must not ask for a
+	// second one.
+	own map[string]time.Time
 }
+
+// journalOwnWindow is how long mg waits for its own write's record before
+// forgetting it (a write that was never journaled).
+const journalOwnWindow = 30 * time.Second
 
 type journalEnabledMsg struct {
 	on  bool
@@ -50,9 +58,6 @@ type journalProbeMsg struct {
 	records   []data.JournalRecord
 	err       error
 	startedAt time.Time // when the probe read the journal
-	// afterMutation marks the probe run right after mg's own write, which
-	// must reload whatever the probe finds.
-	afterMutation bool
 }
 
 type journalTickMsg struct{ gen uint64 }
@@ -64,6 +69,9 @@ func journalOptedOut() bool {
 
 // newJournalLoop starts the follower for a bd-backed source. Init launches
 // the first check, so the loop starts busy (Init cannot mutate the model).
+// Under an orchestrator the caller opts out: orchestrator writes can bypass
+// the journal, so mg keeps the 5s poll there, and probing on top of it would
+// only add bd processes.
 func newJournalLoop(mode data.SourceMode, optedOut bool) journalLoop {
 	if mode != data.SourceCLI {
 		return journalLoop{}
@@ -82,12 +90,12 @@ func findJournalHead() tea.Msg {
 	return journalHeadMsg{anchor: anchor, err: err}
 }
 
-func (m Model) probeJournal(afterMutation bool) tea.Cmd {
+func (m Model) probeJournal() tea.Cmd {
 	anchor := m.journal.follower.Anchor
 	return func() tea.Msg {
 		startedAt := time.Now()
 		records, err := data.ProbeJournal(anchor, data.JournalProbeLimit)
-		return journalProbeMsg{records: records, err: err, startedAt: startedAt, afterMutation: afterMutation}
+		return journalProbeMsg{records: records, err: err, startedAt: startedAt}
 	}
 }
 
@@ -106,7 +114,7 @@ func (m *Model) journalDo(act data.JournalAction) tea.Cmd {
 	case data.JournalFindHead:
 		return m.journalCall(findJournalHead)
 	case data.JournalRefresh:
-		return tea.Batch(m.journalRefresh(), m.scheduleJournal())
+		return tea.Batch(m.refreshSpaced(), m.scheduleJournal())
 	}
 	return m.scheduleJournal()
 }
@@ -131,21 +139,26 @@ func (m *Model) scheduleJournal() tea.Cmd {
 	})
 }
 
-// journalRefresh reloads on the journal's behalf, but no more often than the
-// old poll ran: a burst of agent writes costs at most one bd list per
-// CLIPollInterval.
-func (m *Model) journalRefresh() tea.Cmd {
-	return m.refreshWithin(data.CLIPollInterval - time.Since(m.refresh.startedAt))
-}
-
-// refreshAfterMutation reloads after mg's own write. While following the
-// journal it probes first, so the anchor moves past mg's own record and that
-// record does not trigger a second reload.
-func (m *Model) refreshAfterMutation() tea.Cmd {
-	if !m.journal.follower.Live() || m.journal.busy || !m.usingCLI() {
-		return m.requestRefresh()
+// refreshAfterMutation reloads right away after mg's own write to ownID
+// (empty when the write has no single issue). While following the journal
+// it remembers ownID, so the write's own record, which that reload already
+// covers, does not ask for a second one, and probes now to move the anchor
+// past it.
+func (m *Model) refreshAfterMutation(ownID string) tea.Cmd {
+	refresh := m.requestRefresh()
+	if !m.journal.follower.Live() || !m.usingCLI() {
+		return refresh
 	}
-	return m.journalCall(m.probeJournal(true))
+	if ownID != "" {
+		if m.journal.own == nil {
+			m.journal.own = make(map[string]time.Time)
+		}
+		m.journal.own[ownID] = time.Now()
+	}
+	if m.journal.busy {
+		return refresh
+	}
+	return tea.Batch(refresh, m.journalCall(m.probeJournal()))
 }
 
 func (m Model) handleJournalTick(msg journalTickMsg) (tea.Model, tea.Cmd) {
@@ -160,7 +173,7 @@ func (m Model) handleJournalTick(msg journalTickMsg) (tea.Model, tea.Cmd) {
 	case act != data.JournalNoAction:
 		cmds = append(cmds, m.journalDo(act))
 	case f.Live() && !m.sourceHealth.IsDegraded():
-		cmds = append(cmds, m.journalCall(m.probeJournal(false)))
+		cmds = append(cmds, m.journalCall(m.probeJournal()))
 	default:
 		// Not following, or bd list is failing too: the refresh loop and
 		// its health checks own recovery. Keep the timer going.
@@ -198,13 +211,7 @@ func (m Model) handleJournalProbe(msg journalProbeMsg) (tea.Model, tea.Cmd) {
 	relevant := m.noteJournalRecords(msg.records, now)
 
 	var cmds []tea.Cmd
-	if msg.afterMutation {
-		// mg's own write reloads now, whatever the probe found.
-		cmds = append(cmds, m.requestRefresh())
-		if act == data.JournalRefresh {
-			act = data.JournalNoAction
-		}
-	} else if act == data.JournalRefresh && !relevant {
+	if act == data.JournalRefresh && !relevant {
 		act = data.JournalNoAction
 	}
 	if msg.err == nil && act == data.JournalNoAction && len(m.journal.pending) == 0 &&
@@ -217,19 +224,36 @@ func (m Model) handleJournalProbe(msg journalProbeMsg) (tea.Model, tea.Cmd) {
 }
 
 // noteJournalRecords marks the issues probed records name as pending until a
-// reload shows them, and reports whether any could change the parade: wisps
-// and IDs bd list is known not to return cannot.
+// reload shows them, and reports whether any could change the parade. Wisps
+// cannot (their IDs join ignore, so a wisp's delete record, whose issue is
+// null, is skipped too), nor can IDs bd list is known not to return, nor mg's
+// own recent writes, whose reload is already under way.
 func (m *Model) noteJournalRecords(records []data.JournalRecord, now time.Time) bool {
 	if len(records) == 0 {
 		return false
 	}
-	onScreen := make(map[string]bool, len(m.issues))
-	for i := range m.issues {
-		onScreen[m.issues[i].ID] = true
+	covered := make(map[string]bool)
+	for id, at := range m.journal.own {
+		if now.Sub(at) < journalOwnWindow {
+			covered[id] = true
+		} else {
+			delete(m.journal.own, id)
+		}
 	}
 	relevant := false
 	for _, r := range records {
-		if r.Ephemeral() || (!onScreen[r.IssueID] && m.journal.ignore[r.IssueID]) {
+		if r.Ephemeral() {
+			if m.journal.ignore == nil {
+				m.journal.ignore = make(map[string]bool)
+			}
+			m.journal.ignore[r.IssueID] = true
+			continue
+		}
+		if covered[r.IssueID] {
+			delete(m.journal.own, r.IssueID)
+			continue
+		}
+		if m.detail.IssueMap[r.IssueID] == nil && m.journal.ignore[r.IssueID] {
 			continue
 		}
 		relevant = true
@@ -245,7 +269,9 @@ func (m *Model) noteJournalRecords(records []data.JournalRecord, now time.Time) 
 // pending IDs bd list turned out not to return, and which issues changed,
 // so the follower can spot writes the journal never recorded.
 func (m *Model) journalReloaded(issues []data.Issue, touched []string) {
-	if !m.journal.follower.Live() {
+	if !m.journal.follower.Live() || !m.usingCLI() {
+		// A JSONL fallback reload differs from bd list for reasons that
+		// have nothing to do with the journal.
 		return
 	}
 	startedAt := m.refresh.startedAt
@@ -277,7 +303,9 @@ func (m *Model) journalTransition(before data.JournalFollower) []tea.Cmd {
 	after := m.journal.follower
 	var cmds []tea.Cmd
 	if (before.Live() != after.Live() || before.Partial != after.Partial) && !m.refresh.inFlight {
-		cmds = append(cmds, m.scheduleRefresh())
+		// Bring the backstop in to the new interval, but never push out a
+		// timer already due sooner (one refreshSpaced pulled in).
+		cmds = append(cmds, m.refreshBy(m.refreshInterval()))
 	}
 	if before.Live() && after.Phase == data.JournalBackoff {
 		toast, cmd := components.ShowToast(
