@@ -3,6 +3,8 @@
 # Serves testdata/sample.jsonl as the workspace's issues; mutations succeed
 # without changing anything. Set MG_FAKE_BD_LOG=<file> to log every
 # invocation with a timestamp, e.g. to count how often mg runs bd list.
+# The events journal reports off unless MG_FAKE_BD_EVENTS=true, and then
+# never has any records.
 
 SAMPLE="$(cd "$(dirname "$0")/../.." && pwd)/sample.jsonl"
 
@@ -25,6 +27,13 @@ case "$1" in
     ;;
   doctor)
     echo '{"overall_ok":true,"diagnostics":[]}'
+    ;;
+  config)
+    [ "$2" = "get" ] || exit 0
+    printf '{"key":"%s","location":"config.yaml","value":"%s"}\n' "$3" "${MG_FAKE_BD_EVENTS:-false}"
+    ;;
+  events)
+    exit 0
     ;;
   comments)
     [ "$2" = "add" ] && exit 0

@@ -28,6 +28,8 @@ type Footer struct {
 	BeadsContext *data.BeadsContext
 	SourceHealth *data.SourceHealth
 	Focus        bool // focus mode active — show a persistent badge (audit #12)
+	Live         bool // reloads are driven by the bd events journal
+	LivePartial  bool // ...which has been seen missing writes
 }
 
 // FooterModeChip renders a small gold mode indicator for bottom-bar overlays.
@@ -75,6 +77,12 @@ func (f Footer) View() string {
 	if f.SourceMode == data.SourceCLI || f.SourcePath != "" {
 		name := "bd list"
 		mode := "(cli)"
+		switch {
+		case f.Live && f.LivePartial:
+			mode = "(cli " + ui.SymLive + " live, partial)"
+		case f.Live:
+			mode = "(cli " + ui.SymLive + " live)"
+		}
 		if f.SourceMode != data.SourceCLI {
 			name = filepath.Base(f.SourcePath)
 			mode = "(legacy)"

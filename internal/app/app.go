@@ -190,6 +190,9 @@ type Model struct {
 	// Issue reload loop: the single owner of bd list / JSONL refreshes
 	refresh refreshLoop
 
+	// Live updates: the bd events journal as a reload trigger
+	journal journalLoop
+
 	// Dolt resilience state machine
 	sourceHealth   data.SourceHealth
 	jsonlPath      string // Cached JSONL path resolved on first fallback probe
@@ -322,6 +325,7 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 		oscGuard:       guard,
 		noAnimations:   noAnimations,
 		codexSessions:  make(map[string]*codexSession),
+		journal:        newJournalLoop(source.Mode, journalOptedOut()),
 	}
 }
 
@@ -344,6 +348,9 @@ func (m Model) Init() tea.Cmd {
 	}
 	if m.sourceMode == data.SourceCLI {
 		cmds = append(cmds, fetchCurrentIssue, fetchDoctorDiagnostics, fetchBeadsContext)
+	}
+	if m.journal.busy {
+		cmds = append(cmds, checkJournalEnabled) // New marked the loop busy for this
 	}
 	return tea.Batch(cmds...)
 }
@@ -1532,7 +1539,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !msg.dryRun {
 			// Force refresh so the parade drops any pruned issues.
 			m.lastFileMod = time.Time{}
-			refresh := m.requestRefresh()
+			refresh := m.refreshAfterMutation()
 			return m, tea.Batch(cmd, refresh)
 		}
 		return m, cmd
@@ -1562,7 +1569,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingSelectID = msg.issue.ID
 		m.detail.RichIssueID = ""
 		m.lastFileMod = time.Time{}
-		refresh := m.requestRefresh()
+		refresh := m.refreshAfterMutation()
 		return m, tea.Batch(toastCmd, refresh)
 
 	case mutateResultMsg:
@@ -1593,7 +1600,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Force reload: reset lastFileMod for JSONL, or immediate fetch for CLI
 		m.lastFileMod = time.Time{}
-		cmds := []tea.Cmd{toastCmd, m.requestRefresh()}
+		cmds := []tea.Cmd{toastCmd, m.refreshAfterMutation()}
 		// Trigger confetti on close
 		isClose := strings.HasPrefix(msg.action, "closed")
 		if !m.noAnimations && isClose && m.width > 0 && m.height > 0 {
@@ -1673,7 +1680,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agentFinishedMsg:
 		// Reset lastFileMod to force reload on next poll cycle.
 		m.lastFileMod = time.Time{}
-		refresh := m.requestRefresh()
+		refresh := m.refreshAfterMutation()
 		return m, tea.Batch(refresh, m.gatedPollAgentState())
 	}
 
@@ -2908,18 +2915,18 @@ func (m Model) handleRecoveryResult(msg recoveryResultMsg) (tea.Model, tea.Cmd) 
 
 // diffIssues compares a fresh load against the issues on screen, marks the
 // ones that changed (see data.DiffIssues for what counts) with the current
-// time, and returns them along with how many issues disappeared. With nothing
+// time, and returns them along with the issues that disappeared. With nothing
 // loaded before there is nothing to compare, so nothing is marked.
-func (m *Model) diffIssues(newIssues []data.Issue) (changed []string, removed int) {
+func (m *Model) diffIssues(newIssues []data.Issue) (changed, removed []string) {
 	if len(m.issues) == 0 {
-		return nil, 0
+		return nil, nil
 	}
-	changed, gone := data.DiffIssues(m.issues, newIssues)
+	changed, removed = data.DiffIssues(m.issues, newIssues)
 	now := time.Now()
 	for _, id := range changed {
 		m.changedIDs[id] = now
 	}
-	return changed, len(gone)
+	return changed, removed
 }
 
 // changedSet is the parade's view of the change indicators.
@@ -3594,7 +3601,9 @@ func (m Model) View() tea.View {
 		footer := components.NewFooter(m.width, m.activPane == PaneDetail, m.orchestratorAvailable())
 		footer.Focus = m.focusMode
 		footer.SourcePath = m.watchPath
-		footer.LastRefresh = m.lastFileMod
+		footer.LastRefresh = m.dataFreshAt()
+		footer.Live = m.journal.follower.Live()
+		footer.LivePartial = m.journal.follower.Partial
 		footer.PathExplicit = m.pathExplicit
 		footer.SourceMode = m.sourceMode
 		footer.BeadsContext = m.beadsContext

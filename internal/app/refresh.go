@@ -32,7 +32,15 @@ type refreshLoop struct {
 	// flight. It is honoured by exactly one follow-up fetch, so a burst of
 	// mutations coalesces instead of queueing.
 	dirty bool
+	// startedAt is when the latest fetch started; dueAt is when the armed
+	// timer fires (zero for the first timer, which Init arms).
+	startedAt time.Time
+	dueAt     time.Time
 }
+
+// journalBackstopInterval is how often bd list still runs while the events
+// journal drives reloads: a safety net for writes the journal cannot see.
+const journalBackstopInterval = 30 * time.Second
 
 // refreshTickMsg is the refresh timer firing.
 type refreshTickMsg struct{ gen uint64 }
@@ -50,11 +58,18 @@ func (m Model) usingCLI() bool {
 	return !m.sourceHealth.InFallback() && m.sourceMode == data.SourceCLI
 }
 
+// refreshInterval is the timer's period. While the events journal drives
+// reloads, bd list runs only as a backstop, unless the journal has been
+// seen missing writes or an orchestrator (whose writes it may not see) is
+// present.
 func (m Model) refreshInterval() time.Duration {
-	if m.usingCLI() {
-		return data.CLIPollInterval
+	if !m.usingCLI() {
+		return data.WatchInterval
 	}
-	return data.WatchInterval
+	if f := m.journal.follower; f.Live() && !f.Partial && !m.orchestratorAvailable() {
+		return journalBackstopInterval
+	}
+	return data.CLIPollInterval
 }
 
 // refreshTimer arms the timer for gen without touching the model, so Init
@@ -73,7 +88,31 @@ func (m Model) refreshTimer(gen uint64) tea.Cmd {
 // scheduleRefresh arms the refresh timer, retiring any timer already armed.
 func (m *Model) scheduleRefresh() tea.Cmd {
 	m.refresh.tickGen++
+	m.refresh.dueAt = time.Now().Add(m.refreshInterval())
 	return m.refreshTimer(m.refresh.tickGen)
+}
+
+// refreshWithin makes the next reload start no later than d from now:
+// immediately when d has passed, otherwise by pulling the timer in. It never
+// postpones a timer that is already due sooner.
+func (m *Model) refreshWithin(d time.Duration) tea.Cmd {
+	if m.refresh.inFlight {
+		m.refresh.dirty = true
+		return nil
+	}
+	if d <= 0 {
+		return m.requestRefresh()
+	}
+	due := time.Now().Add(d)
+	if !m.refresh.dueAt.IsZero() && !m.refresh.dueAt.After(due) {
+		return nil
+	}
+	m.refresh.tickGen++
+	m.refresh.dueAt = due
+	gen := m.refresh.tickGen
+	return tea.Tick(d, func(time.Time) tea.Msg {
+		return refreshTickMsg{gen: gen}
+	})
 }
 
 // requestRefresh reloads issues now, or right after the fetch in flight
@@ -100,6 +139,7 @@ func (m *Model) startFetch() tea.Cmd {
 		return nil
 	}
 	m.refresh.inFlight = true
+	m.refresh.startedAt = time.Now()
 	gen := m.refresh.fetchGen
 	return func() tea.Msg {
 		return refreshResultMsg{gen: gen, msg: fetch()}
@@ -150,10 +190,10 @@ func (m Model) handleRefreshResult(msg refreshResultMsg) (tea.Model, tea.Cmd) {
 
 // applyIssues installs a freshly loaded issue set: change indicators, the
 // parade rebuild, selection, and the detail refetches that depend on them.
-// It returns the Cmds the update produced; continuing the refresh loop is the
-// caller's job.
-func (m *Model) applyIssues(msg data.FileChangedMsg) []tea.Cmd {
-	var cmds []tea.Cmd
+// It returns the Cmds the update produced and the IDs of every issue that
+// was added, changed or removed; continuing the refresh loop is the caller's
+// job.
+func (m *Model) applyIssues(msg data.FileChangedMsg) (cmds []tea.Cmd, touched []string) {
 
 	// Warn if malformed lines were skipped
 	if msg.Skipped > 0 {
@@ -167,7 +207,7 @@ func (m *Model) applyIssues(msg data.FileChangedMsg) []tea.Cmd {
 
 	// Diff against the issues on screen for change indicators
 	changed, removed := m.diffIssues(msg.Issues)
-	if changes := len(changed) + removed; changes > 0 {
+	if changes := len(changed) + len(removed); changes > 0 {
 		// The ◈ marks carry the news. Only toast when nothing else is
 		// showing: the reload right after mg's own write would otherwise
 		// replace that write's confirmation or error almost at once.
@@ -204,13 +244,14 @@ func (m *Model) applyIssues(msg data.FileChangedMsg) []tea.Cmd {
 	}
 	m.recomputeVelocity()
 	cmds = append(cmds, m.detailFetchBatch()...)
-	return cmds
+	return cmds, append(changed, removed...)
 }
 
 // handleIssuesLoaded absorbs a successful reload and continues the refresh loop.
 func (m Model) handleIssuesLoaded(msg data.FileChangedMsg) (tea.Model, tea.Cmd) {
 	m.sourceHealth = m.sourceHealth.RecordSuccess()
-	cmds := m.applyIssues(msg)
+	cmds, touched := m.applyIssues(msg)
+	m.journalReloaded(msg.Issues, touched)
 	cmds = append(cmds, m.refreshDone(), m.gatedPollAgentState())
 	return m, tea.Batch(cmds...)
 }
@@ -282,7 +323,7 @@ func (m Model) handleHealthCheck(msg data.CLIHealthCheckMsg) (tea.Model, tea.Cmd
 		m.sourceMode = data.SourceCLI
 		m.watchPath = ""
 		m.healthChecking = false
-		cmds := m.applyIssues(data.FileChangedMsg{Issues: msg.Issues, LastMod: time.Now()})
+		cmds, _ := m.applyIssues(data.FileChangedMsg{Issues: msg.Issues, LastMod: time.Now()})
 		toast, toastCmd := components.ShowToast(
 			"bd recovered \u2014 switched back to CLI",
 			components.ToastSuccess, toastDuration,
