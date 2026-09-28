@@ -49,10 +49,13 @@ func TestGCDriverBackend(t *testing.T) {
 
 func TestGCDriverSupports(t *testing.T) {
 	d, _ := NewGCDriver("http://127.0.0.1:8080", "")
-	for _, f := range []Feature{FeatureVitals, FeatureCosts, FeaturePatrol, FeatureSSE} {
+	for _, f := range []Feature{FeatureVitals, FeatureCosts, FeaturePatrol, FeatureRecovery, FeatureHandoff, FeatureActivityFeed} {
 		if d.Supports(f) {
 			t.Errorf("Supports(%d) = true, want false", f)
 		}
+	}
+	if !d.Supports(FeatureSSE) {
+		t.Error("Supports(FeatureSSE) = false, want true: the bead event stream")
 	}
 }
 

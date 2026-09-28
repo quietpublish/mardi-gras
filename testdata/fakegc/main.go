@@ -6,6 +6,9 @@
 //	go run ./testdata/fakegc -addr :8088
 //	MG_GC_API=http://127.0.0.1:8088 MG_GC_CITY=bourbon ./mg --path testdata/screenshot.jsonl
 //
+// -bead-events 7s turns on the events stream with a synthetic bead change
+// every 7s; mg only reads it when it loads issues through bd (not --path).
+//
 // Lives under testdata/ so the Go toolchain ignores it (not built/linted/shipped
 // with the module). See `make dev-gc`.
 package main
@@ -98,9 +101,50 @@ var responses = map[string]string{
 func main() {
 	addr := flag.String("addr", ":8088", "listen address")
 	delay := flag.Duration("delay", 0, "artificial latency on the agents (status) endpoint, e.g. 6s — exercises the loading spinner")
+	beadEvents := flag.Duration("bead-events", 0, "emit a synthetic bead.updated on the events stream at this interval, e.g. 7s (0: events not enabled, the stream answers 503)")
 	flag.Parse()
 
 	mux := http.NewServeMux()
+
+	// The supervisor's events stream (SSE), which mg reads as a reload
+	// trigger when it loads issues through bd. Heartbeats every 15s, like the
+	// real supervisor, plus a bead.updated every -bead-events.
+	mux.HandleFunc("/v0/city/"+city+"/events/stream", func(w http.ResponseWriter, r *http.Request) {
+		logReq(r)
+		if *beadEvents <= 0 {
+			writeJSON(w, http.StatusServiceUnavailable, `{"title":"Service Unavailable","status":503,"detail":"events not enabled"}`)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.WriteHeader(http.StatusOK)
+		flusher, _ := w.(http.Flusher)
+		flush := func() {
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+		flush()
+		events := time.NewTicker(*beadEvents)
+		heartbeat := time.NewTicker(15 * time.Second)
+		defer events.Stop()
+		defer heartbeat.Stop()
+		for seq := 1; ; {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-heartbeat.C:
+				_, _ = fmt.Fprintf(w, "event: heartbeat\ndata: {\"timestamp\":%q}\n\n", time.Now().UTC().Format(time.RFC3339))
+				flush()
+			case <-events.C:
+				_, _ = fmt.Fprintf(w, "id: %d\nevent: event\ndata: {\"seq\":%d,\"type\":\"bead.updated\",\"ts\":%q,\"actor\":\"cache-reconcile\",\"subject\":\"mg-q12\",\"payload\":{\"bead\":{\"id\":\"mg-q12\",\"title\":\"Refactor auth service\",\"status\":\"in_progress\",\"issue_type\":\"task\",\"created_at\":\"2026-09-01T00:00:00Z\"}}}\n\n",
+					seq, seq, time.Now().UTC().Format(time.RFC3339))
+				flush()
+				log.Printf("fakegc: stream sent bead.updated seq %d", seq)
+				seq++
+			}
+		}
+	})
 
 	// Canned GETs.
 	for path, body := range responses {

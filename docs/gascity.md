@@ -62,12 +62,12 @@ The supervisor binds a **dynamically assigned** TCP port (not a fixed one), logg
 | Rig recovery (`Recover dead rigs`) | ⛔ | shells out to `gt release`/`gt sling`; hidden from the palette on Gas City |
 | Handoff (`h`) | ⛔ | shells out to `gt handoff`; reports "Handoff is a Gas Town feature" |
 | Recent activity feed | ⛔ | reads `~/gt/.events.jsonl` off local disk, which Gas City does not write |
-| Live status stream (SSE) | ⛔ | `FeatureSSE` exists on the `Feature` enum but **no driver implements it** — `Supports(FeatureSSE)` is `false` on Gas Town too. Both backends poll; this is not a Gas City gap |
+| Bead event stream (SSE) | ✅ | `WatchBeadEvents` reads `GET /v0/city/{city}/events/stream` (hand-written: gcclient's wrapper would block reading the whole stream). `bead.created/updated/closed/deleted` events trigger a reload within ~2s, on top of the 5s `bd list` poll, which stays: agents' `bd` writes only reach the stream when the supervisor rescans (30–120s). Heartbeat watchdog, reconnect with backoff, one reload after a reconnect; 401/403/404/503 stop it for the session. Only when mg loads issues through `bd`. Gas Town has no stream (`ErrUnsupported`) |
 
 Unsupported operations either hide themselves (recovery is dropped from the
 command palette) or return a clear "not supported" message — none of them fail
-with a raw `exec: "gt": executable not found`. For anything in the ⛔ rows —
-except SSE, which no backend has — run mg against Gas Town (`gt`) instead.
+with a raw `exec: "gt": executable not found`. For anything in the ⛔ rows,
+run mg against Gas Town (`gt`) instead.
 
 The three gt-shaped rows near the bottom — recovery, handoff, and the activity
 feed — are not Gas City limitations so much as mg ones: they bypass the `Driver`
@@ -133,9 +133,10 @@ make gc-client
 The spec is OpenAPI 3.1; `downgrade.jq` rewrites it to 3.0 first (oapi-codegen does not yet fully support 3.1). Generation is scoped to the endpoints mg uses.
 
 The committed spec is currently **Gas City v1.4.1** (127 paths), and that is
-the current pin: as of 2026-08-29 v1.4.1 is the latest Gas City release, and a
-full contract diff against gascity `main` came back additive-only. **There is
-nothing to bump today.** When a newer release does land, fetch its spec with:
+the current pin. v1.4.2 (2026-09-18) is fixes only, and a full contract diff
+against gascity `main` came back additive-only, so **there is nothing to bump
+today.** The events stream mg reads is in the v1.4.1 spec but deliberately not
+generated (see the SSE row above). When a newer release does land, fetch its spec with:
 
 ```bash
 gh api "repos/gastownhall/gascity/contents/docs/reference/schema/openapi.json?ref=<tag>" \

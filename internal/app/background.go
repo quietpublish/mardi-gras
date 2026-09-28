@@ -57,6 +57,10 @@ func (m Model) updateBackground(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		model, cmd = m.handleJournalProbe(msg)
 	case journalBackfillMsg:
 		model, cmd = m.handleJournalBackfill(msg)
+	case beadStreamStartedMsg:
+		model, cmd = m.handleBeadStreamStarted(msg)
+	case beadStreamMsg:
+		model, cmd = m.handleBeadStream(msg)
 	default:
 		return m, nil, false
 	}
