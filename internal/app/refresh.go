@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -164,26 +165,25 @@ func (m *Model) applyIssues(msg data.FileChangedMsg) []tea.Cmd {
 		cmds = append(cmds, toastCmd)
 	}
 
-	// Diff against previous state for change indicators
-	changes := m.diffIssues(msg.Issues)
-	if changes > 0 {
-		m.changedAt = time.Now()
-		toast, toastCmd := components.ShowToast(
-			fmt.Sprintf("File reloaded — %d issue%s changed", changes, plural(changes)),
-			components.ToastInfo, toastDuration,
-		)
-		m.toast = toast
-		cmds = append(cmds, toastCmd)
+	// Diff against the issues on screen for change indicators
+	changed, removed := m.diffIssues(msg.Issues)
+	if changes := len(changed) + removed; changes > 0 {
+		// The ◈ marks carry the news. Only toast when nothing else is
+		// showing: the reload right after mg's own write would otherwise
+		// replace that write's confirmation or error almost at once.
+		if !m.toast.Active() {
+			toast, toastCmd := components.ShowToast(
+				fmt.Sprintf("%d issue%s changed", changes, plural(changes)),
+				components.ToastInfo, toastDuration,
+			)
+			m.toast = toast
+			cmds = append(cmds, toastCmd)
+		}
 		cmds = append(cmds, tea.Tick(changeIndicatorDuration, func(time.Time) tea.Msg {
 			return changeIndicatorExpiredMsg{}
 		}))
 	}
-
-	// Update snapshot for next diff
-	m.prevIssueMap = make(map[string]data.Status, len(msg.Issues))
-	for _, iss := range msg.Issues {
-		m.prevIssueMap[iss.ID] = iss.Status
-	}
+	m.dropStaleDetail(changed, msg.Issues)
 
 	m.issues = msg.Issues
 	m.groups = data.GroupByParade(msg.Issues, m.blockingTypes)
@@ -293,4 +293,23 @@ func (m Model) handleHealthCheck(msg data.CLIHealthCheckMsg) (tea.Model, tea.Cmd
 	}
 	// Still recovering (1 success counted); keep probing.
 	return m, data.CLIHealthCheck(m.projectDir)
+}
+
+// dropStaleDetail clears the detail panel's caches for the selected issue
+// when a reload shows it changed, so detailFetchBatch refetches them: rich
+// detail on any change, comments when the comment count moved. It must run
+// before the parade rebuild, while SelectedIssue still holds the old version.
+func (m *Model) dropStaleDetail(changed []string, next []data.Issue) {
+	sel := m.parade.SelectedIssue
+	if sel == nil || !slices.Contains(changed, sel.ID) {
+		return
+	}
+	if m.detail.RichIssueID == sel.ID {
+		m.detail.RichIssueID = ""
+	}
+	for i := range next {
+		if next[i].ID == sel.ID && next[i].CommentCount != sel.CommentCount && m.detail.CommentsIssueID == sel.ID {
+			m.detail.CommentsIssueID = ""
+		}
+	}
 }

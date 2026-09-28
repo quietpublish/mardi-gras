@@ -226,8 +226,7 @@ type Model struct {
     excludeLabels map[string]bool     // --exclude-label
 
     // Change detection
-    changedIDs    map[string]bool     // recently changed issue IDs
-    prevIssueMap  map[string]data.Status // for diffing
+    changedIDs    map[string]time.Time // issue ID -> when a reload saw it change
 
     blockingTypes map[string]bool    // dep types that count as blockers
 
@@ -301,7 +300,7 @@ type Model struct {
 | `mutateResultMsg` | Handle status/priority change results, trigger confetti on close |
 | `confettiTickMsg` | Advance confetti animation frame |
 | `components.ToastDismissMsg` | Clear toast notification |
-| `changeIndicatorExpiredMsg` | Clear change indicator badges |
+| `changeIndicatorExpiredMsg` | Clear the change indicator badges that have reached their 30s lifetime |
 | `pruneResultMsg` / `claimNextReadyMsg` | Show toast; claim also selects the claimed issue |
 | **Codex (MCP)** | |
 | `codexLaunchedMsg` / `codexLaunchErrorMsg` | Attach or fail the in-app Codex session |
@@ -439,7 +438,7 @@ One refresh loop per session (`refreshLoop` in `internal/app/refresh.go`) owns e
 
 Results arrive wrapped in `refreshResultMsg`, tagged with the source generation they were fetched against, so a result from a source mg has since left (JSONL fallback → CLI recovery) is dropped. Mutation handlers (status change, create, claim, prune, agent finished) call `requestRefresh()`: it fetches immediately, or, while a fetch is in flight, marks the loop dirty so exactly one follow-up fetch runs when it lands. A burst of mutations therefore coalesces instead of each starting a poll of its own. Timers carry a generation too, so only the newest one can start a fetch.
 
-On `FileChangedMsg`, the app reloads issues, rebuilds parade groups, diffs against `prevIssueMap` to detect status changes (for change indicator badges), and syncs the selected issue — preserving cursor position and scroll state.
+On `FileChangedMsg`, the app diffs the fresh load against the issues on screen with `data.DiffIssues`, which compares every field mg shows (status, title, text fields, priority, assignee, labels and dependencies as sets, comment count, dates, metadata) rather than `updated_at`, since bd does not bump that for label or comment changes. Each changed issue gets a badge that expires 30s after its own change. If the selected issue changed, its cached rich detail is refetched, and its comments too when the comment count moved. The app then rebuilds parade groups and syncs the selected issue, preserving cursor position and scroll state.
 
 ### 5. Filtering (data/filter.go)
 

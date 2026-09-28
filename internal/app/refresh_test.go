@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/matt-wright86/mardi-gras/internal/data"
 )
 
@@ -169,17 +170,97 @@ func TestCLIHealthCheckMsgRecovery(t *testing.T) {
 	if got.refresh.inFlight {
 		t.Fatal("expected the JSONL fetch to be abandoned")
 	}
-	if got.prevIssueMap["a"] != data.StatusClosed {
-		t.Fatalf("expected recovery to refresh the diff snapshot, got %q", got.prevIssueMap["a"])
-	}
-	if !got.changedIDs["a"] {
+	if _, ok := got.changedIDs["a"]; !ok {
 		t.Fatal("expected recovery to mark the issue that changed while in fallback")
 	}
 
 	// The abandoned JSONL result lands late and must not overwrite CLI data.
 	model, _ = got.Update(refreshResultMsg{gen: staleGen, msg: data.FileChangedMsg{Issues: before}})
 	got = model.(Model)
-	if got.prevIssueMap["a"] != data.StatusClosed {
+	if got.issues[0].Status != data.StatusClosed {
 		t.Fatal("stale JSONL result was applied over recovered CLI data")
+	}
+}
+
+// selectedDetailModel returns a sized model with open-1 selected and its
+// rich detail and comments cached.
+func selectedDetailModel(t *testing.T, issues []data.Issue) Model {
+	t.Helper()
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
+	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	got := model.(Model)
+	got.inTmux = false
+	if got.parade.SelectedIssue == nil || got.parade.SelectedIssue.ID != "open-1" {
+		t.Fatalf("expected open-1 selected, got %+v", got.parade.SelectedIssue)
+	}
+	got.detail.RichIssueID = "open-1"
+	got.detail.CommentsIssueID = "open-1"
+	return got
+}
+
+func TestApplyIssuesRefetchesChangedSelection(t *testing.T) {
+	issues := []data.Issue{testIssue("open-1", data.StatusOpen), testIssue("open-2", data.StatusOpen)}
+	m := selectedDetailModel(t, issues)
+
+	next := []data.Issue{testIssue("open-1", data.StatusOpen), testIssue("open-2", data.StatusOpen)}
+	next[0].Title = "Renamed"
+	next[0].CommentCount = 1
+	model, _ := m.Update(data.FileChangedMsg{Issues: next})
+	got := model.(Model)
+
+	if got.detail.RichIssueID == "open-1" {
+		t.Fatal("expected the selected issue's rich detail to be refetched after it changed")
+	}
+	if got.detail.CommentsIssueID == "open-1" {
+		t.Fatal("expected comments to be refetched after the comment count moved")
+	}
+	if _, ok := got.changedIDs["open-1"]; !ok {
+		t.Fatal("expected a title change to mark the issue")
+	}
+}
+
+func TestApplyIssuesKeepsDetailForUnchangedSelection(t *testing.T) {
+	issues := []data.Issue{testIssue("open-1", data.StatusOpen), testIssue("open-2", data.StatusOpen)}
+	m := selectedDetailModel(t, issues)
+
+	// Only another issue changes, and the selected one's comments are steady.
+	next := []data.Issue{testIssue("open-1", data.StatusOpen), testIssue("open-2", data.StatusClosed)}
+	model, _ := m.Update(data.FileChangedMsg{Issues: next})
+	got := model.(Model)
+
+	if got.detail.RichIssueID != "open-1" || got.detail.CommentsIssueID != "open-1" {
+		t.Fatalf("expected caches kept, got rich=%q comments=%q", got.detail.RichIssueID, got.detail.CommentsIssueID)
+	}
+}
+
+func TestMutateResultMsgCommentAdded(t *testing.T) {
+	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
+	m := selectedDetailModel(t, issues)
+
+	model, _ := m.Update(mutateResultMsg{issueID: "open-1", action: "comment added"})
+	if model.(Model).detail.CommentsIssueID != "" {
+		t.Fatal("expected mg's own comment to invalidate the cached COMMENTS list")
+	}
+}
+
+func TestApplyIssuesKeepsMutationToast(t *testing.T) {
+	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
+	m := selectedDetailModel(t, issues)
+
+	// mg adds a comment: its confirmation toast shows...
+	model, _ := m.Update(mutateResultMsg{issueID: "open-1", action: "comment added"})
+	got := model.(Model)
+	confirmation := got.toast
+
+	// ...and the reload that follows sees the comment count move.
+	next := []data.Issue{testIssue("open-1", data.StatusOpen)}
+	next[0].CommentCount = 1
+	model, _ = got.Update(data.FileChangedMsg{Issues: next})
+	got = model.(Model)
+	if got.toast != confirmation {
+		t.Fatal("expected the reload not to replace the write's own toast")
+	}
+	if _, ok := got.changedIDs["open-1"]; !ok {
+		t.Fatal("expected the change still to be marked")
 	}
 }
