@@ -379,3 +379,54 @@ func TestProbeJournalPrunedAnchor(t *testing.T) {
 		t.Fatalf("reset and pruned: err = %v, want ErrJournalReset", err)
 	}
 }
+
+func TestParseJournalRecordsDetails(t *testing.T) {
+	records, err := parseJournalRecords([]byte(bdEventsTailFixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	byOp := map[string]JournalRecord{}
+	for _, r := range records {
+		byOp[r.Op] = r
+	}
+	if r := byOp["dep_add"]; r.Dep == nil || r.Dep.Kind != "blocks" || r.Dep.Target != "fx-m1g" || !r.Issue.IsBlocked {
+		t.Errorf("dep_add = %+v, want a blocks edge to fx-m1g on a now-blocked issue", r)
+	}
+	if r := byOp["comment"]; r.Comment == nil || r.Comment.Text != "first comment" || r.Comment.Author != "Fixture User" {
+		t.Errorf("comment = %+v", r.Comment)
+	}
+	if r := records[0]; r.Issue == nil || r.Issue.Title != "Alpha" || r.Issue.Status != StatusOpen {
+		t.Errorf("first create's snapshot = %+v", r.Issue)
+	}
+	if got := records[0].Time(); !got.Equal(time.Date(2026, 9, 27, 21, 2, 54, 0, time.UTC)) {
+		t.Errorf("Time() = %v", got)
+	}
+	if got := (JournalRecord{TS: "not a time"}).Time(); !got.IsZero() {
+		t.Errorf("unparseable Time() = %v, want zero", got)
+	}
+}
+
+func TestTailRecent(t *testing.T) {
+	f := &fakeJournal{floor: 1, head: 250}
+	restore := f.install()
+	records, err := TailRecent(250, 100)
+	restore()
+	if err != nil || len(records) != 100 || records[0].Seq != 151 || records[99].Seq != 250 {
+		t.Fatalf("got %d records from %v, %v; want 151..250", len(records), firstSeq(records), err)
+	}
+
+	// The window's start was pruned: return what is kept.
+	pruned := &fakeJournal{floor: 230, head: 250}
+	defer pruned.install()()
+	records, err = TailRecent(250, 100)
+	if err != nil || len(records) != 21 || records[0].Seq != 230 {
+		t.Fatalf("got %d records from %v, %v; want 230..250", len(records), firstSeq(records), err)
+	}
+}
+
+func firstSeq(records []JournalRecord) int64 {
+	if len(records) == 0 {
+		return -1
+	}
+	return records[0].Seq
+}

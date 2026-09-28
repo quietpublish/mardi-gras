@@ -38,6 +38,113 @@ type journalLoop struct {
 	// started already covers them, so their records must not ask for a
 	// second one.
 	own map[string]time.Time
+	// recent is the Recent changes feed: the newest records, oldest first,
+	// wisps left out.
+	recent []data.JournalRecord
+}
+
+// journalRecentCap bounds the Recent changes feed.
+const journalRecentCap = 200
+
+// journalBackfill is how many records before the head the feed loads when the
+// journal goes live, so it isn't empty at startup.
+const journalBackfill = 100
+
+type journalBackfillMsg struct {
+	records []data.JournalRecord
+}
+
+// addRecent appends records newer than the feed's newest, leaving out wisps.
+func (j *journalLoop) addRecent(records []data.JournalRecord) {
+	var newest int64
+	if n := len(j.recent); n > 0 {
+		newest = j.recent[n-1].Seq
+	}
+	for _, r := range records {
+		if r.Seq > newest && !r.Ephemeral() {
+			j.recent = append(j.recent, r)
+			newest = r.Seq
+		}
+	}
+	if extra := len(j.recent) - journalRecentCap; extra > 0 {
+		j.recent = append(j.recent[:0:0], j.recent[extra:]...)
+	}
+}
+
+// addBackfill puts records older than the feed's oldest in front of it.
+func (j *journalLoop) addBackfill(records []data.JournalRecord) {
+	oldest := int64(1<<63 - 1)
+	if len(j.recent) > 0 {
+		oldest = j.recent[0].Seq
+	}
+	var older []data.JournalRecord
+	for _, r := range records {
+		if r.Seq < oldest && !r.Ephemeral() {
+			older = append(older, r)
+		}
+	}
+	j.recent = append(older, j.recent...)
+	if extra := len(j.recent) - journalRecentCap; extra > 0 {
+		j.recent = j.recent[extra:]
+	}
+}
+
+// recentFor returns the feed's records for one issue, oldest first.
+func (j journalLoop) recentFor(id string) []data.JournalRecord {
+	var out []data.JournalRecord
+	for _, r := range j.recent {
+		if r.IssueID == id {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func backfillJournal(head int64) tea.Cmd {
+	return func() tea.Msg {
+		records, err := data.TailRecent(head, journalBackfill)
+		if err != nil {
+			return journalBackfillMsg{} // unreachable history just stays empty
+		}
+		return journalBackfillMsg{records: records}
+	}
+}
+
+func (m Model) handleJournalBackfill(msg journalBackfillMsg) (tea.Model, tea.Cmd) {
+	m.journal.addBackfill(msg.records)
+	m.syncRecentChanges()
+	return m, nil
+}
+
+// syncRecentChanges pushes the feed to the Recent changes overlay and the
+// selected issue's ACTIVITY section.
+func (m *Model) syncRecentChanges() {
+	m.changes.SetRecords(m.journal.recent, m.detail.IssueMap, m.journalNote())
+	if sel := m.parade.SelectedIssue; sel != nil && m.detail.Issue != nil && m.detail.Issue.ID == sel.ID {
+		m.detail.RecentChanges = m.journal.recentFor(sel.ID)
+		m.detail.SetIssue(m.detail.Issue)
+	}
+}
+
+// journalNote explains, for the Recent changes overlay, why the journal isn't
+// feeding it; "" when it is.
+func (m Model) journalNote() string {
+	f := m.journal.follower
+	switch {
+	case f.Live():
+		return ""
+	case m.sourceMode != data.SourceCLI:
+		return "Recent changes come from the bd events journal, and mg is reading issues.jsonl directly, without bd."
+	case journalOptedOut():
+		return "Recent changes come from the bd events journal, which MG_EVENTS=off turns off."
+	case m.orchestratorAvailable():
+		return "Recent changes come from the bd events journal, which mg doesn't use under Gas Town or Gas City: orchestrator writes can bypass it."
+	case f.Phase == data.JournalBackoff:
+		return "The bd events journal isn't answering; mg will try again shortly."
+	case f.Phase == data.JournalDetecting || f.Phase == data.JournalBaselining:
+		return "Connecting to the bd events journal..."
+	}
+	return "Recent changes come from the bd events journal, which is off for this workspace, or needs bd 1.2.1 or newer. To turn it on: bd config set events-journal true. That edits .beads/config.yaml and journals every writer in the workspace; see the README's Live updates section."
 }
 
 // journalOwnWindow is how long mg waits for its own write's record before
@@ -199,6 +306,10 @@ func (m Model) handleJournalHead(msg journalHeadMsg) (tea.Model, tea.Cmd) {
 	m.journal.follower = f
 	cmds := m.journalTransition(before)
 	cmds = append(cmds, m.journalDo(act))
+	if f.Live() && len(m.journal.recent) == 0 && msg.anchor.Seq > 0 {
+		cmds = append(cmds, backfillJournal(msg.anchor.Seq))
+	}
+	m.syncRecentChanges()
 	return m, tea.Batch(cmds...)
 }
 
@@ -209,6 +320,10 @@ func (m Model) handleJournalProbe(msg journalProbeMsg) (tea.Model, tea.Cmd) {
 	f, act := before.Probed(msg.records, msg.err, msg.startedAt, now)
 	m.journal.follower = f
 	relevant := m.noteJournalRecords(msg.records, now)
+	if len(msg.records) > 0 && msg.err == nil {
+		m.journal.addRecent(msg.records)
+		m.syncRecentChanges()
+	}
 
 	var cmds []tea.Cmd
 	if act == data.JournalRefresh && !relevant {

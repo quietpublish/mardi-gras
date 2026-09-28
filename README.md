@@ -161,7 +161,7 @@ mg polls. No file watchers, no daemon, no background service.
 
 Edits from agents, scripts, and `bd` commands all show up on the next tick. Your selection, filter, and fold state survive the refresh. Every issue that changed gets a ◈ mark for 30 seconds, whether its status, title, labels, dependencies or comments moved.
 
-**Faster with the bd events journal.** bd 1.2.1+ can keep an ordered journal of every change made through `bd`. When a workspace has it on, mg checks the journal instead of reloading on a timer, and reloads only when something changed. While things are changing it checks every 2 seconds, so edits land in about two; after a quiet minute it relaxes to every 5, and an idle mg runs `bd list` twice a minute instead of twelve times, for less work than plain polling. The footer shows `(cli ∿ live)`. Turn it on per workspace:
+**Faster with the bd events journal.** bd 1.2.1+ can keep an ordered journal of every change made through `bd`. When a workspace has it on, mg checks the journal instead of reloading on a timer, and reloads only when something changed. While things are changing it checks every 2 seconds, so edits land in about two; after a quiet minute it relaxes to every 5, and an idle mg runs `bd list` twice a minute instead of twelve times, for less work than plain polling. The footer shows `(cli ∿ live)`, and `E` opens Recent changes: what happened, to which issue, and who did it. Each issue's ACTIVITY section lists its own. Turn it on per workspace:
 
 ```bash
 bd config set events-journal true
