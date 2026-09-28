@@ -2,6 +2,35 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.33.0 (2026-09-27)
+
+Live updates. When a workspace has bd's events journal on, mg reloads when something changes instead of on a timer, and shows you what changed and who changed it. Thanks to [@csells](https://github.com/csells) of the Beads team, whose suggestion in [#124](https://github.com/quietpublish/mardi-gras/issues/124) started this.
+
+### Added
+- **Reloads driven by the bd events journal** ([#129](https://github.com/quietpublish/mardi-gras/pull/129), [#130](https://github.com/quietpublish/mardi-gras/pull/130), closing [#124](https://github.com/quietpublish/mardi-gras/issues/124)).
+  - **What it does:** bd 1.2.1+ can keep an ordered journal of every change made through `bd`. When a workspace has it on, mg checks the journal and reloads only when a record names an issue it shows. It checks every 2 seconds within a minute of activity and every 5 after that, so an outside edit lands in about two seconds.
+  - **Cheaper when idle:** an idle mg runs `bd list` twice a minute instead of twelve times. In a 40-issue workspace, idle CPU fell from about 3.8 to 2.6 CPU-seconds a minute.
+  - **A trigger, not the data:** `bd list` stays the source of truth. It still runs every 30 seconds as a safety net for writes the journal can't see, such as `bd dolt pull` or the beads Go library. When mg spots one, the footer shows `(cli ∿ live, partial)` and mg polls every 5 seconds until things are quiet.
+  - **Off unless you turn it on:** `bd config set events-journal true` edits the tracked `.beads/config.yaml` and journals every writer, agents included, so mg never does it for you. Under Gas Town or Gas City mg doesn't use the journal, since orchestrator writes can bypass it. `MG_EVENTS=off` keeps plain polling.
+- **`bd serve` support** ([#137](https://github.com/quietpublish/mardi-gras/pull/137), [#138](https://github.com/quietpublish/mardi-gras/pull/138)). bd 1.3.0's `bd serve` (a preview, for workspaces in Dolt server mode) streams the journal over HTTP. Set `MG_BD_SERVE=<url>` and mg listens to that stream instead of starting a `bd` process for each check, so changes usually land within a second. If the stream drops, mg goes back to checking through `bd` and reconnects on its own. A server for a different workspace is refused.
+- **Recent changes (`E`)** ([#135](https://github.com/quietpublish/mardi-gras/pull/135)). `E` shows the newest journal records in place of the detail pane: when, which issue, what happened (created, closed, commented, now waits on, became blocked) and who did it. Each issue's detail panel gains an ACTIVITY section with its own records. When there's nothing to show, the overlay says why.
+- **Faster updates under Gas City** ([#136](https://github.com/quietpublish/mardi-gras/pull/136)). mg follows the supervisor's event stream, so a sling, a convoy change or a close made by the controller shows up within a couple of seconds instead of up to five. The 5-second poll stays, because agents' `bd` writes reach the stream only when the supervisor rescans.
+
+### Fixed
+- **Change marks cover every visible edit** ([#128](https://github.com/quietpublish/mardi-gras/pull/128)).
+  - **More edits get a mark:** the ◈ mark only noticed status changes, so a retitle, a new label, dependency or comment reloaded unmarked. Now every field mg shows counts. Fields are compared directly, since bd doesn't bump `updated_at` for labels or comments.
+  - **Marks expire one by one:** each mark lasts 30 seconds from its own change. They no longer all clear with the first.
+  - **Your own comment shows up:** the selected issue's detail refreshes when it changes, and a comment you add appears right away.
+  - **The toast reads "N issues changed"** and no longer replaces your action's own confirmation.
+- **Focus mode recognises your work** ([#133](https://github.com/quietpublish/mardi-gras/pull/133)). Focus compared assignees against `$USER`, but bd assigns a claim to its actor. That's `BEADS_ACTOR`, `BD_ACTOR`, the workspace's configured `actor`, git `user.name`, then `$USER`. Where those differ, focus showed none of your in-progress work. It now works out who you are the way bd does and matches names by bd's rules. In-progress issues nobody claimed, as mg's own agent prompt leaves them, now count as yours instead of disappearing.
+
+### Changed
+- **mg's background reads don't count as bd usage** ([#130](https://github.com/quietpublish/mardi-gras/pull/130)). bd 1.3.0 queues a usage event for every call. mg's reads (the reload poll, journal checks, detail fetches) now run with `BD_DISABLE_METRICS=1`. Writes mg makes for you keep your own setting.
+- **README visuals redrawn** with the hierarchy mg draws today, where children indent under a real parent-child link, not a dotted ID ([#134](https://github.com/quietpublish/mardi-gras/pull/134)).
+- **`make contract-bd BD=/path/to/bd`** checks mg's journal client against a real `bd` in a throwaway workspace, so drift shows up when bd changes ([#131](https://github.com/quietpublish/mardi-gras/pull/131)).
+- **The OSC guard tests run on a fake clock.** That ends a timing flake on busy CI runners and cuts `internal/app`'s tests from about 6 seconds to 2 ([#132](https://github.com/quietpublish/mardi-gras/pull/132)).
+- **`fakegc -bead-events <interval>`** streams synthetic bead changes for testing Gas City locally ([#136](https://github.com/quietpublish/mardi-gras/pull/136)).
+
 ## v0.32.2 (2026-09-27)
 
 A patch release: mg's polling quietly multiplied with every action you took, an open dialog could stop background work for good, and selecting an issue with a live agent in tmux froze the whole interface.
