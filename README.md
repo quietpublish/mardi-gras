@@ -150,7 +150,7 @@ mg --status                             # tmux status-line summary, then exit
 mg --version
 ```
 
-Every option has an environment variable so you can set it once: `MG_BLOCK_TYPES`, `MG_THEME`, `MG_AGENT_RUNTIME`, `MG_CMD_TIMEOUT`, `MG_NO_ANIMATIONS=1`. `MG_EVENTS=off` keeps plain polling even when the bd events journal is on (see [Live updates](#live-updates)). `MG_DEBUG=1` writes `mg-debug.log` in the current directory. `MG_GC_API` and `MG_GC_CITY` select the Gas City backend, as above.
+Every option has an environment variable so you can set it once: `MG_BLOCK_TYPES`, `MG_THEME`, `MG_AGENT_RUNTIME`, `MG_CMD_TIMEOUT`, `MG_NO_ANIMATIONS=1`. `MG_EVENTS=off` keeps plain polling even when the bd events journal is on, and `MG_BD_SERVE` follows it through a running `bd serve` (see [Live updates](#live-updates)). `MG_DEBUG=1` writes `mg-debug.log` in the current directory. `MG_GC_API` and `MG_GC_CITY` select the Gas City backend, as above.
 
 ## Live updates
 
@@ -168,6 +168,15 @@ bd config set events-journal true
 ```
 
 Know what that does before you run it: it edits `.beads/config.yaml` (a tracked file), and from then on every `bd` command in that workspace, agents' included, writes a journal record. mg never turns it on for you. `bd list` keeps running every 30 seconds as a safety net for writes the journal can't see, such as `bd dolt pull` or programs using the beads Go library. If mg spots one, the footer adds `partial` and it falls back to the 5-second poll until things are quiet again. Under Gas Town or Gas City mg doesn't use the journal at all and keeps the 5-second poll, since orchestrator writes can bypass it. `MG_EVENTS=off` keeps plain polling.
+
+**Faster still with `bd serve`.** bd 1.3.0's `bd serve` (a preview, for workspaces in Dolt server mode) streams the journal over HTTP. Point mg at it and, while the journal is on, mg listens to that stream instead of starting a `bd` process for every check. Changes usually land within a second, and an idle mg runs nothing but the 30-second `bd list`:
+
+```bash
+bd serve --addr 127.0.0.1:8181          # a fixed port; the default is a random one
+MG_BD_SERVE=http://127.0.0.1:8181 mg
+```
+
+If the stream drops, mg goes back to checking through `bd` and reconnects on its own. If the server turns mg away (it wants a token, or serves a different workspace), mg says so once and stays on `bd` for the session. `bd serve` reads the journal setting when it starts, so restart it after turning the journal on.
 
 mg's background reads (`bd list`, journal checks, detail fetches) run with `BD_DISABLE_METRICS=1`, so its polling isn't counted as bd usage; the writes it makes for you keep your own bd metrics setting.
 

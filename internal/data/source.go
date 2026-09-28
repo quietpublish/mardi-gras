@@ -110,6 +110,7 @@ type BeadsContext struct {
 	Database     string `json:"database"`
 	Role         string `json:"role"`
 	BdVersion    string `json:"bd_version"`
+	ProjectID    string `json:"project_id"` // bd 1.3.0+, when the workspace has one
 }
 
 // FetchContext runs `bd context --json` and returns workspace identity info.
