@@ -209,3 +209,18 @@ func TestSanitizeCaptureOutputTakesLastLines(t *testing.T) {
 		t.Errorf("line 1 = %q, want 'new2'", lines[1])
 	}
 }
+
+func TestIsPaneID(t *testing.T) {
+	for s, want := range map[string]bool{
+		"%0":       true,
+		"%12":      true,
+		"%":        false,
+		"":         false,
+		"obsidian": false, // an orchestrator agent name
+		"mg-abc":   false,
+	} {
+		if got := IsPaneID(s); got != want {
+			t.Errorf("IsPaneID(%q) = %v, want %v", s, got, want)
+		}
+	}
+}

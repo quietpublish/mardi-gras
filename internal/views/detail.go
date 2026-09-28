@@ -110,6 +110,16 @@ func (d *Detail) SetComments(issueID string, comments []gastown.Comment) {
 	}
 }
 
+// SetAgentOutput shows the captured tail of issueID's agent pane, or clears
+// it when issueID is empty.
+func (d *Detail) SetAgentOutput(issueID string, lines []string) {
+	d.AgentOutput = lines
+	d.AgentOutputID = issueID
+	if d.Issue != nil {
+		d.Viewport.SetContent(d.renderContent())
+	}
+}
+
 // SetRichDetail enriches the current issue with fields from bd show (notes, design, acceptance_criteria).
 func (d *Detail) SetRichDetail(issueID string, rich *data.Issue) {
 	d.RichIssueID = issueID
