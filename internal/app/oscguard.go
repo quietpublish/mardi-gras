@@ -28,6 +28,17 @@ type OSCGuard struct {
 	suppressUntil     time.Time
 	seqBuf            [16]byte
 	seqLen            int
+
+	// now is the guard's clock; nil means time.Now. Its heuristics work on
+	// gaps of 5-50ms, too fine to test with real sleeps on a busy machine.
+	now func() time.Time
+}
+
+func (g *OSCGuard) clock() time.Time {
+	if g.now != nil {
+		return g.now()
+	}
+	return time.Now()
 }
 
 // NewOSCGuard constructs a shared guard instance for a program run.
@@ -79,7 +90,7 @@ func (g *OSCGuard) Filter() func(tea.Model, tea.Msg) tea.Msg {
 }
 
 func (g *OSCGuard) filterMsg(msg tea.Msg) tea.Msg {
-	now := time.Now()
+	now := g.clock()
 
 	// Layer 1: drop opaque unknown events (torn sequences UV kept
 	// intact but could not identify).
@@ -227,7 +238,7 @@ func (g *OSCGuard) SuspiciousSince(t time.Time) bool {
 // NoteAppSuppression lets app-level deferred key logic open the same window the
 // filter uses once it identifies a torn fragment pair.
 func (g *OSCGuard) NoteAppSuppression() {
-	now := time.Now()
+	now := g.clock()
 	g.markSuspicious(now, oscGuardWindow)
 	g.seqLen = 0
 }
