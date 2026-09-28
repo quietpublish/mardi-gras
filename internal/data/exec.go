@@ -94,8 +94,8 @@ func bdChildEnv(name string, args []string) []string {
 
 // bdReadOnlyArgs reports whether the given `bd` arg list invokes a
 // read-only subcommand (list, show, context, doctor, --version, plain
-// `ready`, or `prune --dry-run`). Used to opt into BD_DOLT_AUTO_COMMIT=off
-// without affecting mutating commands.
+// `ready`, `prune --dry-run`, `events tail`, or `config get`). Used to opt
+// into BD_DOLT_AUTO_COMMIT=off without affecting mutating commands.
 func bdReadOnlyArgs(args []string) bool {
 	if len(args) == 0 {
 		return false
@@ -117,6 +117,12 @@ func bdReadOnlyArgs(args []string) bool {
 			}
 		}
 		return true
+	case "events":
+		// `bd events tail` reads the journal; `bd events prune` deletes from it.
+		return len(args) > 1 && args[1] == "tail"
+	case "config":
+		// `bd config get` reads; `bd config set` writes .beads/config.yaml.
+		return len(args) > 1 && args[1] == "get"
 	case "prune":
 		// `bd prune --dry-run` is read-only; `bd prune --force` mutates.
 		for _, a := range args {
