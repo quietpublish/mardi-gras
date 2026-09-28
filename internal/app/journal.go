@@ -41,6 +41,10 @@ type journalLoop struct {
 	// recent is the Recent changes feed: the newest records, oldest first,
 	// wisps left out.
 	recent []data.JournalRecord
+	// serveURL is MG_BD_SERVE: a bd serve whose event stream replaces the
+	// CLI probes while it's up. serve is that stream's state.
+	serveURL string
+	serve    serveStream
 }
 
 // journalRecentCap bounds the Recent changes feed.
@@ -184,7 +188,11 @@ func newJournalLoop(mode data.SourceMode, optedOut bool) journalLoop {
 		return journalLoop{}
 	}
 	f, act := data.NewJournalFollower(optedOut)
-	return journalLoop{follower: f, busy: act == data.JournalCheckEnabled}
+	j := journalLoop{follower: f, busy: act == data.JournalCheckEnabled}
+	if !optedOut {
+		j.serveURL = strings.TrimSpace(os.Getenv("MG_BD_SERVE"))
+	}
+	return j
 }
 
 func checkJournalEnabled() tea.Msg {
@@ -276,9 +284,15 @@ func (m Model) handleJournalTick(msg journalTickMsg) (tea.Model, tea.Cmd) {
 	f, act := before.Tick(time.Now())
 	m.journal.follower = f
 	cmds := m.journalTransition(before)
+	if cmd := m.maybeStartServe(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	switch {
 	case act != data.JournalNoAction:
 		cmds = append(cmds, m.journalDo(act))
+	case f.Live() && m.journal.serve.connected:
+		// The bd serve stream is feeding the follower: no CLI probe.
+		cmds = append(cmds, m.scheduleJournal())
 	case f.Live() && !m.sourceHealth.IsDegraded():
 		cmds = append(cmds, m.journalCall(m.probeJournal()))
 	default:
@@ -309,19 +323,31 @@ func (m Model) handleJournalHead(msg journalHeadMsg) (tea.Model, tea.Cmd) {
 	if f.Live() && len(m.journal.recent) == 0 && msg.anchor.Seq > 0 {
 		cmds = append(cmds, backfillJournal(msg.anchor.Seq))
 	}
+	if cmd := m.maybeStartServe(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	m.syncRecentChanges()
 	return m, tea.Batch(cmds...)
 }
 
 func (m Model) handleJournalProbe(msg journalProbeMsg) (tea.Model, tea.Cmd) {
 	m.journal.busy = false
+	return m, tea.Batch(m.absorbJournal(msg.records, msg.err, msg.startedAt)...)
+}
+
+// absorbJournal feeds records (or a read error) to the follower, whichever
+// path read them: a CLI probe or the bd serve stream. Records at or below
+// the anchor are dropped: when both paths have run, one may deliver what the
+// other already has, and replaying it would move the anchor backwards.
+func (m *Model) absorbJournal(records []data.JournalRecord, err error, startedAt time.Time) []tea.Cmd {
 	now := time.Now()
 	before := m.journal.follower
-	f, act := before.Probed(msg.records, msg.err, msg.startedAt, now)
+	records = recordsAfter(records, before.Anchor.Seq)
+	f, act := before.Probed(records, err, startedAt, now)
 	m.journal.follower = f
-	relevant := m.noteJournalRecords(msg.records, now)
-	if len(msg.records) > 0 && msg.err == nil {
-		m.journal.addRecent(msg.records)
+	relevant := m.noteJournalRecords(records, now)
+	if len(records) > 0 && err == nil {
+		m.journal.addRecent(records)
 		m.syncRecentChanges()
 	}
 
@@ -329,13 +355,23 @@ func (m Model) handleJournalProbe(msg journalProbeMsg) (tea.Model, tea.Cmd) {
 	if act == data.JournalRefresh && !relevant {
 		act = data.JournalNoAction
 	}
-	if msg.err == nil && act == data.JournalNoAction && len(m.journal.pending) == 0 &&
+	if err == nil && act == data.JournalNoAction && len(m.journal.pending) == 0 &&
 		!m.refresh.inFlight && !m.refresh.dirty {
 		m.journal.freshAt = now
 	}
 	cmds = append(cmds, m.journalTransition(before)...)
 	cmds = append(cmds, m.journalDo(act))
-	return m, tea.Batch(cmds...)
+	return cmds
+}
+
+// recordsAfter drops records at or below seq.
+func recordsAfter(records []data.JournalRecord, seq int64) []data.JournalRecord {
+	for i, r := range records {
+		if r.Seq > seq {
+			return records[i:]
+		}
+	}
+	return nil
 }
 
 // noteJournalRecords marks the issues probed records name as pending until a
@@ -417,6 +453,9 @@ func (m *Model) journalReloaded(issues []data.Issue, touched []string) {
 func (m *Model) journalTransition(before data.JournalFollower) []tea.Cmd {
 	after := m.journal.follower
 	var cmds []tea.Cmd
+	if before.Live() && !after.Live() {
+		m.stopServe()
+	}
 	if (before.Live() != after.Live() || before.Partial != after.Partial) && !m.refresh.inFlight {
 		// Bring the backstop in to the new interval, but never push out a
 		// timer already due sooner (one refreshSpaced pulled in).

@@ -383,6 +383,7 @@ func closeAllCodexSessions(sessions map[string]*codexSession) {
 func (m *Model) Cleanup() {
 	closeAllCodexSessions(m.codexSessions)
 	m.stopBeadStream()
+	m.stopServe()
 }
 
 // toggleCodexTranscript is the M-key handler. It opens the codex transcript
