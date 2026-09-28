@@ -21,6 +21,11 @@ func NewGTDriver() Driver { return GTDriver{} }
 
 func (GTDriver) Backend() string { return BackendGasTown }
 
+// WatchBeadEvents is unsupported: gt has no event stream mg can subscribe to.
+func (GTDriver) WatchBeadEvents(context.Context) (<-chan BeadEvent, error) {
+	return nil, ErrUnsupported
+}
+
 func (GTDriver) Supports(feature Feature) bool {
 	switch feature {
 	case FeatureVitals, FeatureCosts, FeaturePatrol,

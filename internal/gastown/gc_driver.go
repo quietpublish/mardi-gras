@@ -48,11 +48,11 @@ func NewGCDriver(baseURL, city string) (*GCDriver, error) {
 
 func (*GCDriver) Backend() string { return BackendGasCity }
 
-// Supports reports false for every optional feature today: vitals/costs/patrol
-// have no Gas City equivalent; recovery/handoff/activity-feed are gt-shaped
-// (they shell out to gt or read ~/gt/.events.jsonl) and would fail with a raw
-// exec error rather than cleanly; and the SSE stream lands in Phase 4.
-func (*GCDriver) Supports(Feature) bool { return false }
+// Supports reports true only for FeatureSSE, the bead event stream (see
+// WatchBeadEvents). Vitals/costs/patrol have no Gas City equivalent, and
+// recovery/handoff/activity-feed are gt-shaped (they shell out to gt or read
+// ~/gt/.events.jsonl) and would fail with a raw exec error rather than cleanly.
+func (*GCDriver) Supports(f Feature) bool { return f == FeatureSSE }
 
 // Status fetches the live agent roster over HTTP and adapts it to TownStatus.
 func (d *GCDriver) Status(ctx context.Context) (*TownStatus, error) {

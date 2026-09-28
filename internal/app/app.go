@@ -199,6 +199,9 @@ type Model struct {
 	// Live updates: the bd events journal as a reload trigger
 	journal journalLoop
 
+	// The orchestrator's bead event stream, another reload trigger
+	beadStream beadStream
+
 	// Dolt resilience state machine
 	sourceHealth   data.SourceHealth
 	jsonlPath      string // Cached JSONL path resolved on first fallback probe
@@ -358,6 +361,9 @@ func (m Model) Init() tea.Cmd {
 	}
 	if m.journal.busy {
 		cmds = append(cmds, checkJournalEnabled) // New marked the loop busy for this
+	}
+	if cmd := m.startBeadStream(); cmd != nil {
+		cmds = append(cmds, cmd)
 	}
 	return tea.Batch(cmds...)
 }

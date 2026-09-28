@@ -28,7 +28,8 @@ const (
 	FeatureCosts
 	// FeaturePatrol is `gt patrol scan` (zombie/stall diagnostics). Gas Town only.
 	FeaturePatrol
-	// FeatureSSE is a live server-sent-events status stream (Gas City; Phase 4).
+	// FeatureSSE is a live stream of bead change events (Gas City's supervisor
+	// events stream), used as a reload trigger. See WatchBeadEvents.
 	FeatureSSE
 	// FeatureRecovery is dead-rig recovery (`gt release` + `gt sling`). Gas Town
 	// only — RecoverRig shells out to gt directly rather than going through a
@@ -42,6 +43,29 @@ const (
 	// equivalent is the supervisor events API, not yet wired up).
 	FeatureActivityFeed
 )
+
+// BeadEventKind says what a BeadEvent reports.
+type BeadEventKind int
+
+const (
+	// BeadChanged: a bead was created, updated, closed or deleted.
+	BeadChanged BeadEventKind = iota
+	// BeadStreamResumed: the stream reconnected after a gap. Changes in the
+	// gap were not seen, so the caller should reload once.
+	BeadStreamResumed
+	// BeadStreamStopped: the stream ended for good (the backend has no
+	// stream, or refuses mg); Err says why. The channel closes after it.
+	BeadStreamStopped
+)
+
+// BeadEvent is one event from WatchBeadEvents.
+type BeadEvent struct {
+	Kind      BeadEventKind
+	BeadID    string
+	IssueType string // the bead's type, so callers can skip ones bd list hides
+	Ephemeral bool
+	Err       error
+}
 
 // SlingRequest collapses the several `gt sling` variants (single/multiple,
 // plain/agent-override/formula) into one shape. A Gas Town driver fans it
@@ -77,6 +101,12 @@ type SlingRequest struct {
 type Driver interface {
 	// Backend reports the orchestrator name ("gastown" | "gascity").
 	Backend() string
+
+	// WatchBeadEvents streams the orchestrator's bead change events until
+	// ctx is done, then closes the channel. The events only say that
+	// something changed; callers reload rather than apply them. It returns
+	// ErrUnsupported when the backend has no stream.
+	WatchBeadEvents(ctx context.Context) (<-chan BeadEvent, error)
 	// Supports reports whether this driver can perform the given feature.
 	Supports(feature Feature) bool
 

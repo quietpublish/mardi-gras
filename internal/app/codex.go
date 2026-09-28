@@ -382,6 +382,7 @@ func closeAllCodexSessions(sessions map[string]*codexSession) {
 // call after tea.Program.Run returns. Idempotent.
 func (m *Model) Cleanup() {
 	closeAllCodexSessions(m.codexSessions)
+	m.stopBeadStream()
 }
 
 // toggleCodexTranscript is the M-key handler. It opens the codex transcript

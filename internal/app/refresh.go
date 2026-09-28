@@ -32,10 +32,12 @@ type refreshLoop struct {
 	// flight. It is honoured by exactly one follow-up fetch, so a burst of
 	// mutations coalesces instead of queueing.
 	dirty bool
-	// spaced records a reload the journal asked for while a fetch was in
-	// flight. refreshDone honours it no sooner than CLIPollInterval later,
-	// unlike dirty, so a stream of writes never reloads back to back.
-	spaced bool
+	// spaced records a reload a trigger (the journal, the orchestrator's
+	// event stream) asked for while a fetch was in flight. refreshDone
+	// honours it no sooner than spacedGap after that fetch lands, unlike
+	// dirty, so a stream of writes never reloads back to back.
+	spaced    bool
+	spacedGap time.Duration
 	// startedAt is when the latest fetch started, landedAt when the latest
 	// one finished, and dueAt when the armed timer fires (zero for the first
 	// timer, which Init arms).
@@ -100,15 +102,24 @@ func (m *Model) scheduleRefresh() tea.Cmd {
 }
 
 // refreshSpaced reloads for the journal, but no more often than the old
-// poll ran: CLIPollInterval after the last reload landed, pulling the timer
-// in (never pushing it out). While a fetch is in flight it only notes the
-// request, and refreshDone honours it on the same terms.
+// poll ran: CLIPollInterval after the last reload landed.
 func (m *Model) refreshSpaced() tea.Cmd {
+	return m.refreshSpacedBy(data.CLIPollInterval)
+}
+
+// refreshSpacedBy reloads for a trigger no sooner than gap after the last
+// reload landed, pulling the timer in (never pushing it out). While a fetch
+// is in flight it only notes the request, and refreshDone honours it on the
+// same terms.
+func (m *Model) refreshSpacedBy(gap time.Duration) tea.Cmd {
 	if m.refresh.inFlight {
+		if !m.refresh.spaced || gap < m.refresh.spacedGap {
+			m.refresh.spacedGap = gap
+		}
 		m.refresh.spaced = true
 		return nil
 	}
-	return m.refreshBy(data.CLIPollInterval - time.Since(m.refresh.landedAt))
+	return m.refreshBy(gap - time.Since(m.refresh.landedAt))
 }
 
 // refreshBy makes the next reload start no later than d from now:
@@ -177,7 +188,7 @@ func (m *Model) refreshDone() tea.Cmd {
 	timer := m.scheduleRefresh()
 	if m.refresh.spaced {
 		m.refresh.spaced = false
-		if sooner := m.refreshBy(data.CLIPollInterval); sooner != nil {
+		if sooner := m.refreshBy(m.refresh.spacedGap); sooner != nil {
 			return sooner
 		}
 	}
