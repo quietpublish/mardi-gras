@@ -37,6 +37,7 @@ const (
 	SymMail        = "✉"
 	SymSling       = "➤"
 	SymChanged     = "◈"
+	SymLive        = "∿" // footer: reloads driven by the bd events journal
 	SymSelected    = "◉"
 	SymUnselected  = "○"
 

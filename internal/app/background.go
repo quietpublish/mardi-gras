@@ -14,7 +14,7 @@ import (
 // Update forwards every other message to it, and a modal drops what it does
 // not understand. Each message here closes an in-flight gate or re-arms a
 // timer, so losing one would stall its loop for the rest of the session: no
-// more reloads, agent captures, status polls or animation.
+// more reloads, agent captures, journal probes, status polls or animation.
 func (m Model) updateBackground(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	var model tea.Model
 	var cmd tea.Cmd
@@ -47,6 +47,14 @@ func (m Model) updateBackground(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		model, cmd = m.handleAgentStatus(msg)
 	case agentOutputMsg:
 		model, cmd = m.handleAgentOutput(msg)
+	case journalTickMsg:
+		model, cmd = m.handleJournalTick(msg)
+	case journalEnabledMsg:
+		model, cmd = m.handleJournalEnabled(msg)
+	case journalHeadMsg:
+		model, cmd = m.handleJournalHead(msg)
+	case journalProbeMsg:
+		model, cmd = m.handleJournalProbe(msg)
 	default:
 		return m, nil, false
 	}

@@ -1,6 +1,7 @@
 package gastown
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -56,7 +57,7 @@ func TestBdChildEnvPinsEnvelopeForBd(t *testing.T) {
 	// User had BD_JSON_ENVELOPE=1 in shell — gastown must override it to 0
 	// so bd's --json output stays in legacy (non-envelope) form.
 	t.Setenv("BD_JSON_ENVELOPE", "1")
-	env := bdChildEnv("bd")
+	env := bdChildEnv("bd", nil)
 	var sawPin, sawInherited bool
 	for _, kv := range env {
 		switch kv {
@@ -75,10 +76,10 @@ func TestBdChildEnvPinsEnvelopeForBd(t *testing.T) {
 }
 
 func TestBdChildEnvDoesNotPinAutoCommit(t *testing.T) {
-	// gastown shells `gt`, never `bd` directly — the auto-commit polite
-	// citizen pattern lives in internal/data, not here. Verify the
+	// gastown's only direct bd call is the comment read; the auto-commit
+	// polite-citizen pattern lives in internal/data, not here. Verify the
 	// asymmetry: gastown.bdChildEnv must NOT set BD_DOLT_AUTO_COMMIT=off.
-	env := bdChildEnv("bd")
+	env := bdChildEnv("bd", nil)
 	for _, kv := range env {
 		if strings.HasPrefix(kv, "BD_DOLT_AUTO_COMMIT=") {
 			t.Errorf("gastown bdChildEnv should not pin BD_DOLT_AUTO_COMMIT, got %q", kv)
@@ -91,8 +92,20 @@ func TestBdChildEnvReturnsNilForOtherBinaries(t *testing.T) {
 	// the child inherits the parent env without modification.
 	cases := []string{"gt", "claude", "tmux", ""}
 	for _, name := range cases {
-		if env := bdChildEnv(name); env != nil {
+		if env := bdChildEnv(name, nil); env != nil {
 			t.Errorf("bdChildEnv(%q) = %v, want nil", name, env)
 		}
+	}
+}
+
+func TestBdChildEnvDisablesMetricsForCommentRead(t *testing.T) {
+	t.Setenv("BD_DISABLE_METRICS", "0")
+	read := bdChildEnv("bd", []string{"comments", "mg-42", "--json"})
+	if !slices.Contains(read, "BD_DISABLE_METRICS=1") || slices.Contains(read, "BD_DISABLE_METRICS=0") {
+		t.Errorf("comment read: want metrics disabled, got %v", read)
+	}
+	write := bdChildEnv("bd", []string{"comments", "add", "mg-42", "--", "hi"})
+	if !slices.Contains(write, "BD_DISABLE_METRICS=0") || slices.Contains(write, "BD_DISABLE_METRICS=1") {
+		t.Errorf("comment write: want the user's own setting kept, got %v", write)
 	}
 }

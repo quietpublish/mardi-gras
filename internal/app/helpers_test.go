@@ -120,8 +120,8 @@ func TestOverlayStrings(t *testing.T) {
 func TestDiffIssuesEmptyPrev(t *testing.T) {
 	m := Model{changedIDs: make(map[string]time.Time)}
 	issues := []data.Issue{testIssue("a", data.StatusOpen)}
-	if changed, removed := m.diffIssues(issues); len(changed) != 0 || removed != 0 {
-		t.Errorf("nothing loaded before: got %v changed, %d removed; want none", changed, removed)
+	if changed, removed := m.diffIssues(issues); len(changed) != 0 || len(removed) != 0 {
+		t.Errorf("nothing loaded before: got %v changed, %v removed; want none", changed, removed)
 	}
 }
 
@@ -131,8 +131,8 @@ func TestDiffIssuesStatusChanged(t *testing.T) {
 		changedIDs: make(map[string]time.Time),
 	}
 	changed, removed := m.diffIssues([]data.Issue{testIssue("a", data.StatusInProgress)})
-	if len(changed) != 1 || removed != 0 {
-		t.Errorf("status changed: got %v changed, %d removed; want [a], 0", changed, removed)
+	if len(changed) != 1 || len(removed) != 0 {
+		t.Errorf("status changed: got %v changed, %v removed; want [a], none", changed, removed)
 	}
 	if _, ok := m.changedIDs["a"]; !ok {
 		t.Error("expected changedIDs to contain 'a'")
@@ -145,8 +145,8 @@ func TestDiffIssuesNewAndRemoved(t *testing.T) {
 		changedIDs: make(map[string]time.Time),
 	}
 	changed, removed := m.diffIssues([]data.Issue{testIssue("new", data.StatusOpen)})
-	if len(changed) != 1 || removed != 1 {
-		t.Errorf("new+removed: got %v changed, %d removed; want [new], 1", changed, removed)
+	if len(changed) != 1 || len(removed) != 1 {
+		t.Errorf("new+removed: got %v changed, %v removed; want [new], [old]", changed, removed)
 	}
 	if _, ok := m.changedIDs["new"]; !ok {
 		t.Error("expected changedIDs to contain 'new'")
@@ -159,8 +159,8 @@ func TestDiffIssuesNoChange(t *testing.T) {
 		testIssue("b", data.StatusClosed),
 	}
 	m := Model{issues: issues, changedIDs: make(map[string]time.Time)}
-	if changed, removed := m.diffIssues(issues); len(changed) != 0 || removed != 0 {
-		t.Errorf("no change: got %v changed, %d removed; want none", changed, removed)
+	if changed, removed := m.diffIssues(issues); len(changed) != 0 || len(removed) != 0 {
+		t.Errorf("no change: got %v changed, %v removed; want none", changed, removed)
 	}
 }
 

@@ -253,6 +253,35 @@ func TestBdChildEnvPinsReadOnlyOnly(t *testing.T) {
 	}
 }
 
+func TestBdChildEnvDisablesMetricsForReads(t *testing.T) {
+	// Even a user who forces bd metrics on keeps mg's background polling out
+	// of them; mg's writes on the user's behalf keep the user's setting.
+	t.Setenv("BD_DISABLE_METRICS", "0")
+
+	for _, args := range [][]string{
+		{"list", "--json", "--limit", "0", "--all"},
+		{"events", "tail", "--since", "4", "--limit", "501", "--json"},
+		{"config", "get", "events-journal", "--json"},
+		{"show", "mg-42", "--long", "--json"},
+	} {
+		env := bdChildEnv("bd", args)
+		if !hasEnv(env, "BD_DISABLE_METRICS=1") || hasEnv(env, "BD_DISABLE_METRICS=0") {
+			t.Errorf("bd %v: want metrics disabled, got %v", args, env)
+		}
+	}
+
+	for _, args := range [][]string{
+		{"update", "mg-42", "--claim"},
+		{"config", "set", "events-journal", "true"},
+		{"events", "prune", "--before", "10"},
+	} {
+		env := bdChildEnv("bd", args)
+		if !hasEnv(env, "BD_DISABLE_METRICS=0") || hasEnv(env, "BD_DISABLE_METRICS=1") {
+			t.Errorf("bd %v: want the user's own setting kept, got %v", args, env)
+		}
+	}
+}
+
 func hasEnv(env []string, want string) bool {
 	return slices.Contains(env, want)
 }

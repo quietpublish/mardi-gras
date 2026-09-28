@@ -310,3 +310,26 @@ func TestJournalFollowerSuspectsWaitForLaterProbe(t *testing.T) {
 		t.Fatal("expected x to be explained by the later probe")
 	}
 }
+
+func TestJournalFollowerProbeInterval(t *testing.T) {
+	f := following(t) // head found at t0
+	if got := f.ProbeInterval(t0.Add(time.Second)); got != journalActiveProbe {
+		t.Fatalf("just after the head search: %v, want %v", got, journalActiveProbe)
+	}
+	quiet := t0.Add(journalActiveWindow)
+	if got := f.ProbeInterval(quiet); got != journalIdleProbe {
+		t.Fatalf("after a quiet minute: %v, want %v", got, journalIdleProbe)
+	}
+
+	// A record brings the fast cadence back.
+	f, _ = f.Probed([]JournalRecord{rec(11, "a")}, nil, quiet, quiet)
+	if got := f.ProbeInterval(quiet.Add(time.Second)); got != journalActiveProbe {
+		t.Fatalf("after activity: %v, want %v", got, journalActiveProbe)
+	}
+	// An empty probe does not.
+	later := quiet.Add(journalActiveWindow)
+	f, _ = f.Probed(nil, nil, later, later)
+	if got := f.ProbeInterval(later); got != journalIdleProbe {
+		t.Fatalf("empty probes keep it idle: %v, want %v", got, journalIdleProbe)
+	}
+}

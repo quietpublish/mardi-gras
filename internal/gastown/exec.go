@@ -77,7 +77,7 @@ var runWithTimeout = func(timeout time.Duration, name string, args ...string) ([
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Env = bdChildEnv(name)
+	cmd.Env = bdChildEnv(name, args)
 	return cmd.Output()
 }
 
@@ -86,7 +86,7 @@ var runCombinedWithTimeout = func(timeout time.Duration, name string, args ...st
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Env = bdChildEnv(name)
+	cmd.Env = bdChildEnv(name, args)
 	return cmd.CombinedOutput()
 }
 
@@ -95,23 +95,31 @@ var execWithTimeout = func(timeout time.Duration, name string, args ...string) e
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Env = bdChildEnv(name)
+	cmd.Env = bdChildEnv(name, args)
 	return cmd.Run()
 }
 
 // bdChildEnv pins BD_JSON_ENVELOPE=0 for `bd` subprocesses so a user's shell
-// setting cannot flip bd's --json output into envelope form. See
-// internal/data/exec.go for the rationale.
-func bdChildEnv(name string) []string {
+// setting cannot flip bd's --json output into envelope form, and
+// BD_DISABLE_METRICS=1 for the comment read, which the detail panel runs on
+// every selection: machine polling, not someone using bd. See
+// internal/data/exec.go for the rationale behind both.
+func bdChildEnv(name string, args []string) []string {
 	if name != "bd" {
 		return nil
 	}
+	read := len(args) > 0 && args[0] == "comments" && (len(args) < 2 || args[1] != "add")
 	env := os.Environ()
 	filtered := env[:0]
 	for _, kv := range env {
-		if !strings.HasPrefix(kv, "BD_JSON_ENVELOPE=") {
-			filtered = append(filtered, kv)
+		if strings.HasPrefix(kv, "BD_JSON_ENVELOPE=") || (read && strings.HasPrefix(kv, "BD_DISABLE_METRICS=")) {
+			continue
 		}
+		filtered = append(filtered, kv)
 	}
-	return append(filtered, "BD_JSON_ENVELOPE=0")
+	filtered = append(filtered, "BD_JSON_ENVELOPE=0")
+	if read {
+		filtered = append(filtered, "BD_DISABLE_METRICS=1")
+	}
+	return filtered
 }
