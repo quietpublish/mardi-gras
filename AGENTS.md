@@ -49,6 +49,7 @@
 - `make dev-gt`: run with sample data and fake `gt` on PATH (Gas Town features).
 - `make dev-gc`: run against `testdata/fakegc`, a fake Gas City supervisor (Gas City features, no `gc` install needed).
 - `make dev-bd`: run in CLI mode against `testdata/fake-bd`, a fake `bd` serving the sample data (`MG_FAKE_BD_LOG=<file>` logs each invocation).
+- `make contract-bd BD=/path/to/bd`: run the bd events journal client against a real `bd` in a throwaway workspace (build tag `bdcontract`; skips cleanly on a bd without the journal). Run it when bumping the supported bd version.
 - `make test`: execute `go test ./...` across all packages.
 - `make fmt`: apply standard Go formatting (`go fmt ./...`).
 - `make lint`: run static analysis with `golangci-lint run ./...`.

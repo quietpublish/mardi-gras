@@ -13,6 +13,7 @@ make dev          # Build and run with testdata/sample.jsonl
 make dev-gt       # Same, with testdata/fake-gt.sh on PATH (fake Gas Town)
 make dev-gc       # Same, against testdata/fakegc (fake Gas City supervisor)
 make dev-bd       # CLI mode against testdata/fake-bd (fake bd; MG_FAKE_BD_LOG=<file> logs calls)
+make contract-bd BD=/path/to/bd  # journal client vs a real bd in a throwaway workspace
 make gc-client    # Regenerate the Gas City API client (internal/gastown/gcclient) from the pinned spec
 ```
 

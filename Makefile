@@ -4,7 +4,7 @@ GO := go
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -ldflags "-s -w -X main.version=$(VERSION)"
 
-.PHONY: build run run-sample test clean dev dev-gt dev-gc dev-bd screenshot screenshots-gc screenshot-light demo-gif tidy fmt lint gc-client
+.PHONY: build run run-sample test clean dev dev-gt dev-gc dev-bd contract-bd screenshot screenshots-gc screenshot-light demo-gif tidy fmt lint gc-client
 
 # GCDIR is the generated Gas City client package.
 GCDIR := internal/gastown/gcclient
@@ -38,6 +38,13 @@ dev-gt: build
 dev-bd: build
 	mkdir -p testdata/fake-bd/.beads
 	cd testdata/fake-bd && PATH="$(CURDIR)/testdata/fake-bd/bin:$(PATH)" $(CURDIR)/$(BINARY)
+
+# contract-bd runs mg's bd events journal client against a real bd binary, in a
+# throwaway workspace with its own HOME (never your real one: bd migrates a
+# workspace's schema on first use). Usage: make contract-bd BD=/path/to/bd
+contract-bd:
+	@test -n "$(BD)" || { echo "usage: make contract-bd BD=/path/to/bd"; exit 2; }
+	MG_BD_CONTRACT_BIN="$(BD)" $(GO) test -tags bdcontract -run TestBdContract -count=1 -v ./internal/data
 
 # dev-gc runs mg against a fake Gas City supervisor (testdata/fakegc) — the
 # HTTP analogue of dev-gt. Press ctrl+g for the Gas City panel. Good for
