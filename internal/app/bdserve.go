@@ -55,7 +55,7 @@ func (m *Model) maybeStartServe() tea.Cmd {
 	if m.beadsContext != nil {
 		projectID = m.beadsContext.ProjectID
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // G118: kept in s.cancel; stopServe and the stream's close call it
 	s.events = data.WatchServeJournal(ctx, m.journal.serveURL, projectID, m.journal.follower.Anchor)
 	s.cancel = cancel
 	s.running = true
@@ -72,6 +72,9 @@ func waitServe(events <-chan data.ServeEvent) tea.Cmd {
 func (m Model) handleServe(msg serveMsg) (tea.Model, tea.Cmd) {
 	s := &m.journal.serve
 	if !msg.ok {
+		if s.cancel != nil {
+			s.cancel()
+		}
 		s.cancel = nil
 		s.running = false
 		s.connected = false
