@@ -2,6 +2,31 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.32.2 (2026-09-27)
+
+A patch release: mg's polling quietly multiplied with every action you took, an open dialog could stop background work for good, and selecting an issue with a live agent in tmux froze the whole interface.
+
+### Fixed
+- **Each action no longer adds another `bd list` poll** ([#125](https://github.com/quietpublish/mardi-gras/pull/125)).
+  - **The bug:** claiming, changing status, creating, closing, commenting, pruning, or an agent finishing each triggered an immediate refresh. That refresh started a new 5-second polling loop alongside the one already running, and none of them ever stopped. After three claims mg ran `bd list` four times every five seconds, and in tmux the agent-state poll multiplied with it.
+  - **The fix:** one refresh loop now owns every reload, with one timer and at most one fetch in flight. A burst of actions costs one extra fetch.
+  - **Same bug in the fallback:** leaving the JSONL fallback leaked a loop the same way and skipped the change marks for issues that changed while `bd` was down. Both are fixed.
+  - **Also fixed:** in JSONL mode every file change was loaded twice; now it's loaded once.
+  - **Measured** with a logging fake `bd`: three status changes followed by 20 idle seconds went from 15 `bd list` runs to 4.
+- **An open dialog no longer stops background work for good** ([#125](https://github.com/quietpublish/mardi-gras/pull/125)). While the command palette, a form, a dialog or a text input is open, mg hands every message to it, and it drops what it doesn't understand, including the results of background work. A Gas Town status result that arrived then left the next poll waiting forever, so the panel stopped updating for the rest of the session. The header shimmer, toast dismissal and change-mark expiry could stop the same way. Background results now reach their handlers first.
+- **Selecting an issue with a live agent no longer freezes the TUI in tmux** ([#126](https://github.com/quietpublish/mardi-gras/pull/126)).
+  - **The bug:** the detail panel read the agent's tmux pane synchronously on every keypress and every refresh, two `tmux` round trips each time, blocking the whole interface.
+  - **The fix:** the capture now runs in the background, one at a time, with a 2-second timeout, and makes one `tmux` call instead of two.
+  - **Output shows up sooner:** it appears as soon as it's captured, where before it waited for an unrelated redraw.
+  - **It follows every selection change:** filter, focus mode, the palette, startup, a freshly launched agent, and an agent exiting.
+  - **Orchestrator agents** have no pane mg can read, so they're no longer captured; that always came back empty.
+- **`G` selects the last issue** ([#126](https://github.com/quietpublish/mardi-gras/pull/126)). It could land on a section footer and leave the previous issue selected, so the detail panel and actions kept targeting it. `g` and `G` now move the selection with the cursor.
+
+### Changed
+- **The Homebrew cask is published with a GitHub App token and checked every week** ([#121](https://github.com/quietpublish/mardi-gras/pull/121), [#122](https://github.com/quietpublish/mardi-gras/pull/122)). The personal access token that published the cask expired, so v0.32.1's release went out but its cask push failed, and the cask only landed the next day. Publishing now uses a GitHub App, which doesn't expire. A preflight proves write access to the tap before anything is published, and a scheduled check catches trouble weeks before a release. v0.32.2 is the first release published this way.
+- **The README is rewritten** around what mg does today ([#123](https://github.com/quietpublish/mardi-gras/pull/123)).
+- **`make dev-bd`** runs mg in CLI mode against a fake `bd` that serves the sample data. `MG_FAKE_BD_LOG=<file>` logs every `bd` call, which is how the polling leak above was measured ([#125](https://github.com/quietpublish/mardi-gras/pull/125)).
+
 ## v0.32.1 (2026-09-12)
 
 A patch release: comment bodies were invisible in the detail panel, and CI had gone red on its own.
