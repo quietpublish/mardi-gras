@@ -95,8 +95,10 @@ type Model struct {
 	// dot expires changeIndicatorDuration after its own change.
 	changedIDs map[string]time.Time
 
-	// Focus mode
-	focusMode bool
+	// Focus mode, and who "you" are for it (resolved on first use)
+	focusMode     bool
+	actor         string
+	actorResolved bool
 
 	// Issue creation form
 	creating   bool
@@ -376,6 +378,16 @@ type beadsContextMsg struct {
 func fetchBeadsContext() tea.Msg {
 	ctx, _ := data.FetchContext()
 	return beadsContextMsg{ctx: ctx}
+}
+
+// focusActor is who focus mode treats as "you" (data.CurrentActor),
+// resolved once, on first use: it can shell out to git.
+func (m *Model) focusActor() string {
+	if !m.actorResolved {
+		m.actor = data.CurrentActor(m.projectDir)
+		m.actorResolved = true
+	}
+	return m.actor
 }
 
 // orchestratorAvailable reports whether mg has a reachable orchestrator — Gas
@@ -3154,7 +3166,7 @@ func (m *Model) rebuildParade() {
 	filteredIssues, highlights := data.FilterIssuesWithHighlights(m.issues, m.filterInput.Value())
 	filteredIssues = data.ExcludeByLabel(data.ExcludeByType(filteredIssues, m.excludeTypes), m.excludeLabels)
 	if m.focusMode {
-		filteredIssues = data.FocusFilter(filteredIssues, m.blockingTypes)
+		filteredIssues = data.FocusFilter(filteredIssues, m.blockingTypes, m.focusActor())
 	}
 	groups := m.groups
 	detailIssueMap := data.BuildIssueMap(m.issues)
