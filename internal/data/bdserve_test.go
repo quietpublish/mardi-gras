@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -15,14 +16,17 @@ import (
 // fakeServe emulates `bd serve`'s journal endpoints, shaped by bytes
 // captured from bd 1.3.0: a paged read and an SSE watch stream that opens
 // with `retry: 3000`, sends `id:`/`data:` frames and `: heartbeat` comments,
-// and ends a pruned-past stream with `event: truncated`.
+// and ends a pruned-past stream with `event: truncated`. Like the real
+// server, only the paged endpoint checks Bd-Project-Id.
 type fakeServe struct {
 	journal   *fakeJournal // the paged endpoint answers from this
 	frames    chan string  // raw SSE text for the watch stream
 	status    int          // non-200 makes both endpoints fail with it
 	body      string
 	retry     string
-	projectID string // header seen on the watch stream
+	serves    string       // project the paged endpoint accepts; "" accepts any
+	projectID string       // header seen on the watch stream
+	watches   atomic.Int32 // watch connections accepted
 }
 
 func newFakeServe(t *testing.T, head int64) (f *fakeServe, url string) {
@@ -44,6 +48,12 @@ func newFakeServe(t *testing.T, head int64) (f *fakeServe, url string) {
 		if fail(w) {
 			return
 		}
+		if id := r.Header.Get("Bd-Project-Id"); f.serves != "" && id != "" && id != f.serves {
+			// bd 1.3.0's reply, less the echoed ID.
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"code":"invalid_argument","detail":"the Bd-Project-Id header names a project this server does not serve"}`))
+			return
+		}
 		var since int64
 		_, _ = fmt.Sscan(r.URL.Query().Get("since"), &since)
 		var records []JournalRecord
@@ -57,6 +67,7 @@ func newFakeServe(t *testing.T, head int64) (f *fakeServe, url string) {
 		if fail(w) {
 			return
 		}
+		f.watches.Add(1)
 		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		_, _ = fmt.Fprint(w, "retry: 3000\n\n")
@@ -97,6 +108,7 @@ func nextServe(t *testing.T, events <-chan ServeEvent) ServeEvent {
 
 func TestWatchServeJournal(t *testing.T) {
 	f, url := newFakeServe(t, 10)
+	f.serves = "proj-1"
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ref := f.journal.record(10)
@@ -161,7 +173,7 @@ func TestWatchServeJournalStatus(t *testing.T) {
 			func(ev ServeEvent) bool { var tr *JournalTruncatedError; return errors.As(ev.Err, &tr) && tr.Head == 9 }},
 		{"auth", http.StatusUnauthorized, `unauthorized`, "",
 			func(ev ServeEvent) bool { return errors.Is(ev.Err, ErrServeRefused) }},
-		{"wrong workspace", http.StatusBadRequest, `{"code":"project_mismatch"}`, "",
+		{"bad request", http.StatusBadRequest, `{"code":"invalid_argument"}`, "",
 			func(ev ServeEvent) bool { return errors.Is(ev.Err, ErrServeRefused) }},
 		{"saturated", http.StatusServiceUnavailable, `{"code":"events_watch_saturated"}`, "7",
 			func(ev ServeEvent) bool { return ev.Err != nil && ev.RetryAfter == 7*time.Second }},
@@ -175,6 +187,21 @@ func TestWatchServeJournalStatus(t *testing.T) {
 				t.Fatalf("got %+v", ev)
 			}
 		})
+	}
+}
+
+// The watch stream ignores Bd-Project-Id, so the anchor check's paged read
+// is what keeps mg off another workspace's server.
+func TestWatchServeJournalWrongProject(t *testing.T) {
+	f, url := newFakeServe(t, 3)
+	f.serves = "proj-1"
+	ref := f.journal.record(3)
+	ev := nextServe(t, WatchServeJournal(testCtx(t), url, "proj-2", JournalAnchor{Seq: 3, Ref: &ref}))
+	if !errors.Is(ev.Err, ErrServeRefused) {
+		t.Fatalf("got %+v, want refused", ev)
+	}
+	if n := f.watches.Load(); n != 0 {
+		t.Fatalf("watch connections = %d, want none for another workspace", n)
 	}
 }
 

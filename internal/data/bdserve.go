@@ -52,7 +52,8 @@ var serveIdle = 65 * time.Second
 // WatchServeJournal opens one bd serve stream of records after anchor, and
 // closes the channel when it ends; the caller decides when to reconnect.
 // projectID, when known, is sent so a bd serve for another workspace refuses
-// rather than feeding this one's reloads.
+// rather than feeding this one's reloads. Only the paged read in
+// verifyServeAnchor enforces it: bd 1.3.0's watch stream ignores the header.
 func WatchServeJournal(ctx context.Context, baseURL, projectID string, anchor JournalAnchor) <-chan ServeEvent {
 	out := make(chan ServeEvent, 64)
 	idle := serveIdle
@@ -87,6 +88,8 @@ func watchServe(ctx context.Context, baseURL, projectID string, anchor JournalAn
 	// No Timeout: it would cut the stream. ctx and the idle watchdog end it.
 	client := &http.Client{}
 	base := strings.TrimRight(baseURL, "/")
+	// Run before every connection, even when the anchor hasn't moved: it is
+	// also the wrong-workspace check (see WatchServeJournal).
 	if err := verifyServeAnchor(ctx, client, base, projectID, anchor); err != nil {
 		return err
 	}
