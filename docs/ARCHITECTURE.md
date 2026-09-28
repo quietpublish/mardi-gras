@@ -460,7 +460,7 @@ Structured tokens are ANDed. Free-text words are **not** — they are rejoined i
 
 ### 6. Focus mode (data/focus.go)
 
-`FocusFilter(issues, blockingTypes)` returns the subset relevant to the current user: their in-progress work plus the top ready and blocked issues. Activated with `f`.
+`FocusFilter(issues, blockingTypes, me)` returns the subset relevant to you: your in-progress work plus the top five ready and top three blocked issues. Activated with `f`. "Your" work is in progress and assigned to you, or claimed by nobody (an agent may mark an issue in progress without claiming it). "You" is `data.CurrentActor`, resolved the way bd 1.3.0 resolves the actor it writes into claims: `BEADS_ACTOR`, `BD_ACTOR`, the workspace's `.beads/config.yaml` `actor`, git `user.name`, then `$USER`. Names match by bd's rule (`SameActor`): runs of `.`, `_` and `-` are one separator, an exact `--` is `/`, and case is ignored.
 
 ## Gas Town Integration
 

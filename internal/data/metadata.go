@@ -42,6 +42,7 @@ type MetadataSchema struct {
 // only parsing the validation.metadata section we care about.
 type beadsConfig struct {
 	IssuePrefix string `yaml:"issue-prefix"`
+	Actor       string `yaml:"actor"`
 	Validation  struct {
 		Metadata MetadataSchema `yaml:"metadata"`
 	} `yaml:"validation"`
@@ -114,6 +115,24 @@ func LoadIssuePrefix(projectDir string) string {
 		return ""
 	}
 	return issuePrefixFromDatabase(meta.DoltDatabase)
+}
+
+// LoadConfiguredActor returns the `actor` set in the workspace's
+// .beads/config.yaml, or "" when none is set.
+func LoadConfiguredActor(projectDir string) string {
+	if projectDir == "" {
+		return ""
+	}
+	beadsDir := ResolveBeadsDir(filepath.Join(projectDir, ".beads"))
+	raw, err := os.ReadFile(filepath.Join(beadsDir, "config.yaml"))
+	if err != nil {
+		return ""
+	}
+	var cfg beadsConfig
+	if yaml.Unmarshal(raw, &cfg) != nil {
+		return ""
+	}
+	return strings.TrimSpace(cfg.Actor)
 }
 
 func issuePrefixFromDatabase(name string) string {
