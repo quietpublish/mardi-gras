@@ -403,6 +403,7 @@ func (m Model) toggleCodexTranscript() (tea.Model, tea.Cmd) {
 	m.showGasTown = false
 	m.showProblems = false
 	m.showDoctor = false
+	m.showChanges = false
 
 	if sess, ok := m.codexSessions[issue.ID]; ok && sess != nil {
 		m.codexTranscript.SetState(sess.state)

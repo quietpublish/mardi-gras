@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/matt-wright86/mardi-gras/internal/data"
 	"github.com/matt-wright86/mardi-gras/internal/gastown"
 )
@@ -408,5 +410,101 @@ func TestDataFreshAt(t *testing.T) {
 	m.journal.follower.Partial = true
 	if !m.dataFreshAt().Equal(m.lastFileMod) {
 		t.Fatal("expected only bd list to count while the journal is partial")
+	}
+}
+
+func wispRecord(seq int64, id string) data.JournalRecord {
+	return data.JournalRecord{Seq: seq, TS: "t", Op: "create", IssueID: id, Issue: &data.JournalIssue{Ephemeral: true}}
+}
+
+func TestJournalAddRecent(t *testing.T) {
+	var j journalLoop
+	j.addRecent([]data.JournalRecord{probeRecord(1, "a"), wispRecord(2, "w"), probeRecord(3, "b")})
+	j.addRecent([]data.JournalRecord{probeRecord(3, "b"), probeRecord(4, "a")}) // 3 again: a re-read anchor
+	var seqs []int64
+	for _, r := range j.recent {
+		seqs = append(seqs, r.Seq)
+	}
+	if len(seqs) != 3 || seqs[0] != 1 || seqs[1] != 3 || seqs[2] != 4 {
+		t.Fatalf("seqs = %v, want [1 3 4]: no wisps, no repeats", seqs)
+	}
+	if got := j.recentFor("a"); len(got) != 2 {
+		t.Fatalf("recentFor(a) = %d records, want 2", len(got))
+	}
+
+	var many []data.JournalRecord
+	for i := int64(10); i < 10+journalRecentCap+50; i++ {
+		many = append(many, probeRecord(i, "x"))
+	}
+	j.addRecent(many)
+	if len(j.recent) != journalRecentCap || j.recent[len(j.recent)-1].Seq != 10+journalRecentCap+49 {
+		t.Fatalf("len %d, newest %d: want the newest %d kept", len(j.recent), j.recent[len(j.recent)-1].Seq, journalRecentCap)
+	}
+}
+
+func TestJournalAddBackfill(t *testing.T) {
+	var j journalLoop
+	j.addRecent([]data.JournalRecord{probeRecord(50, "a")})
+	j.addBackfill([]data.JournalRecord{probeRecord(48, "b"), wispRecord(49, "w"), probeRecord(50, "a")})
+	if len(j.recent) != 2 || j.recent[0].Seq != 48 || j.recent[1].Seq != 50 {
+		t.Fatalf("recent = %+v, want 48 then 50", j.recent)
+	}
+}
+
+func TestJournalProbeFeedsRecentChanges(t *testing.T) {
+	issues := []data.Issue{testIssue("a", data.StatusOpen), testIssue("b", data.StatusOpen)}
+	m := liveModel(t, issues)
+	model, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = model.(Model)
+	sel := m.parade.SelectedIssue.ID
+
+	model, _ = m.Update(journalProbeMsg{records: []data.JournalRecord{probeRecord(11, sel), probeRecord(12, "other")}})
+	got := model.(Model)
+	if len(got.journal.recent) != 2 {
+		t.Fatalf("feed has %d records, want 2", len(got.journal.recent))
+	}
+	if len(got.detail.RecentChanges) != 1 || got.detail.RecentChanges[0].IssueID != sel {
+		t.Fatalf("detail changes = %+v, want the selected issue's record", got.detail.RecentChanges)
+	}
+}
+
+func TestJournalBackfillMsg(t *testing.T) {
+	m := liveModel(t, []data.Issue{testIssue("a", data.StatusOpen)})
+	model, _ := m.Update(journalBackfillMsg{records: []data.JournalRecord{probeRecord(5, "a"), probeRecord(6, "a")}})
+	if got := model.(Model); len(got.journal.recent) != 2 {
+		t.Fatalf("feed has %d records after backfill, want 2", len(got.journal.recent))
+	}
+}
+
+func TestKeyEOpensRecentChanges(t *testing.T) {
+	m := newCLIModel(t, []data.Issue{testIssue("a", data.StatusOpen)})
+	m.startedAt = time.Now().Add(-time.Second)
+	model, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = model.(Model)
+	m.showDoctor = true
+
+	model, _ = m.Update(tea.KeyPressMsg{Code: 'E', Text: "E"})
+	got := model.(Model)
+	if !got.showChanges || got.showDoctor {
+		t.Fatalf("showChanges %v showDoctor %v: want E to open it and close the doctor", got.showChanges, got.showDoctor)
+	}
+	model, _ = got.Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
+	if got = model.(Model); got.showChanges {
+		t.Fatal("expected D to close Recent changes")
+	}
+}
+
+func TestJournalNote(t *testing.T) {
+	m := newCLIModel(t, nil)
+	m.journal = journalLoop{} // off: the journal is disabled here
+	if note := m.journalNote(); !strings.Contains(note, "bd config set events-journal true") {
+		t.Errorf("off: note %q should say how to turn it on", note)
+	}
+	if live := liveModel(t, nil); live.journalNote() != "" {
+		t.Errorf("live: note %q, want none", live.journalNote())
+	}
+	jsonl := New(nil, data.Source{Mode: data.SourceJSONL, Path: "x.jsonl"}, data.DefaultBlockingTypes)
+	if note := jsonl.journalNote(); !strings.Contains(note, "issues.jsonl") {
+		t.Errorf("JSONL: note %q should say mg isn't using bd", note)
 	}
 }

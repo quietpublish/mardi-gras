@@ -35,7 +35,10 @@ type Detail struct {
 	MetadataSchema   *data.MetadataSchema
 	AgentOutput      []string // live captured lines from agent's tmux pane
 	AgentOutputID    string   // which issue the agent output belongs to
-	mdRenderer       goldmark.Markdown
+	// RecentChanges holds the displayed issue's records from the bd events
+	// journal, oldest first, for the ACTIVITY section.
+	RecentChanges []data.JournalRecord
+	mdRenderer    goldmark.Markdown
 }
 
 // NewDetail creates a detail panel.
@@ -659,8 +662,30 @@ func (d *Detail) renderActivity() string {
 			ui.MolStepDone.Render("Closed")))
 	}
 
+	// What the events journal saw happen to it, newest last.
+	changes := d.RecentChanges
+	if len(changes) > maxActivityChanges {
+		changes = changes[len(changes)-maxActivityChanges:]
+	}
+	actorStyle := lipgloss.NewStyle().Foreground(ui.Dim)
+	for _, r := range changes {
+		if r.IssueID != issue.ID {
+			continue
+		}
+		who := ""
+		if r.Actor != "" {
+			who = actorStyle.Render(" · " + r.Actor)
+		}
+		lines = append(lines, fmt.Sprintf("  %s  %s%s",
+			timeStyle.Render(formatTime(r.Time().Local())),
+			eventStyle.Render(DescribeChange(r)), who))
+	}
+
 	return strings.Join(lines, "\n")
 }
+
+// maxActivityChanges caps the journal lines in an issue's ACTIVITY section.
+const maxActivityChanges = 8
 
 // renderGateStatus renders the gate waiting section when an agent is awaiting-gate.
 func (d *Detail) renderGateStatus() string {

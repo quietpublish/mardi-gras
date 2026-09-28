@@ -73,6 +73,7 @@ func allSections() []helpSection {
 				{key: "?", desc: "Toggle help"},
 				{key: ": / Ctrl+K", desc: "Open command palette"},
 				{key: "p", desc: "Toggle problems view (gt)"},
+				{key: "E", desc: "Toggle recent changes (bd events journal)"},
 			},
 		},
 		{

@@ -9,11 +9,11 @@ import (
 var t0 = time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
 
 func rec(seq int64, id string) JournalRecord {
-	return JournalRecord{Seq: seq, TS: "t", Op: "update", IssueID: id, Issue: &journalIssue{}}
+	return JournalRecord{Seq: seq, TS: "t", Op: "update", IssueID: id, Issue: &JournalIssue{}}
 }
 
 func wisp(seq int64, id string) JournalRecord {
-	return JournalRecord{Seq: seq, TS: "t", Op: "create", IssueID: id, Issue: &journalIssue{Ephemeral: true}}
+	return JournalRecord{Seq: seq, TS: "t", Op: "create", IssueID: id, Issue: &JournalIssue{Ephemeral: true}}
 }
 
 // following returns a follower that has found head 10 at t0 and absorbed its

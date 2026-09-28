@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // The bd events journal (bd 1.2.1+, opt-in per workspace with
@@ -19,16 +20,46 @@ import (
 
 // JournalRecord is the part of an events journal record mg reads.
 type JournalRecord struct {
-	Seq     int64         `json:"seq"`
-	TS      string        `json:"ts"`
-	Op      string        `json:"op"`
-	IssueID string        `json:"issue_id"`
-	Actor   string        `json:"actor,omitempty"` // empty on derived records (e.g. a blocked-state flip)
-	Issue   *journalIssue `json:"issue"`           // nil on delete
+	Seq     int64           `json:"seq"`
+	TS      string          `json:"ts"`
+	Op      string          `json:"op"`
+	IssueID string          `json:"issue_id"`
+	Actor   string          `json:"actor,omitempty"` // empty on derived records (e.g. a blocked-state flip)
+	Issue   *JournalIssue   `json:"issue"`           // nil on delete
+	Comment *JournalComment `json:"comment,omitempty"`
+	Dep     *JournalDep     `json:"dep,omitempty"`
 }
 
-type journalIssue struct {
-	Ephemeral bool `json:"ephemeral,omitempty"`
+// JournalIssue is the part of a record's post-change issue snapshot mg
+// reads, for describing the change. It is never applied as issue state.
+type JournalIssue struct {
+	Title     string `json:"title,omitempty"`
+	Status    Status `json:"status,omitempty"`
+	IsBlocked bool   `json:"is_blocked,omitempty"` // bd omits it when false
+	Ephemeral bool   `json:"ephemeral,omitempty"`
+}
+
+// JournalComment is the comment a `comment` record added.
+type JournalComment struct {
+	Author string `json:"author"`
+	Text   string `json:"text"`
+}
+
+// JournalDep is the dependency a `dep_add` or `dep_remove` record changed:
+// the record's issue gained or lost a Kind edge to Target.
+type JournalDep struct {
+	Kind   string `json:"kind"`
+	Target string `json:"target"`
+}
+
+// Time is when bd stamped the record, or the zero time if the stamp does not
+// parse. It has one-second resolution; order records by Seq, not Time.
+func (r JournalRecord) Time() time.Time {
+	t, err := time.Parse(time.RFC3339, r.TS)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }
 
 // Ephemeral reports whether the record is about a wisp. Wisps are journaled
@@ -158,6 +189,18 @@ func parseJournalRecords(out []byte) ([]JournalRecord, error) {
 		records = append(records, r)
 	}
 	return records, nil
+}
+
+// TailRecent returns up to n of the newest records at or below head. When
+// the start of that window was pruned it returns what is still retained.
+func TailRecent(head int64, n int) ([]JournalRecord, error) {
+	since := max(head-int64(n), 0)
+	records, err := TailJournal(since, n)
+	var trunc *JournalTruncatedError
+	if errors.As(err, &trunc) && trunc.Floor-1 > since {
+		return TailJournal(trunc.Floor-1, n)
+	}
+	return records, err
 }
 
 // ProbeJournal returns up to limit records after anchor. It re-reads the

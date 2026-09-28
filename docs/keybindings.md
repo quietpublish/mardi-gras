@@ -20,9 +20,10 @@ Keys marked **(orch)** need a live orchestrator — Gas Town (`gt`) or Gas City.
 | `ctrl+g`     | Toggle Gas Town panel **(orch)** |
 | `p`          | Toggle problems view **(orch)** |
 | `D`          | Toggle doctor diagnostics overlay |
+| `E`          | Toggle recent changes (bd events journal) |
 | `M`          | Toggle Codex (MCP) live transcript |
 
-`ctrl+g`, `p`, `D` and `M` are mutually exclusive — opening one closes the other three.
+`ctrl+g`, `p`, `D`, `E` and `M` are mutually exclusive — opening one closes the others.
 
 ## Parade
 
@@ -128,6 +129,15 @@ The panel takes over the detail pane; give it focus with `tab` (or `enter` from 
 | `j` / `k`    | Scroll diagnostics             |
 | `g` / `G`    | Jump to first/last             |
 | `R`          | Re-run `bd doctor`              |
+
+## Recent Changes (`E`)
+
+The newest changes the bd events journal recorded, newest first: what happened, to which issue, and who did it. It needs the journal on (`bd config set events-journal true`; see the README's Live updates section); otherwise it says why it's empty.
+
+| Key          | Action                          |
+| ------------ | ------------------------------- |
+| `j` / `k`    | Scroll                          |
+| `g` / `G`    | Jump to newest/oldest           |
 
 ## Codex Transcript (`M`)
 

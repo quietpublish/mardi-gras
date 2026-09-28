@@ -160,6 +160,10 @@ type Model struct {
 	showDoctor bool
 	doctor     views.Doctor
 
+	// Recent changes overlay (the bd events journal feed)
+	showChanges bool
+	changes     views.Changes
+
 	// Codex MCP transcript overlay + per-issue session registry
 	showCodex       bool
 	codexTranscript views.CodexTranscript
@@ -1777,6 +1781,16 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// When the Recent changes panel is focused, it scrolls
+	if m.showChanges && m.activPane == PaneDetail {
+		switch msg.String() {
+		case "j", "k", "up", "down", "g", "G":
+			var cmd tea.Cmd
+			m.changes, cmd = m.changes.Update(msg)
+			return m, cmd
+		}
+	}
+
 	// When Problems panel is focused, route its keys before global handlers
 	if m.showProblems && m.activPane == PaneDetail {
 		switch msg.String() {
@@ -1855,6 +1869,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.showGasTown = !m.showGasTown
 		if m.showGasTown {
 			m.showDoctor = false
+			m.showChanges = false
 			m.showCodex = false
 			m.dismissCodexReply()
 			cmd := m.activateGasTown()
@@ -1870,9 +1885,22 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.showProblems {
 			m.showGasTown = false
 			m.showDoctor = false
+			m.showChanges = false
 			m.showCodex = false
 			m.dismissCodexReply()
 			m.problems.SetProblems(m.allProblems())
+		}
+		return m, nil
+
+	case "E":
+		m.showChanges = !m.showChanges
+		if m.showChanges {
+			m.showGasTown = false
+			m.showProblems = false
+			m.showDoctor = false
+			m.showCodex = false
+			m.dismissCodexReply()
+			m.syncRecentChanges()
 		}
 		return m, nil
 
@@ -1881,6 +1909,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.showDoctor {
 			m.showGasTown = false
 			m.showProblems = false
+			m.showChanges = false
 			m.showCodex = false
 			m.dismissCodexReply()
 			// Set existing result if available, then refresh
@@ -2965,6 +2994,10 @@ func (m *Model) syncSelection() {
 		m.detail.AgentOutput = nil
 		m.detail.AgentOutputID = ""
 	}
+	m.detail.RecentChanges = nil
+	if sel != nil {
+		m.detail.RecentChanges = m.journal.recentFor(sel.ID)
+	}
 	m.detail.SetIssue(sel)
 	if sel != nil && m.detail.AgentOutputID != sel.ID && m.capturable(sel.ID) {
 		m.captureWanted = true
@@ -3112,6 +3145,7 @@ func (m *Model) layout() {
 	m.gasTown.SetSize(detailW, bodyH)
 	m.problems.SetSize(detailW, bodyH)
 	m.doctor.SetSize(detailW, bodyH)
+	m.changes.SetSize(detailW, bodyH)
 	m.codexTranscript.SetSize(detailW, bodyH)
 	m.detail.AllIssues = m.issues
 	detailIssueMap := data.BuildIssueMap(m.issues)
@@ -3562,6 +3596,8 @@ func (m Model) View() tea.View {
 			rightPanel = m.codexTranscript.View()
 		case m.showDoctor:
 			rightPanel = m.doctor.View()
+		case m.showChanges:
+			rightPanel = m.changes.View()
 		case m.showProblems && m.orchestratorAvailable():
 			rightPanel = m.problems.View()
 		case m.showGasTown && m.orchestratorAvailable():
