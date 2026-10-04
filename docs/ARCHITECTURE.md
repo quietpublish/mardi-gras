@@ -20,6 +20,7 @@ internal/
     debug.go              Opt-in action/route/state logging
     jev.go                Jev loop: startup probe, hash-cached sweeps over changed issues, footer status
     jev_dup.go            Duplicate check on create: candidate prefilter → one Jev request → dialog / hint / create
+    jev_formula.go        Formula choice: installed-list cache → debounced Jev pick per selected issue → detail + `s` picker
 
   data/
     issue.go              Domain types: Issue, Status, Priority, Dependency, DepEval

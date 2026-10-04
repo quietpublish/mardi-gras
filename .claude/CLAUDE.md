@@ -101,7 +101,7 @@ The `internal/gastown` package handles:
 - **`app` is the only importer of `internal/jev`.** `data.SnapshotForJudge` is the one redaction point for what is sent (no people, notes, timestamps or dependency IDs); views receive verdict values through setters.
 - **Never bypass the cache.** The loop asks only about issues whose `IssueSnapshot.Hash()` changed (`scheduleJev`, `workSet`). A full backlog costs a fraction of a cent once; re-asking on every poll would cost dollars a day.
 - **Fail safe by direction.** Advisory badges fail open (disappear); anything gating a destructive action must fail closed (ask the human). Jev never executes an action.
-- Two shapes of feature. A **sweep** feature registers a `jevQuestionSet` on the loop and reads cached answers (none registered yet, so the loop sends only the startup probe). A **point decision** (`jev_dup.go`, the duplicate check on create) asks once on a user action with a short budget, feeds the same circuit via `jevRecord`, and falls back to today's action on any error.
+- Two shapes of feature. A **sweep** feature registers a `jevQuestionSet` on the loop and reads cached answers (none registered yet, so the loop sends only the startup probe). A **point decision** asks once on a user action with a short budget, feeds the same circuit via `jevRecord`, and falls back to today's output on any error: `jev_dup.go` (duplicate check when the create form submits) and `jev_formula.go` (formula choice over the installed list, on selection change, debounced and cached per issue).
 
 ## Agent Dispatch
 

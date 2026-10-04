@@ -14,7 +14,16 @@ Mardi Gras can ask [Jev](https://docs.typesafe.ai), TypeSafe AI's System One mod
 
 What is sent: the new title, type and priority, and the redacted snapshots of the candidates (see below). Nothing is sent when no title overlaps.
 
-More features will follow on the same plumbing; the design notes list formula choice and a Jev-ranked focus mode next.
+**Formula choice over the installed list.** With an orchestrator available, the FORMULA section of the detail panel and the `s` picker suggest a workflow formula for the selected issue. Without Jev that suggestion is a word-matching heuristic over a fixed set of formula names, which can name a formula that is not installed. With Jev on, mg fetches the installed formulas once (and again after five minutes, or whenever the `s` picker lists them), asks Jev to pick one for the selected issue, and:
+
+- shows the ranking in the detail panel as `Suggest: shiny  78% · jev`, with the runner-up alternatives;
+- opens the `s` picker with the ranked formulas first, each annotated `· jev 78%`, so `enter` accepts the pick.
+
+The ask is debounced so scrolling with `j`/`k` does not ask about every issue passed over, and each issue's ranking is cached by the issue's snapshot and the formula list, so an issue is asked about once until it changes. A best probability under 40% leaves the heuristic in place. Jev off, no orchestrator, a closed issue, a failed fetch or a failed ask all mean the FORMULA section and picker read exactly as before.
+
+What is sent: the redacted snapshot of the selected issue (see below) and the installed formula names with mg's short description of each.
+
+More features follow on the same plumbing; the design notes list a Jev-ranked focus mode and problem triage next.
 
 ## Enabling it
 

@@ -1194,3 +1194,37 @@ func TestCommentsRenderingMarkdown(t *testing.T) {
 		}
 	}
 }
+
+func TestFormulaRecsFromJudgeReplaceHeuristic(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "bd-001", Title: "Add authentication middleware", Status: data.StatusOpen,
+			Priority: data.PriorityHigh, IssueType: data.TypeFeature, CreatedAt: time.Now()},
+		{ID: "bd-002", Title: "Other", Status: data.StatusOpen, CreatedAt: time.Now()},
+	}
+	d := NewDetail(80, 40, issues)
+	d.SetIssue(&issues[0])
+	d.SetFormulaRecs("bd-001", []gastown.FormulaRecommendation{
+		{Formula: "shiny", Reason: "full lifecycle", P: 0.78},
+		{Formula: "mol-polecat-work", Reason: "standard", P: 0.2},
+	})
+	content := ansi.Strip(d.renderContent())
+	if !strings.Contains(content, "shiny") || !strings.Contains(content, "78% · jev") {
+		t.Fatalf("judge ranking should render with its probability:\n%s", content)
+	}
+	if strings.Contains(content, "security-audit") {
+		t.Fatal("the heuristic's pick should be replaced while a ranking is set")
+	}
+
+	// A ranking for another issue is ignored.
+	d.SetIssue(&issues[0])
+	d.SetFormulaRecs("bd-002", []gastown.FormulaRecommendation{{Formula: "shiny", P: 0.9}})
+	if content := ansi.Strip(d.renderContent()); !strings.Contains(content, "security-audit") || strings.Contains(content, "jev") {
+		t.Fatalf("a ranking for a different issue must not apply:\n%s", content)
+	}
+
+	// Dropping the ranking restores the heuristic.
+	d.SetFormulaRecs("bd-001", nil)
+	if content := ansi.Strip(d.renderContent()); !strings.Contains(content, "security-audit") {
+		t.Fatal("nil ranking should fall back to the heuristic")
+	}
+}

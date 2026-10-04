@@ -151,3 +151,34 @@ func TestRecommendFormulasReviewLabel(t *testing.T) {
 		t.Fatal("expected code-review for issue with 'review' in title")
 	}
 }
+
+func TestRankFormulas(t *testing.T) {
+	installed := []string{"mol-polecat-work", "shiny", "security-audit", "custom-flow"}
+	probs := map[string]float64{"shiny": 0.62, "mol-polecat-work": 0.25, "security-audit": 0.08, "custom-flow": 0.05}
+	recs := RankFormulas(installed, probs, 0.4)
+	if len(recs) != 4 || recs[0].Formula != "shiny" || recs[0].P != 0.62 || recs[1].Formula != "mol-polecat-work" {
+		t.Fatalf("recs = %+v", recs)
+	}
+	if recs[0].Reason != FormulaDescriptions["shiny"] {
+		t.Fatalf("known formula should carry its description, got %q", recs[0].Reason)
+	}
+	if recs[3].Formula != "custom-flow" || recs[3].Reason != "installed formula" {
+		t.Fatalf("unknown formula should still be offered: %+v", recs[3])
+	}
+}
+
+func TestRankFormulasEdgeCaseBelowThreshold(t *testing.T) {
+	if recs := RankFormulas([]string{"a", "b"}, map[string]float64{"a": 0.35, "b": 0.3}, 0.4); recs != nil {
+		t.Fatalf("a weak best should yield nil so the heuristic stays, got %+v", recs)
+	}
+}
+
+func TestRankFormulasEdgeCaseUnscoredAndEmpty(t *testing.T) {
+	recs := RankFormulas([]string{"a", "b"}, map[string]float64{"a": 0.9}, 0.4)
+	if len(recs) != 1 || recs[0].Formula != "a" {
+		t.Fatalf("unscored formulas should be left out, got %+v", recs)
+	}
+	if RankFormulas(nil, nil, 0.4) != nil || RankFormulas([]string{"a"}, nil, 0.4) != nil {
+		t.Fatal("nothing to rank should be nil")
+	}
+}
