@@ -1,6 +1,7 @@
 package components
 
 import (
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 	"testing"
 
@@ -89,5 +90,74 @@ func TestApprovalDialogViewPatch(t *testing.T) {
 	}
 	if !strings.Contains(v, "2 file(s)") {
 		t.Fatalf("patch view missing file count:\n%s", v)
+	}
+}
+
+func TestApprovalDialogVerdictMovesUntouchedCursor(t *testing.T) {
+	ad := NewApprovalDialog("exec", "Run?", []string{"rm", "-rf", "build"}, "/work", "", nil, 80, 24)
+	ad.SetPending(true)
+	if out := ansi.Strip(ad.View()); !strings.Contains(out, "evaluating") {
+		t.Fatalf("pending should show:\n%s", out)
+	}
+	ad.SetVerdict(&ApprovalVerdict{Summary: "high risk", Detail: "destructive 92%", Intent: "edit-in-workspace", Level: 2})
+	out := ansi.Strip(ad.View())
+	for _, want := range []string{"high risk", "destructive 92%", "intent edit-in-workspace"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("view lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "evaluating") {
+		t.Fatal("pending marker should clear once the verdict lands")
+	}
+	if ad.Selected() != "denied" {
+		t.Fatalf("a high-risk verdict should park the cursor on Deny, got %q", ad.Selected())
+	}
+	// The user can still approve: the verdict only moved the default.
+	ad, _ = ad.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
+	ad, _ = ad.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
+	if ad.Selected() != "approved" {
+		t.Fatalf("human override failed: %q", ad.Selected())
+	}
+}
+
+func TestApprovalDialogVerdictEdgeCaseTouchedCursorStays(t *testing.T) {
+	ad := NewApprovalDialog("exec", "Run?", []string{"go", "test"}, "/work", "", nil, 80, 24)
+	ad, _ = ad.Update(tea.KeyPressMsg{Code: 'j', Text: "j"}) // user moved to approve_for_session
+	ad.SetVerdict(&ApprovalVerdict{Summary: "high risk", Level: 2})
+	if ad.Selected() != "approved_for_session" {
+		t.Fatalf("a verdict must not move a cursor the user already placed, got %q", ad.Selected())
+	}
+	ad2 := NewApprovalDialog("exec", "Run?", []string{"go", "test"}, "/work", "", nil, 80, 24)
+	ad2.SetVerdict(&ApprovalVerdict{Summary: "low risk", Level: 0})
+	if ad2.Selected() != "approved" {
+		t.Fatalf("a routine verdict leaves the default on Approve once, got %q", ad2.Selected())
+	}
+}
+
+func TestApprovalDialogDenyHit(t *testing.T) {
+	ad := NewApprovalDialog("exec", "Run?", []string{"git", "push", "--force"}, "/work", "", nil, 80, 24)
+	ad.SetDenyHit("force-push", "git push --force")
+	out := ansi.Strip(ad.View())
+	if !strings.Contains(out, "DENY-LIST: force-push") || strings.Contains(out, "Approve for this session") {
+		t.Fatalf("deny hit should banner and withhold session approval:\n%s", out)
+	}
+	if !ad.Denied() || ad.Selected() != "denied" {
+		t.Fatalf("denied %v selected %q", ad.Denied(), ad.Selected())
+	}
+	// Approve once is still reachable: two ups from Deny in the shortened list.
+	ad, _ = ad.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
+	if ad.Selected() != "approved" {
+		t.Fatalf("Approve once should sit directly above Deny without session approval, got %q", ad.Selected())
+	}
+	// A later verdict never re-moves the cursor on a deny-listed request.
+	ad.SetVerdict(&ApprovalVerdict{Summary: "low risk", Level: 0})
+	if ad.Selected() != "approved" {
+		t.Fatal("verdict moved the cursor on a deny-listed request")
+	}
+	// enter on the shortened list resolves to the right value.
+	ad, _ = ad.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	_, cmd := ad.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if res := cmd().(ApprovalDialogResult); res.Decision != "denied" {
+		t.Fatalf("decision = %q", res.Decision)
 	}
 }

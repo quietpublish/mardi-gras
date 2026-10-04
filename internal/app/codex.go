@@ -155,8 +155,8 @@ func (m Model) handleCodexApprovalRequest(msg codexApprovalRequestMsg) (tea.Mode
 		return m, rePump
 	}
 
-	m.openApprovalDialog(msg)
-	return m, rePump
+	advise := m.openApprovalDialog(msg)
+	return m, tea.Batch(rePump, advise)
 }
 
 // handleApprovalDialogResult replies to codex with the chosen decision (cancel is
@@ -174,20 +174,22 @@ func (m Model) handleApprovalDialogResult(res components.ApprovalDialogResult) (
 		respond = codexRespondCmd(cur.issueID, sess.handle, cur.req, decision)
 	}
 
+	var advise tea.Cmd
 	if len(m.pendingApprovals) > 0 {
 		next := m.pendingApprovals[0]
 		m.pendingApprovals = m.pendingApprovals[1:]
-		m.openApprovalDialog(next)
+		advise = m.openApprovalDialog(next)
 	} else {
 		m.approving = false
 		m.currentApproval = codexApprovalRequestMsg{}
 	}
-	return m, respond
+	return m, tea.Batch(respond, advise)
 }
 
 // openApprovalDialog builds the modal for an approval request and marks the model
-// as approving. Pointer receiver — mutates dialog state in place.
-func (m *Model) openApprovalDialog(msg codexApprovalRequestMsg) {
+// as approving. Pointer receiver — mutates dialog state in place. It returns
+// the advisory Cmd (the judge's reading of the request), or nil.
+func (m *Model) openApprovalDialog(msg codexApprovalRequestMsg) tea.Cmd {
 	a := msg.approval
 	var files []string
 	if a.Kind == "patch" {
@@ -202,6 +204,7 @@ func (m *Model) openApprovalDialog(msg codexApprovalRequestMsg) {
 	m.approvalDialog = components.NewApprovalDialog(
 		a.Kind, a.Message, a.Command, a.Cwd, a.Reason, files, m.width, m.height,
 	)
+	return m.adviseApproval(msg)
 }
 
 // codexReplyCmd invokes Handle.Reply in a goroutine and returns the
