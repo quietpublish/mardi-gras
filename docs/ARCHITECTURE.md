@@ -369,12 +369,12 @@ The `LayoutWide` preset drops the right panel and gives the parade the full widt
 
 ```
 Parse flags (--path, --block-types, --exclude-type, --exclude-label,
-             --status, --version, --agent, --theme,
+             --status, --version, --agent, --agent-cmd, --theme,
              --no-animations, --cmd-timeout)
     |
     v
 Env-var equivalents fold into the same values:
-  MG_BLOCK_TYPES, MG_AGENT_RUNTIME, MG_THEME,
+  MG_BLOCK_TYPES, MG_AGENT_RUNTIME, MG_AGENT_CMD, MG_THEME,
   MG_NO_ANIMATIONS, MG_CMD_TIMEOUT
   (an explicit flag wins over the env var)
     |
@@ -644,7 +644,7 @@ Pressing `a` on a selected issue launches an agent with a context-rich prompt (t
 
 `A` stops the agent: with an orchestrator it calls `Driver.Unsling` (a backend that cannot returns `ErrUnsupported`, which is a truthful message); only with no orchestrator at all does it kill the tmux pane directly.
 
-`agent.DetectRuntime()` picks the runtime at startup: `MG_AGENT_RUNTIME` / `--agent` wins if the named binary is on PATH, otherwise the order is `claude` → `cursor-agent` → `codex`. Each gets its own launch flags (`claude --teammate-mode tmux`, `cursor-agent -f -p`, `codex --sandbox workspace-write -a on-request -C <dir>`, plus `--no-alt-screen` in tmux). When Codex is the runtime, mg propagates `--agent codex` into `gt sling`. The app polls for agent state: tmux panes (when in tmux) or orchestrator status (when available). Status badges appear in the header, parade list, and detail view, and the detail pane tails the agent's pane via `agent.CapturePane(id, 15)`.
+`agent.DetectRuntime()` picks the runtime at startup: `MG_AGENT_RUNTIME` / `--agent` wins if the named binary is on PATH, otherwise the order is `claude` → `cursor-agent` → `codex`. Each gets its own launch flags (`claude --teammate-mode tmux`, `cursor-agent -f -p`, `codex --sandbox workspace-write -a on-request -C <dir>`, plus `--no-alt-screen` in tmux). `MG_AGENT_CMD` / `--agent-cmd` replaces the binary those flags are given, so a session can be routed through a wrapper; `agentCommand()` resolves it to an absolute path because the tmux dispatch path hands the command to the tmux *server*, which resolves it against the server's own PATH. When Codex is the runtime, mg propagates `--agent codex` into `gt sling`. The app polls for agent state: tmux panes (when in tmux) or orchestrator status (when available). Status badges appear in the header, parade list, and detail view, and the detail pane tails the agent's pane via `agent.CapturePane(id, 15)`.
 
 `M` is a separate dispatch path entirely: it runs a Codex session **inside** mg over MCP (`internal/codexmcp` + `agent.LaunchCodexMCP`), streaming events into `views.CodexTranscript` and routing exec/apply-patch approvals to a modal. It uses approval policy `on-request` because a human is watching; the tmux and orchestrator paths use `never`.
 

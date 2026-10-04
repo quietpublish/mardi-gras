@@ -14,6 +14,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/matt-wright86/mardi-gras/internal/agent"
 	"github.com/matt-wright86/mardi-gras/internal/app"
 	"github.com/matt-wright86/mardi-gras/internal/data"
 	"github.com/matt-wright86/mardi-gras/internal/gastown"
@@ -40,6 +41,7 @@ func main() {
 	noAnimations := flag.Bool("no-animations", false, "Disable confetti and header shimmer animations")
 	cmdTimeout := flag.Int("cmd-timeout", 0, "Command timeout in seconds (scales all external command timeouts; default 30)")
 	agentRuntime := flag.String("agent", "", "Preferred agent runtime: claude, cursor, or codex (default: first on PATH — claude, then cursor, then codex)")
+	agentCmd := flag.String("agent-cmd", "", "Executable to launch instead of the agent binary; the runtime's flags are still passed (default: MG_AGENT_CMD env, or the runtime binary)")
 	themeFlag := flag.String("theme", "", "Color theme: auto, dark, or light (default: MG_THEME env or auto)")
 	flag.Parse()
 
@@ -52,6 +54,15 @@ func main() {
 	// the same env-based contract consumed by internal/agent.DetectRuntime.
 	if *agentRuntime != "" {
 		os.Setenv("MG_AGENT_RUNTIME", *agentRuntime)
+	}
+
+	// --agent-cmd sets MG_AGENT_CMD, the same env-based contract, read at
+	// launch time by internal/agent to interpose a wrapper (a gateway router,
+	// a sandbox, a credential broker) between mg and the agent binary. Pair it
+	// with --agent when the wrapper stands in for a specific runtime: the
+	// wrapper is exec'd in place of that runtime's binary, with its flags.
+	if *agentCmd != "" {
+		os.Setenv(agent.AgentCommandEnv, *agentCmd)
 	}
 
 	// MG_CMD_TIMEOUT env var as alternative to --cmd-timeout flag

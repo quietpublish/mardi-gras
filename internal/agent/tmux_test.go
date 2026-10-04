@@ -2,6 +2,8 @@ package agent
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -207,6 +209,56 @@ func TestSanitizeCaptureOutputTakesLastLines(t *testing.T) {
 	}
 	if lines[1] != "new2" {
 		t.Errorf("line 1 = %q, want 'new2'", lines[1])
+	}
+}
+
+func TestLaunchInTmuxRunsTheConfiguredWrapper(t *testing.T) {
+	dir := t.TempDir()
+
+	// A fake tmux: it logs every invocation and answers the split-window
+	// format query, so LaunchInTmux runs to completion with no server.
+	log := filepath.Join(dir, "calls.log")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> " + log + "\n" +
+		"if [ \"$1\" = split-window ]; then printf '%%7\\n'; fi\n"
+	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake tmux: %v", err)
+	}
+	shim := writeShim(t, dir, "agent-shim")
+
+	t.Setenv("PATH", dir)
+	t.Setenv(AgentCommandEnv, shim)
+
+	paneID, err := LaunchInTmux("do the thing", "/tmp/project", "bd-1")
+	if err != nil {
+		t.Fatalf("LaunchInTmux: %v", err)
+	}
+	if paneID != "%7" {
+		t.Errorf("paneID = %q, want the split-window output %%7", paneID)
+	}
+
+	raw, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatalf("read fake tmux log: %v", err)
+	}
+	var split string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "split-window ") {
+			split = line
+		}
+	}
+	if split == "" {
+		t.Fatalf("fake tmux saw no split-window call; log:\n%s", raw)
+	}
+
+	// The pane command must be the ABSOLUTE wrapper: tmux resolves it against
+	// the server's PATH, so anything less can silently launch the bare agent.
+	for _, want := range []string{shim, "-c /tmp/project", "--teammate-mode tmux", "do the thing"} {
+		if !strings.Contains(split, want) {
+			t.Errorf("split-window argv missing %q\n  got: %s", want, split)
+		}
+	}
+	if strings.Contains(split, " claude ") {
+		t.Errorf("split-window still launches the bare claude\n  got: %s", split)
 	}
 }
 

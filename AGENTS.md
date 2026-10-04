@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-- `cmd/mg/main.go`: CLI entrypoint. Flags: `--path`, `--block-types`, `--exclude-type`, `--exclude-label`, `--status`, `--version`, `--theme`, `--agent`, `--cmd-timeout`, `--no-animations`.
+- `cmd/mg/main.go`: CLI entrypoint. Flags: `--path`, `--block-types`, `--exclude-type`, `--exclude-label`, `--status`, `--version`, `--theme`, `--agent`, `--agent-cmd`, `--cmd-timeout`, `--no-animations`.
 - `internal/app`: BubbleTea root model, key routing, pane orchestration, confetti animation.
 - `internal/views`: Parade (left pane), Detail (right pane), Gas Town panel, Problems overlay, `bd doctor` overlay, Codex transcript.
 - `internal/components`: Header, Footer, Help overlay, Command palette, Toast notifications, Create/Edit forms, Approval + Recovery dialogs, Float utility.

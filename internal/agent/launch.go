@@ -20,6 +20,16 @@ const (
 	RuntimeCodex  Runtime = "codex"
 )
 
+// AgentCommandEnv names an executable to launch INSTEAD of the runtime's own
+// binary. The runtime's flags are still appended, so a wrapper sees exactly the
+// argv the binary would have received and only has to forward it.
+//
+// It exists for setups where the agent must not be exec'd directly: a launcher
+// that routes through a gateway, a sandbox, or a credential broker has to be
+// the process mg starts, and no PATH arrangement can express that — see
+// agentCommand for why the tmux path rules out a shim.
+const AgentCommandEnv = "MG_AGENT_CMD"
+
 // DetectRuntime returns the agent runtime to launch.
 //
 // If MG_AGENT_RUNTIME is set to "claude", "cursor" (or "cursor-agent"), or
@@ -58,6 +68,41 @@ func DetectRuntime() Runtime {
 // Available returns true if any supported agent CLI is on PATH.
 func Available() bool {
 	return DetectRuntime() != ""
+}
+
+// agentCommand returns the executable to launch for rt.
+//
+// With MG_AGENT_CMD unset it returns rt's own binary name — or claude when no
+// runtime was detected, which is what the hardcoded command did — so the
+// default behaviour is unchanged.
+//
+// When MG_AGENT_CMD IS set its value is resolved with exec.LookPath and the
+// ABSOLUTE path is returned. That is what makes the tmux dispatch path work:
+// LaunchInTmux hands the name to `tmux split-window`, and the tmux SERVER
+// resolves the pane command against the server's own PATH, not this process's.
+// A bare name could therefore run a different binary than the one resolved
+// here, or none at all, leaving a pane that exits instantly with no error mg
+// can see.
+//
+// A wrapper that is configured but not executable is reported on stderr and
+// the runtime's binary is launched instead, so a typo degrades to the previous
+// behaviour rather than breaking agent launch outright.
+func agentCommand(rt Runtime) string {
+	bin := string(rt)
+	if bin == "" {
+		// Nothing detected on PATH. Name claude anyway: that is what the
+		// hardcoded command did, and an empty argv[0] would make tmux's
+		// split-window fail outright.
+		bin = string(RuntimeClaude)
+	}
+	if cmd := strings.TrimSpace(os.Getenv(AgentCommandEnv)); cmd != "" {
+		if abs, err := exec.LookPath(cmd); err == nil {
+			return abs
+		}
+		fmt.Fprintf(os.Stderr, "mg: %s=%q is not executable; launching %q directly\n",
+			AgentCommandEnv, cmd, bin)
+	}
+	return bin
 }
 
 // RuntimeLabel returns a display name for the runtime.
@@ -143,20 +188,24 @@ func BuildPrompt(issue data.Issue, deps data.DepEval, issueMap map[string]*data.
 // and -a on-request to match the zero-friction posture Claude and Cursor have
 // out of the box. Power users can override via codex profiles or
 // MG_AGENT_RUNTIME=codex combined with a custom shell alias.
+//
+// The binary is agentCommand(rt): the runtime's own name unless MG_AGENT_CMD
+// interposes a wrapper.
 func Command(prompt, projectDir string) *exec.Cmd {
 	rt := DetectRuntime()
+	bin := agentCommand(rt)
 	var c *exec.Cmd
 	switch rt {
 	case RuntimeCursor:
-		c = exec.Command("cursor-agent", "-f", "-p", prompt)
+		c = exec.Command(bin, "-f", "-p", prompt)
 	case RuntimeCodex:
-		c = exec.Command("codex",
+		c = exec.Command(bin,
 			"--sandbox", "workspace-write",
 			"-a", "on-request",
 			"-C", projectDir,
 			prompt)
 	default: // Claude Code
-		c = exec.Command("claude", prompt)
+		c = exec.Command(bin, prompt)
 	}
 	c.Dir = projectDir
 	return c

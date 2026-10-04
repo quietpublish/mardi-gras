@@ -22,6 +22,22 @@ Accepted values are `claude`, `cursor` (or `cursor-agent`), and `codex`. The ove
 
 The override applies only to mg's local launch path. When an orchestrator is available, the `a` key dispatches through it (`gt sling`, or the Gas City sling endpoint) and the runtime is chosen by the formula (see [Gas Town docs](https://github.com/gastownhall/gastown)). Gas Town v1.1.0+ has first-class codex support via `gt sling --agent codex`, and mg propagates that automatically — see [Gas Town routing for Codex](#gas-town-routing-for-codex) below.
 
+## Launching through a wrapper
+
+`MG_AGENT_CMD` (or `--agent-cmd`) names an executable to launch *instead of* the runtime's binary. mg still appends the runtime's own flags, so the wrapper receives exactly the argv the binary would have and only has to forward it:
+
+```bash
+mg --agent-cmd ~/.local/bin/agent-launcher        # for this session
+MG_AGENT_CMD=/usr/local/bin/agent-sandbox mg      # same shape via env var
+```
+
+Use it when the agent must not be exec'd directly — a launcher that routes the model through a gateway, enters a sandbox, or brokers credentials. A shell alias can't do this, because mg execs the binary itself rather than going through a shell.
+
+Two details worth knowing:
+
+- **Pair it with `--agent`** when the wrapper stands in for one specific runtime: the wrapper replaces *that* runtime's binary and is given its flags (`claude --teammate-mode tmux <prompt>`, `codex --sandbox workspace-write … <prompt>`). With `--agent` unset, the wrapper replaces whatever runtime detection picked.
+- **Inside tmux the wrapper is resolved to an absolute path.** mg hands the command to `tmux split-window`, and the tmux *server* resolves it against the server's own PATH rather than mg's, so a bare name could run a different binary than the one you configured. mg calls `exec.LookPath` before dispatching and passes the absolute path. If the wrapper is configured but not executable, mg reports it on stderr and launches the runtime's binary instead, rather than leaving you with a pane that exits instantly.
+
 ## Codex specifics
 
 Codex is built on stricter defaults than Claude or Cursor — it requires a sandbox policy and an approval policy or it blocks on permission prompts. mg launches codex with `--sandbox workspace-write -a on-request` so unattended tmux agents can edit files and run tests without interactive blocks. Power users who want a different posture (e.g. `-a never` for fully autonomous runs) can wire it through a codex **profile** (`~/.codex/config.toml` under `[profiles.<name>]`) and shell-alias `codex` to `codex -p <name>`.

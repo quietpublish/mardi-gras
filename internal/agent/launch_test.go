@@ -326,7 +326,104 @@ func TestBuildPromptDependencies(t *testing.T) {
 	}
 }
 
+// writeShim drops an executable no-op script at dir/name and returns its path.
+func writeShim(t *testing.T, dir, name string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write shim %s: %v", name, err)
+	}
+	return path
+}
+
+func TestAgentCommandDefaultsToRuntimeBinary(t *testing.T) {
+	t.Setenv(AgentCommandEnv, "")
+	cases := map[Runtime]string{
+		RuntimeClaude: "claude",
+		RuntimeCursor: "cursor-agent",
+		RuntimeCodex:  "codex",
+		// No runtime detected: the historical hardcoded default, kept so an
+		// empty argv[0] never reaches tmux.
+		Runtime(""): "claude",
+	}
+	for rt, want := range cases {
+		if got := agentCommand(rt); got != want {
+			t.Errorf("agentCommand(%q) = %q, want %q", rt, got, want)
+		}
+	}
+}
+
+func TestAgentCommandQualifiesBareWrapperName(t *testing.T) {
+	// The crux of the tmux path: split-window's command is resolved by the
+	// tmux SERVER against the server's PATH, so a bare wrapper name must be
+	// qualified here or the pane runs whatever the server finds first.
+	dir := t.TempDir()
+	shim := writeShim(t, dir, "agent-shim")
+	t.Setenv("PATH", dir)
+	t.Setenv(AgentCommandEnv, "agent-shim")
+
+	got := agentCommand(RuntimeClaude)
+	if got != shim {
+		t.Errorf("agentCommand(bare name) = %q, want the resolved path %q", got, shim)
+	}
+	if !filepath.IsAbs(got) {
+		t.Errorf("agentCommand must return an absolute path, got %q", got)
+	}
+}
+
+func TestAgentCommandAcceptsWhitespacePaddedValue(t *testing.T) {
+	dir := t.TempDir()
+	shim := writeShim(t, dir, "agent-shim")
+	t.Setenv(AgentCommandEnv, "  "+shim+"\n")
+
+	if got := agentCommand(RuntimeClaude); got != shim {
+		t.Errorf("agentCommand should trim the configured value, got %q want %q", got, shim)
+	}
+}
+
+func TestAgentCommandMissingWrapperFallsBackToRuntime(t *testing.T) {
+	withFakePath(t, "claude")
+	t.Setenv(AgentCommandEnv, "definitely-not-a-binary-xyz")
+
+	if got := agentCommand(RuntimeClaude); got != "claude" {
+		t.Errorf("unresolvable MG_AGENT_CMD should fall back to the runtime binary, got %q", got)
+	}
+}
+
+func TestAgentCommandBlankValueIsUnset(t *testing.T) {
+	t.Setenv(AgentCommandEnv, "   ")
+	if got := agentCommand(RuntimeClaude); got != "claude" {
+		t.Errorf("a whitespace-only MG_AGENT_CMD is unset, got %q", got)
+	}
+}
+
+func TestCommandUsesAgentCommandWrapper(t *testing.T) {
+	dir := t.TempDir()
+	shim := writeShim(t, dir, "agent-shim")
+	withFakePath(t, "claude")
+	t.Setenv(AgentCommandEnv, shim)
+
+	cmd := Command("hello world", "/tmp/project")
+	want := []string{shim, "hello world"}
+	if len(cmd.Args) != len(want) {
+		t.Fatalf("expected %d args, got %d: %v", len(want), len(cmd.Args), cmd.Args)
+	}
+	for i, w := range want {
+		if cmd.Args[i] != w {
+			t.Errorf("arg[%d] = %q, want %q", i, cmd.Args[i], w)
+		}
+	}
+	if cmd.Dir != "/tmp/project" {
+		t.Errorf("expected Dir=%q, got %q", "/tmp/project", cmd.Dir)
+	}
+}
+
 func TestCommandDir(t *testing.T) {
+	// Pin the wrapper off: this test asserts the bare runtime binary, and an
+	// ambient MG_AGENT_CMD (a seat that always routes through a launcher)
+	// would otherwise decide the result.
+	t.Setenv(AgentCommandEnv, "")
+
 	cmd := Command("hello world", "/tmp/project")
 
 	if cmd.Dir != "/tmp/project" {

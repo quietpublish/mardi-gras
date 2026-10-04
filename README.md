@@ -144,13 +144,14 @@ mg --exclude-type epic,chore            # hide issue types from the parade
 mg --exclude-label gt:agent             # hide issues carrying a label
 mg --theme light                        # auto | dark | light
 mg --agent codex                        # claude | cursor | codex
+mg --agent-cmd ~/bin/agent-launcher     # launch through a wrapper instead of the binary
 mg --cmd-timeout 60                     # seconds; scales every external command (default 30)
 mg --no-animations                      # calm header, no confetti; good over SSH
 mg --status                             # tmux status-line summary, then exit
 mg --version
 ```
 
-Every option has an environment variable so you can set it once: `MG_BLOCK_TYPES`, `MG_THEME`, `MG_AGENT_RUNTIME`, `MG_CMD_TIMEOUT`, `MG_NO_ANIMATIONS=1`. `MG_EVENTS=off` keeps plain polling even when the bd events journal is on, and `MG_BD_SERVE` follows it through a running `bd serve` (see [Live updates](#live-updates)). `MG_DEBUG=1` writes `mg-debug.log` in the current directory. `MG_GC_API` and `MG_GC_CITY` select the Gas City backend, as above.
+Every option has an environment variable so you can set it once: `MG_BLOCK_TYPES`, `MG_THEME`, `MG_AGENT_RUNTIME`, `MG_AGENT_CMD`, `MG_CMD_TIMEOUT`, `MG_NO_ANIMATIONS=1`. `MG_EVENTS=off` keeps plain polling even when the bd events journal is on, and `MG_BD_SERVE` follows it through a running `bd serve` (see [Live updates](#live-updates)). `MG_DEBUG=1` writes `mg-debug.log` in the current directory. `MG_GC_API` and `MG_GC_CITY` select the Gas City backend, as above.
 
 ## Live updates
 

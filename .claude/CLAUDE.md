@@ -23,7 +23,7 @@ Always run `make test` after changes. Run `make lint` before committing.
 
 | Package | Purpose |
 |---------|---------|
-| `cmd/mg` | Entry point, flag parsing (`--path`, `--block-types`, `--exclude-type`, `--exclude-label`, `--status`, `--version`, `--theme`, `--agent`, `--cmd-timeout`, `--no-animations`) |
+| `cmd/mg` | Entry point, flag parsing (`--path`, `--block-types`, `--exclude-type`, `--exclude-label`, `--status`, `--version`, `--theme`, `--agent`, `--agent-cmd`, `--cmd-timeout`, `--no-animations`) |
 | `internal/app` | Root BubbleTea model, key handlers, message routing, confetti animation |
 | `internal/views` | Parade list, Detail panel (deps, molecule DAG, HOP, comments), Gas Town panel, Problems overlay, `bd doctor` overlay, Codex transcript |
 | `internal/components` | Header, footer, help overlay, command palette, toast notifications, issue create/edit forms, approval + recovery dialogs, float utility |
@@ -91,7 +91,7 @@ The `internal/gastown` package handles:
 
 ## Agent Dispatch
 
-Three agent runtimes are supported, resolved by `agent.DetectRuntime()`: `claude`, `cursor-agent`, then `codex` (first on PATH wins; `--agent` / `MG_AGENT_RUNTIME` overrides).
+Three agent runtimes are supported, resolved by `agent.DetectRuntime()`: `claude`, `cursor-agent`, then `codex` (first on PATH wins; `--agent` / `MG_AGENT_RUNTIME` overrides). `--agent-cmd` / `MG_AGENT_CMD` replaces the binary those flags are passed to, so agent launch can be routed through a wrapper (a gateway, a sandbox, a credential broker); `agentCommand()` resolves it to an absolute path because tmux resolves the pane command against the tmux *server*'s PATH.
 
 When running in tmux, `a` opens the agent in a **split pane** to the right (`tmux split-window -h`, 60% width), not a new window. Panes are tagged with the `@mg_agent` pane option for discovery (`internal/agent/tmux.go`). Claude is launched with `--teammate-mode tmux` so its native agent teams land in the same tmux session; Codex gets `--no-alt-screen --sandbox workspace-write -a on-request`.
 

@@ -27,24 +27,29 @@ func WindowName(issueID string) string {
 	return "mg-" + issueID
 }
 
-// LaunchInTmux opens a new tmux pane running claude to the right of the current pane.
+// LaunchInTmux opens a new tmux pane running the agent to the right of the current pane.
 func LaunchInTmux(prompt, projectDir, issueID string) (string, error) {
 	paneName := WindowName(issueID)
-	// Build agent command based on detected runtime
+	// Build agent command based on detected runtime. The binary comes from
+	// agentCommand so MG_AGENT_CMD can interpose a wrapper, and it is absolute
+	// for the reason documented there: tmux resolves the pane command against
+	// the tmux SERVER's PATH, not this process's.
+	rt := DetectRuntime()
+	bin := agentCommand(rt)
 	var agentArgs []string
-	switch DetectRuntime() {
+	switch rt {
 	case RuntimeCursor:
-		agentArgs = []string{"cursor-agent", "-f", "-p", prompt}
+		agentArgs = []string{bin, "-f", "-p", prompt}
 	case RuntimeCodex:
 		// --no-alt-screen preserves tmux scrollback inside the split pane.
-		agentArgs = []string{"codex",
+		agentArgs = []string{bin,
 			"--no-alt-screen",
 			"--sandbox", "workspace-write",
 			"-a", "on-request",
 			"-C", projectDir,
 			prompt}
 	default: // Claude Code
-		agentArgs = []string{"claude", "--teammate-mode", "tmux", prompt}
+		agentArgs = []string{bin, "--teammate-mode", "tmux", prompt}
 	}
 
 	tmuxArgs := []string{"split-window",
