@@ -88,7 +88,7 @@ func TestClassifyApprovalPatchPaths(t *testing.T) {
 	if hit := ClassifyApproval(patch("internal/app/app.go", "/work/mg/docs/jev.md", "internal/ui/keyboard.go"), "/work/mg"); hit.Hit() {
 		t.Fatalf("ordinary files tripped %q (%s)", hit.Rule, hit.Detail)
 	}
-	for want, path := range map[string]string{
+	for want, path := range map[string]string{ //nolint:gosec // G101: path fixtures the deny-list must flag, not credentials
 		"ci-or-release":        ".github/workflows/ci.yml",
 		"ci-or-release/2":      ".goreleaser.yaml",
 		"agent-instructions":   "CLAUDE.md",
