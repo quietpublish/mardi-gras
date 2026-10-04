@@ -28,6 +28,7 @@ type Footer struct {
 	BeadsContext *data.BeadsContext
 	SourceHealth *data.SourceHealth
 	Focus        bool       // focus mode active — show a persistent badge (audit #12)
+	FocusJev     bool       // ...and the ready list is ordered by the Jev judge
 	Live         bool       // reloads are driven by the bd events journal
 	LivePartial  bool       // ...which has been seen missing writes
 	Jev          *JevStatus // the Jev judge, when the operator enabled it
@@ -153,7 +154,11 @@ func (f Footer) View() string {
 	// Persistent focus-mode badge: without it the only signal is a transient
 	// toast (audit #12).
 	if f.Focus {
-		badge := ui.FooterKey.Render(ui.FleurDeLis + " FOCUS")
+		label := ui.FleurDeLis + " FOCUS"
+		if f.FocusJev {
+			label += " · jev"
+		}
+		badge := ui.FooterKey.Render(label)
 		if sourceInfo != "" {
 			sourceInfo = badge + ui.FooterSource.Render(" · ") + sourceInfo
 		} else {

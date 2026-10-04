@@ -307,3 +307,31 @@ func TestParadeCommentBadgeRespectsWidth(t *testing.T) {
 		}
 	}
 }
+
+func TestParadeRankBadge(t *testing.T) {
+	issues := []data.Issue{testIssue("mg-1", data.StatusOpen), testIssue("mg-2", data.StatusOpen)}
+	p := NewParade(issues, 80, 20, data.DefaultBlockingTypes)
+	if out := ansi.Strip(p.View()); strings.Contains(out, ui.SymRank) {
+		t.Fatalf("no badge without ranks:\n%s", out)
+	}
+	p.Ranks = map[string]float64{"mg-1": 2.8}
+	out := ansi.Strip(p.View())
+	if !strings.Contains(out, ui.SymRank+" mg-1") {
+		t.Fatalf("ranked issue should carry the badge before its id:\n%s", out)
+	}
+	if strings.Contains(out, ui.SymRank+" mg-2") {
+		t.Fatalf("unranked issue must not carry the badge:\n%s", out)
+	}
+}
+
+func TestParadeRankBadgeRespectsWidth(t *testing.T) {
+	issues := []data.Issue{testIssue("mg-1", data.StatusOpen)}
+	issues[0].Title = strings.Repeat("a long title ", 10)
+	p := NewParade(issues, 60, 20, data.DefaultBlockingTypes)
+	p.Ranks = map[string]float64{"mg-1": 1}
+	for _, line := range strings.Split(ansi.Strip(p.View()), "\n") {
+		if w := lipgloss.Width(line); w > 60 {
+			t.Fatalf("row wider than the parade (%d): %q", w, line)
+		}
+	}
+}

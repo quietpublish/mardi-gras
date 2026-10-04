@@ -15,12 +15,94 @@ import (
 //
 // With no known identity (me == ""), every in-progress issue counts.
 func FocusFilter(issues []Issue, blockingTypes map[string]bool, me string) []Issue {
+	myWork, ready, blocked := focusGroups(issues, blockingTypes, me)
+
+	// Sort ready by priority (P0 first)
+	sort.Slice(ready, func(i, j int) bool {
+		return ready[i].Priority < ready[j].Priority
+	})
+	return focusAssemble(myWork, ready, blocked)
+}
+
+// FocusLevels is the urgency scale a judge rates issues on, lowest first.
+var FocusLevels = []string{"Park", "Can wait", "Do next", "Do now"}
+
+// FocusVerdict is a judge's opinion of one open issue for focus mode.
+type FocusVerdict struct {
+	Urgency              float64 // expected position on FocusLevels, 0 (Park) to 3 (Do now)
+	Confidence           float64 // the judge's confidence in Urgency
+	Actionable           float64 // p(can be started right now)
+	ActionableConfidence float64
+}
+
+// Thresholds for acting on a verdict: below the confidence floor an issue
+// keeps the slot its priority gives it, and only a confident "cannot start"
+// moves an unblocked issue out of the ready list.
+const (
+	FocusConfidenceFloor   = 0.6
+	focusNotActionableProb = 0.4
+	focusNotActionableConf = 0.7
+)
+
+// FocusLevelLabel names the level nearest to an urgency.
+func FocusLevelLabel(urgency float64) string {
+	i := int(urgency + 0.5)
+	if i < 0 {
+		i = 0
+	}
+	if i >= len(FocusLevels) {
+		i = len(FocusLevels) - 1
+	}
+	return FocusLevels[i]
+}
+
+// FocusRank is FocusFilter with the ready list ordered by a judge's
+// verdicts: confident urgency first, and an issue the judge is confident
+// cannot be started now moves down with the blocked ones. An issue without
+// a confident verdict keeps the place its priority alone would give it, so a
+// shaky verdict never jumps the queue. Without verdicts it is FocusFilter.
+func FocusRank(issues []Issue, blockingTypes map[string]bool, me string, verdicts map[string]FocusVerdict) []Issue {
+	if len(verdicts) == 0 {
+		return FocusFilter(issues, blockingTypes, me)
+	}
+	myWork, ready, blocked := focusGroups(issues, blockingTypes, me)
+
+	kept := ready[:0]
+	for _, iss := range ready {
+		if v, ok := verdicts[iss.ID]; ok && v.Actionable < focusNotActionableProb && v.ActionableConfidence >= focusNotActionableConf {
+			blocked = append(blocked, iss)
+			continue
+		}
+		kept = append(kept, iss)
+	}
+	ready = kept
+
+	sort.SliceStable(ready, func(i, j int) bool {
+		si, sj := focusScore(ready[i], verdicts), focusScore(ready[j], verdicts)
+		if si != sj {
+			return si > sj
+		}
+		if ready[i].Priority != ready[j].Priority {
+			return ready[i].Priority < ready[j].Priority
+		}
+		return ready[i].UpdatedAt.After(ready[j].UpdatedAt)
+	})
+	return focusAssemble(myWork, ready, blocked)
+}
+
+// focusScore places an issue on the urgency scale: the judge's expected
+// level when confident, else the level its priority implies (P0 is "Do
+// now", P4 is "Park"), so both kinds of issue sort on one axis.
+func focusScore(iss Issue, verdicts map[string]FocusVerdict) float64 {
+	if v, ok := verdicts[iss.ID]; ok && v.Confidence >= FocusConfidenceFloor {
+		return v.Urgency
+	}
+	return max(0, 3-0.75*float64(iss.Priority))
+}
+
+// focusGroups splits the open issues into the three focus-mode lists.
+func focusGroups(issues []Issue, blockingTypes map[string]bool, me string) (myWork, ready, blocked []Issue) {
 	issueMap := BuildIssueMap(issues)
-
-	var myWork []Issue  // in_progress, assigned to me
-	var ready []Issue   // open, not blocked
-	var blocked []Issue // open, blocked (context)
-
 	for _, iss := range issues {
 		if iss.Status == StatusClosed {
 			continue
@@ -39,22 +121,18 @@ func FocusFilter(issues []Issue, blockingTypes map[string]bool, me string) []Iss
 			ready = append(ready, iss)
 		}
 	}
+	return myWork, ready, blocked
+}
 
-	// Sort ready by priority (P0 first)
-	sort.Slice(ready, func(i, j int) bool {
-		return ready[i].Priority < ready[j].Priority
-	})
-
-	// Limit ready to top 5
+// focusAssemble caps and concatenates the lists: my work, then up to five
+// ready issues, then up to three blocked ones for context.
+func focusAssemble(myWork, ready, blocked []Issue) []Issue {
 	if len(ready) > 5 {
 		ready = ready[:5]
 	}
-
-	// Limit blocked to top 3
 	if len(blocked) > 3 {
 		blocked = blocked[:3]
 	}
-
 	var result []Issue
 	result = append(result, myWork...)
 	result = append(result, ready...)

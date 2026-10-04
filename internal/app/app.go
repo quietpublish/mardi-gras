@@ -347,6 +347,11 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 	}
 	m.journal = newJournalLoop(source.Mode, journalOptedOut() || m.orchestratorAvailable())
 	m.jev = newJevLoop()
+	if m.jev.enabled() {
+		// The sweep's question set: focus mode's urgency and actionability
+		// for every open issue (jev_focus.go).
+		m.jev.questions = focusQuestions
+	}
 	return m
 }
 
@@ -3018,6 +3023,9 @@ func (m *Model) syncSelection() {
 		m.detail.RecentChanges = m.journal.recentFor(sel.ID)
 	}
 	m.detail.SetIssue(sel)
+	if sel != nil {
+		m.detail.SetFocusVerdict(sel.ID, m.focusVerdictFor(sel.ID))
+	}
 	if sel != nil && m.detail.AgentOutputID != sel.ID && m.capturable(sel.ID) {
 		m.captureWanted = true
 	}
@@ -3221,8 +3229,11 @@ func (m *Model) rebuildParade() {
 
 	filteredIssues, highlights := data.FilterIssuesWithHighlights(m.issues, m.filterInput.Value())
 	filteredIssues = data.ExcludeByLabel(data.ExcludeByType(filteredIssues, m.excludeTypes), m.excludeLabels)
+	var ranks map[string]float64 // the judge's urgency per ranked issue, focus mode only
 	if m.focusMode {
-		filteredIssues = data.FocusFilter(filteredIssues, m.blockingTypes, m.focusActor())
+		verdicts := m.focusVerdicts()
+		filteredIssues = data.FocusRank(filteredIssues, m.blockingTypes, m.focusActor(), verdicts)
+		ranks = m.focusRanks(verdicts)
 	}
 	groups := m.groups
 	detailIssueMap := data.BuildIssueMap(m.issues)
@@ -3245,6 +3256,7 @@ func (m *Model) rebuildParade() {
 
 	m.parade = views.NewParadeWithData(filteredIssues, groups, paradeIssueMap, paradeW, bodyH, m.blockingTypes)
 	m.parade.MatchHighlights = highlights
+	m.parade.Ranks = ranks
 	if oldShowClosed {
 		m.parade.ToggleClosed()
 	}
@@ -3671,6 +3683,7 @@ func (m Model) View() tea.View {
 	default:
 		footer := components.NewFooter(m.width, m.activPane == PaneDetail, m.orchestratorAvailable())
 		footer.Focus = m.focusMode
+		footer.FocusJev = m.focusMode && len(m.parade.Ranks) > 0
 		footer.SourcePath = m.watchPath
 		footer.LastRefresh = m.dataFreshAt()
 		footer.Live = m.journal.follower.Live()

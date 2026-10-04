@@ -1228,3 +1228,35 @@ func TestFormulaRecsFromJudgeReplaceHeuristic(t *testing.T) {
 		t.Fatal("nil ranking should fall back to the heuristic")
 	}
 }
+
+func TestDetailFocusVerdictRow(t *testing.T) {
+	issues := []data.Issue{
+		{ID: "bd-001", Title: "Ship it", Status: data.StatusOpen, Priority: data.PriorityMedium, CreatedAt: time.Now()},
+		{ID: "bd-002", Title: "Other", Status: data.StatusOpen, CreatedAt: time.Now()},
+	}
+	d := NewDetail(80, 40, issues)
+	d.SetIssue(&issues[0])
+	if strings.Contains(ansi.Strip(d.renderContent()), "Next up:") {
+		t.Fatal("no row without a verdict")
+	}
+	d.SetFocusVerdict("bd-001", &data.FocusVerdict{Urgency: 2.7, Confidence: 0.9, Actionable: 0.91})
+	content := ansi.Strip(d.renderContent())
+	if !strings.Contains(content, "Next up:") || !strings.Contains(content, "Do now") || !strings.Contains(content, "actionable 91%") {
+		t.Fatalf("verdict row missing:\n%s", content)
+	}
+	if strings.Contains(content, "low confidence") {
+		t.Fatal("a confident verdict carries no caveat")
+	}
+	d.SetFocusVerdict("bd-001", &data.FocusVerdict{Urgency: 0.4, Confidence: 0.3, Actionable: 0.5})
+	if content := ansi.Strip(d.renderContent()); !strings.Contains(content, "Park") || !strings.Contains(content, "low confidence") {
+		t.Fatalf("a shaky verdict should say so:\n%s", content)
+	}
+	d.SetFocusVerdict("bd-002", &data.FocusVerdict{Urgency: 3, Confidence: 0.9})
+	if strings.Contains(ansi.Strip(d.renderContent()), "Next up:") {
+		t.Fatal("a verdict for another issue must not render")
+	}
+	d.SetFocusVerdict("bd-001", nil)
+	if strings.Contains(ansi.Strip(d.renderContent()), "Next up:") {
+		t.Fatal("nil drops the row")
+	}
+}

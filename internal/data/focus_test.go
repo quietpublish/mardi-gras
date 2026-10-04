@@ -3,6 +3,7 @@ package data
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -254,4 +255,80 @@ func ids(issues []Issue) []string {
 		out[i] = iss.ID
 	}
 	return out
+}
+
+func TestFocusRank(t *testing.T) {
+	low := focusTestIssue("low", StatusOpen, PriorityLow)
+	crit := focusTestIssue("crit", StatusOpen, PriorityCritical)
+	med := focusTestIssue("med", StatusOpen, PriorityMedium)
+	high := focusTestIssue("high", StatusOpen, PriorityHigh)
+	mine := focusTestIssue("mine", StatusInProgress, PriorityMedium)
+	verdicts := map[string]FocusVerdict{
+		"low":  {Urgency: 2.9, Confidence: 0.9, Actionable: 0.9, ActionableConfidence: 0.9}, // judge: do now
+		"crit": {Urgency: 0.2, Confidence: 0.9, Actionable: 0.9, ActionableConfidence: 0.9}, // judge: park
+		// med has no verdict: its P2 slot (1.5) applies
+		// high has a shaky verdict: its P1 slot (2.25) applies, not 0.1
+		"high": {Urgency: 0.1, Confidence: 0.3, Actionable: 0.9, ActionableConfidence: 0.9},
+	}
+	got := FocusRank([]Issue{low, crit, med, high, mine}, DefaultBlockingTypes, "", verdicts)
+	ids := make([]string, len(got))
+	for i, iss := range got {
+		ids[i] = iss.ID
+	}
+	want := "mine,low,high,med,crit"
+	if joined := strings.Join(ids, ","); joined != want {
+		t.Fatalf("order = %s, want %s", joined, want)
+	}
+}
+
+func TestFocusRankEdgeCaseNotActionableMovesDown(t *testing.T) {
+	a := focusTestIssue("a", StatusOpen, PriorityCritical)
+	b := focusTestIssue("b", StatusOpen, PriorityLow)
+	verdicts := map[string]FocusVerdict{
+		"a": {Urgency: 3, Confidence: 0.9, Actionable: 0.1, ActionableConfidence: 0.9}, // urgent but cannot start
+		"b": {Urgency: 1, Confidence: 0.9, Actionable: 0.9, ActionableConfidence: 0.9},
+	}
+	got := FocusRank([]Issue{a, b}, DefaultBlockingTypes, "", verdicts)
+	if len(got) != 2 || got[0].ID != "b" || got[1].ID != "a" {
+		t.Fatalf("a confident 'cannot start' should sink below ready work: %v", ids(got))
+	}
+	// An unconfident "cannot start" is ignored.
+	verdicts["a"] = FocusVerdict{Urgency: 3, Confidence: 0.9, Actionable: 0.1, ActionableConfidence: 0.4}
+	if got := FocusRank([]Issue{a, b}, DefaultBlockingTypes, "", verdicts); got[0].ID != "a" {
+		t.Fatalf("an unconfident 'cannot start' must not demote: %v", ids(got))
+	}
+}
+
+func TestFocusRankEdgeCaseNoVerdictsIsFocusFilter(t *testing.T) {
+	issues := []Issue{
+		focusTestIssue("low", StatusOpen, PriorityLow),
+		focusTestIssue("crit", StatusOpen, PriorityCritical),
+		focusTestIssue("c", StatusClosed, PriorityCritical),
+	}
+	a, b := FocusRank(issues, DefaultBlockingTypes, "me", nil), FocusFilter(issues, DefaultBlockingTypes, "me")
+	if strings.Join(ids(a), ",") != strings.Join(ids(b), ",") || ids(a)[0] != "crit" {
+		t.Fatalf("FocusRank without verdicts = %v, FocusFilter = %v", ids(a), ids(b))
+	}
+}
+
+func TestFocusRankEdgeCaseCapsStillApply(t *testing.T) {
+	var issues []Issue
+	verdicts := map[string]FocusVerdict{}
+	for i := range 9 {
+		id := string(rune('a' + i))
+		issues = append(issues, focusTestIssue(id, StatusOpen, PriorityMedium))
+		verdicts[id] = FocusVerdict{Urgency: float64(i) / 3, Confidence: 0.9, Actionable: 0.9, ActionableConfidence: 0.9}
+	}
+	got := FocusRank(issues, DefaultBlockingTypes, "", verdicts)
+	if len(got) != 5 || got[0].ID != "i" {
+		t.Fatalf("ready should be capped at 5 and start with the most urgent: %v", ids(got))
+	}
+}
+
+func TestFocusLevelLabel(t *testing.T) {
+	for u, want := range map[float64]string{-1: "Park", 0.2: "Park", 0.6: "Can wait", 1.9: "Do next", 2.5: "Do now", 7: "Do now"} {
+		if got := FocusLevelLabel(u); got != want {
+			t.Errorf("FocusLevelLabel(%v) = %q, want %q", u, got, want)
+		}
+	}
 }

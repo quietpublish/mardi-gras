@@ -301,6 +301,9 @@ func (m Model) handleJevVerdicts(msg jevVerdictsMsg) (tea.Model, tea.Cmd) {
 	if cmd := m.jevRecord(msg.err); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
+	if len(msg.results) > 0 {
+		m.applyFocusVerdicts()
+	}
 	if m.jev.dirty {
 		if cmd := m.scheduleJev(); cmd != nil {
 			cmds = append(cmds, cmd)
