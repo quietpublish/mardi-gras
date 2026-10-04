@@ -75,6 +75,8 @@ func (m Model) updateBackground(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		model, cmd = m.handleFormulaAsk(msg)
 	case formulaVerdictMsg:
 		model, cmd = m.handleFormulaVerdict(msg)
+	case jevApprovalMsg:
+		model, cmd = m.handleJevApproval(msg)
 	default:
 		return m, nil, false
 	}

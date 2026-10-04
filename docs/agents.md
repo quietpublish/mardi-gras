@@ -38,7 +38,7 @@ A few practical gotchas:
 
 `M` on a selected issue opens a live Codex transcript in place of the detail pane. Unlike `a`, this path does not use tmux at all — mg spawns `codex mcp-server`, performs the MCP handshake, and streams the session's events (agent messages, exec commands, tool calls, patches, errors) straight into the panel. It needs `codex` on `PATH`; without it the launch reports the runtime as unavailable.
 
-Because a human is watching, `M` launches with approval policy `on-request` (the tmux and orchestrator paths use `never`), so exec and apply-patch approvals surface as a modal inside mg — `j`/`k` to choose, `enter` to confirm. Press `r` with the transcript open to send a follow-up prompt into the running session, and `M` again to close it.
+Because a human is watching, `M` launches with approval policy `on-request` (the tmux and orchestrator paths use `never`), so exec and apply-patch approvals surface as a modal inside mg — `j`/`k` to choose, `enter` to confirm. A static deny-list flags clearly destructive requests in that modal (banner, cursor on Deny, no session-wide approval offered), and with [Jev](jev.md) enabled a risk reading fills in under the command. Both are advice: the decision is always yours. Press `r` with the transcript open to send a follow-up prompt into the running session, and `M` again to close it.
 
 ### Resuming a prior Codex session
 

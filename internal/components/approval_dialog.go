@@ -34,6 +34,17 @@ var approvalDecisions = []approvalDecision{
 	{"Abort turn", "abort"},
 }
 
+// ApprovalVerdict is a judge's advisory reading of the request, rendered
+// under the command. Level is 0 (looks routine), 1 (worth a look) or 2
+// (high risk); Summary and Detail are display text. The app builds it from
+// the jev package's answers so this package never imports jev.
+type ApprovalVerdict struct {
+	Summary string // "low risk", "review", "high risk", "unavailable"
+	Detail  string // e.g. "destructive 1% · exfil 0% · in scope 99% · conf 94%"
+	Intent  string // e.g. "build/test"
+	Level   int
+}
+
 // ApprovalDialog prompts the user to approve or deny a codex action (a shell
 // command or a patch). It mirrors RecoveryDialog's Update/View shape and is
 // decoupled from codexmcp — the app passes plain fields.
@@ -47,6 +58,71 @@ type ApprovalDialog struct {
 	selIdx  int
 	width   int
 	height  int
+
+	// Advisory annotations. touched records that the user moved the cursor,
+	// after which a verdict may inform but never move it.
+	pending  bool // a judge's verdict is on its way
+	verdict  *ApprovalVerdict
+	denyRule string // a static deny-list rule the request tripped
+	denyWhat string
+	touched  bool
+}
+
+// SetPending shows that a judge is evaluating the request.
+func (ad *ApprovalDialog) SetPending(on bool) { ad.pending = on }
+
+// SetVerdict shows the judge's reading. If the user has not moved the
+// cursor, a high-risk verdict moves it to Deny and a routine one leaves it
+// on Approve once; the human still confirms.
+func (ad *ApprovalDialog) SetVerdict(v *ApprovalVerdict) {
+	ad.pending = false
+	ad.verdict = v
+	if v == nil || ad.touched || ad.denyRule != "" {
+		return
+	}
+	if v.Level >= 2 {
+		ad.selIdx = ad.indexOf("denied")
+	}
+}
+
+// SetDenyHit flags a request the static deny-list caught: a banner, the
+// cursor on Deny, and "approve for this session" withheld, since that
+// would blanket-approve whatever comes next.
+func (ad *ApprovalDialog) SetDenyHit(rule, what string) {
+	ad.denyRule, ad.denyWhat = rule, what
+	if rule != "" && !ad.touched {
+		ad.selIdx = ad.indexOf("denied")
+	}
+}
+
+// Denied reports whether the static deny-list flagged the request.
+func (ad ApprovalDialog) Denied() bool { return ad.denyRule != "" }
+
+// Selected returns the decision under the cursor.
+func (ad ApprovalDialog) Selected() string { return ad.decisions()[ad.selIdx].Value }
+
+// decisions is the choice list, without session-wide approval for a
+// deny-listed request.
+func (ad ApprovalDialog) decisions() []approvalDecision {
+	if ad.denyRule == "" {
+		return approvalDecisions
+	}
+	out := make([]approvalDecision, 0, len(approvalDecisions)-1)
+	for _, d := range approvalDecisions {
+		if d.Value != "approved_for_session" {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+func (ad ApprovalDialog) indexOf(value string) int {
+	for i, d := range ad.decisions() {
+		if d.Value == value {
+			return i
+		}
+	}
+	return 0
 }
 
 // NewApprovalDialog builds an approval dialog. For exec approvals pass command +
@@ -78,17 +154,19 @@ func (ad ApprovalDialog) Update(msg tea.Msg) (ApprovalDialog, tea.Cmd) {
 		}
 
 	case "j", "down":
-		if ad.selIdx < len(approvalDecisions)-1 {
+		ad.touched = true
+		if ad.selIdx < len(ad.decisions())-1 {
 			ad.selIdx++
 		}
 
 	case "k", "up":
+		ad.touched = true
 		if ad.selIdx > 0 {
 			ad.selIdx--
 		}
 
 	case "enter":
-		selected := approvalDecisions[ad.selIdx]
+		selected := ad.decisions()[ad.selIdx]
 		return ad, func() tea.Msg {
 			return ApprovalDialogResult{Decision: selected.Value}
 		}
@@ -131,10 +209,22 @@ func (ad ApprovalDialog) View() string {
 		lines = append(lines, "")
 		lines = append(lines, dimStyle.Render(fmt.Sprintf("  reason: %s", ad.reason)))
 	}
+
+	// Advisory lines: the deny-list banner, then the judge's reading.
+	if ad.denyRule != "" {
+		lines = append(lines, "")
+		lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ui.StatusStalled).Render(
+			fmt.Sprintf("  %s DENY-LIST: %s", ui.SymStalled, ad.denyRule)))
+		lines = append(lines, dimStyle.Render(fmt.Sprintf("  %s", truncate(ad.denyWhat, ad.width-8))))
+	}
+	if ad.pending || ad.verdict != nil {
+		lines = append(lines, "")
+		lines = append(lines, "  "+renderApprovalVerdict(ad.pending, ad.verdict))
+	}
 	lines = append(lines, "")
 
 	// Decisions
-	for i, d := range approvalDecisions {
+	for i, d := range ad.decisions() {
 		cursor := "    "
 		labelStyle := normalStyle
 		if i == ad.selIdx {
@@ -147,4 +237,31 @@ func (ad ApprovalDialog) View() string {
 	lines = append(lines, dimStyle.Render("  ↑/↓ select   enter confirm   esc deny"))
 
 	return strings.Join(lines, "\n")
+}
+
+// renderApprovalVerdict is the one-line judge reading: "jev ⟳ evaluating…",
+// or "jev ✓ low risk  destructive 1% · … · intent build/test".
+func renderApprovalVerdict(pending bool, v *ApprovalVerdict) string {
+	tag := lipgloss.NewStyle().Foreground(ui.Muted).Render("jev")
+	if pending || v == nil {
+		return tag + lipgloss.NewStyle().Foreground(ui.Dim).Render(" ⟳ evaluating…")
+	}
+	var mark string
+	var style lipgloss.Style
+	switch v.Level {
+	case 0:
+		mark, style = "✓", lipgloss.NewStyle().Foreground(ui.BrightGreen)
+	case 1:
+		mark, style = "?", lipgloss.NewStyle().Foreground(ui.StateStuck)
+	default:
+		mark, style = "✗", lipgloss.NewStyle().Foreground(ui.StatusStalled).Bold(true)
+	}
+	out := tag + " " + style.Render(mark+" "+v.Summary)
+	if v.Detail != "" {
+		out += lipgloss.NewStyle().Foreground(ui.Dim).Render("  " + v.Detail)
+	}
+	if v.Intent != "" {
+		out += lipgloss.NewStyle().Foreground(ui.Muted).Render(" · intent " + v.Intent)
+	}
+	return out
 }

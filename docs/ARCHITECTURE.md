@@ -22,6 +22,7 @@ internal/
     jev_dup.go            Duplicate check on create: candidate prefilter → one Jev request → dialog / hint / create
     jev_formula.go        Formula choice: installed-list cache → debounced Jev pick per selected issue → detail + `s` picker
     jev_focus.go          Jev-ranked focus mode: the sweep's question set, verdict → data.FocusVerdict, parade ranks
+    jev_approval.go       Codex approval advice: deny-list first, then one Jev request → verdict line in the modal
 
   data/
     issue.go              Domain types: Issue, Status, Priority, Dependency, DepEval
@@ -66,6 +67,7 @@ internal/
     tmux.go               tmux pane integration (launch, discover, capture, focus, kill)
     codex.go              Codex session-file discovery and `codex resume --last`
     codex_mcp.go          Codex MCP subprocess handle (spawn, events, reply, close)
+    denylist.go           Static deny-list for agent approval requests (destructive, out-of-project, kills agents)
 
   gastown/
     driver.go             Driver interface (the orchestrator seam) + Feature/ErrUnsupported/SlingRequest

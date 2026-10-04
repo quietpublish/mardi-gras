@@ -32,7 +32,16 @@ What is sent: the redacted snapshot of the selected issue (see below) and the in
 
 This is the sweep feature the plumbing was built for: it asks only about issues whose snapshot changed since they were last asked about, in chunks, so a backlog costs a fraction of a cent once and nothing on an unchanged reload. Jev off, or no verdicts yet, is exactly today's focus mode.
 
-More features follow on the same plumbing; the design notes list the Codex approval gate and problem triage next.
+**Codex approval advice.** The in-app Codex session (`M`) runs with approval policy on-request, so every command and patch opens a modal. Two advisors now annotate that modal; neither answers for you:
+
+- A static deny-list, with no Jev involved, flags clearly destructive requests: force-pushes and history rewrites, release and publish commands, privilege escalation, anything that kills mg or sibling agents (`tmux kill-*`, `pkill`), `rm` outside the project, piping the network into a shell, and patches to CI or release config, agent instruction files, the Beads store or credential-like files. A hit shows a `DENY-LIST` banner, puts the cursor on Deny and withholds "Approve for this session". You can still approve once.
+- Jev reads everything else: for a command, is it destructive, does it exfiltrate, is it in scope, is it obfuscated, how risky is it and what is it for; for a patch, does it touch sensitive paths or delete tests, is it in scope, how risky is it. The modal opens at once with `jev ⟳ evaluating…` and the verdict fills in, usually before you have read the command: `jev ✓ low risk  destructive 1% · exfil 0% · in scope 99% · conf 94% · intent build/test`. A confident high-risk verdict moves the default cursor to Deny; if you have already moved the cursor it stays where you put it. A shaky verdict is shown as "review" or "possibly high risk" and never moves anything. If Jev is slow or down the line reads `unavailable, decide manually`.
+
+What is sent: the command text (or the script a `bash -lc` runs), its directory relative to the project, the changed files' project-relative paths (never their contents), the agent's own stated reason labelled untrusted, and the issue title. Token-shaped strings are scrubbed first.
+
+There is deliberately no auto-approve in this release. When it comes it will be opt-in, will require Jev's verdict **and** a static allow-list of command shapes to agree, and will never choose "Approve for this session".
+
+More features follow on the same plumbing; the design notes list problem triage next.
 
 ## Enabling it
 
