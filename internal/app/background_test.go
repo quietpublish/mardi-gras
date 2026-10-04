@@ -14,6 +14,7 @@ var withModal = map[string]func(*Model){
 	"create form":  func(m *Model) { m.creating = true },
 	"quick action": func(m *Model) { m.qaMode = "comment" },
 	"nudge":        func(m *Model) { m.nudging = true },
+	"dup dialog":   func(m *Model) { m.dupDialogOpen = true },
 }
 
 func TestUpdateBackgroundWhileModalOpen(t *testing.T) {

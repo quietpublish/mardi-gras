@@ -28,7 +28,7 @@ Always run `make test` after changes. Run `make lint` before committing.
 | `cmd/mg` | Entry point, flag parsing (`--path`, `--block-types`, `--exclude-type`, `--exclude-label`, `--status`, `--version`, `--theme`, `--agent`, `--cmd-timeout`, `--no-animations`) |
 | `internal/app` | Root BubbleTea model, key handlers, message routing, confetti animation |
 | `internal/views` | Parade list, Detail panel (deps, molecule DAG, HOP, comments), Gas Town panel, Problems overlay, `bd doctor` overlay, Codex transcript |
-| `internal/components` | Header, footer, help overlay, command palette, toast notifications, issue create/edit forms, approval + recovery dialogs, float utility |
+| `internal/components` | Header, footer, help overlay, command palette, toast notifications, issue create/edit forms, approval + recovery + duplicate dialogs, float utility |
 | `internal/ui` | Theme colors, styles, symbols, HOP badges, gradients, sparklines — no logic. Includes `RoleColor()`, `AgentStateColor()`, DAG connector symbols |
 | `internal/data` | Issue loading (`bd list --json` via SourceCLI, JSONL fallback), issue types, filtering, focus mode, file watcher, mutations (`bd` CLI), cross-rig deps, HOP types, source health |
 | `internal/gastown` | Orchestrator integration behind a `Driver` seam (see below): `GTDriver` (gt CLI) + `GCDriver` (Gas City HTTP API). Core files have no internal deps; analytics files import `internal/data`. `gcclient/` is the generated Gas City client |
@@ -101,7 +101,7 @@ The `internal/gastown` package handles:
 - **`app` is the only importer of `internal/jev`.** `data.SnapshotForJudge` is the one redaction point for what is sent (no people, notes, timestamps or dependency IDs); views receive verdict values through setters.
 - **Never bypass the cache.** The loop asks only about issues whose `IssueSnapshot.Hash()` changed (`scheduleJev`, `workSet`). A full backlog costs a fraction of a cent once; re-asking on every poll would cost dollars a day.
 - **Fail safe by direction.** Advisory badges fail open (disappear); anything gating a destructive action must fail closed (ask the human). Jev never executes an action.
-- A feature registers a `jevQuestionSet` on the loop; the question keys come back as the keys of the cached answers. Phase 0 ships no question set, so no sweep runs; only the startup probe is sent.
+- Two shapes of feature. A **sweep** feature registers a `jevQuestionSet` on the loop and reads cached answers (none registered yet, so the loop sends only the startup probe). A **point decision** (`jev_dup.go`, the duplicate check on create) asks once on a user action with a short budget, feeds the same circuit via `jevRecord`, and falls back to today's action on any error.
 
 ## Agent Dispatch
 

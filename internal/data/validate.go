@@ -44,3 +44,16 @@ func sanitizeText(s string, maxLen int) string {
 	}
 	return result
 }
+
+// depTypePattern matches the dependency type names bd accepts: lower-case
+// words joined by hyphens, such as "blocks", "related" or "discovered-from".
+var depTypePattern = regexp.MustCompile(`^[a-z]+(-[a-z]+)*$`)
+
+// ValidateDepType rejects anything that is not a bd dependency type name,
+// so a user-supplied value can never become a flag or an extra argument.
+func ValidateDepType(depType string) error {
+	if !depTypePattern.MatchString(depType) {
+		return fmt.Errorf("invalid dependency type %q", depType)
+	}
+	return nil
+}

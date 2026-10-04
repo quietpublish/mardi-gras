@@ -19,6 +19,7 @@ internal/
     oscguard.go           Filters terminal capability-reply traffic out of the key stream
     debug.go              Opt-in action/route/state logging
     jev.go                Jev loop: startup probe, hash-cached sweeps over changed issues, footer status
+    jev_dup.go            Duplicate check on create: candidate prefilter → one Jev request → dialog / hint / create
 
   data/
     issue.go              Domain types: Issue, Status, Priority, Dependency, DepEval
@@ -34,6 +35,7 @@ internal/
     validate.go           Input validation for user-supplied mutation arguments
     crossrig.go           Cross-rig dependency detection and rendering
     snapshot.go           IssueSnapshot: the redacted view of an issue sent to Jev, and its hash
+    duplicates.go         Lexical duplicate-candidate prefilter, typed `bd dep add`
 
 
   views/
@@ -55,6 +57,7 @@ internal/
     edit_form.go          Issue edit form (title, priority)
     approval_dialog.go    Codex exec/apply-patch approval modal
     recovery_dialog.go    Dead-rig recovery confirmation modal
+    duplicate_dialog.go   "This may already exist" modal shown before a create
 
   agent/
     launch.go             Runtime detection (claude/cursor-agent/codex), prompt builder, CLI invocation

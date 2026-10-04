@@ -190,6 +190,11 @@ type Model struct {
 	recovering     bool
 	recoveryDialog components.RecoveryDialog
 
+	// Duplicate check on create: the dialog, and the create it holds back
+	dupDialogOpen bool
+	dupDialog     components.DuplicateDialog
+	pendingCreate *components.CreateFormResult
+
 	// Data source mode (JSONL file watcher vs bd CLI polling)
 	sourceMode data.SourceMode
 
@@ -756,22 +761,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if result.Cancelled || result.Title == "" {
 			return m, nil
 		}
-		title := result.Title
-		issueType := data.IssueType(result.Type)
-		priority := components.ParsePriority(result.Priority)
-		if result.CrewMember != "" {
-			crew := result.CrewMember
-			driver := m.driver
-			return m, func() tea.Msg {
-				_, err := driver.Assign(context.Background(), crew, title, result.Type, result.Priority, "", true)
-				action := fmt.Sprintf("assigned to %s", crew)
-				return mutateResultMsg{issueID: title, action: action, err: err}
-			}
-		}
-		return m, func() tea.Msg {
-			_, err := data.CreateIssue(title, issueType, priority)
-			return mutateResultMsg{issueID: title, action: "created", err: err}
-		}
+		return m.submitCreate(result)
+	}
+	if result, ok := msg.(components.DuplicateDialogResult); ok {
+		return m.handleDupDialogResult(result)
 	}
 
 	// Handle edit form result
@@ -892,6 +885,18 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		logRoute("recoveryDialog forward")
 		var cmd tea.Cmd
 		m.recoveryDialog, cmd = m.recoveryDialog.Update(msg)
+		return m, cmd
+	}
+
+	// Forward all messages to the duplicate dialog when active
+	if m.dupDialogOpen {
+		if km, ok := msg.(tea.KeyPressMsg); ok && km.String() == "ctrl+c" {
+			logRoute("dupDialog ctrl+c -> quit")
+			return m, tea.Quit
+		}
+		logRoute("dupDialog forward")
+		var cmd tea.Cmd
+		m.dupDialog, cmd = m.dupDialog.Update(msg)
 		return m, cmd
 	}
 
@@ -3735,6 +3740,16 @@ func (m Model) View() tea.View {
 		adContent := lipgloss.JoinVertical(lipgloss.Left, adTitle, "", adBody)
 		adBox := ui.OverlayBox(adContent, m.width-8)
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, adBox))
+	}
+
+	if m.dupDialogOpen {
+		ddWidth := min(m.width-8, 72)
+		ddTitle := ui.HelpTitle.Width(ddWidth - 4).Render("[ POSSIBLE DUPLICATE ]")
+		ddBody := m.dupDialog.View()
+		ddHint := ui.HelpHint.Width(ddWidth - 4).Render("enter go to it · c create anyway · l create + mark duplicate · esc cancel")
+		ddContent := lipgloss.JoinVertical(lipgloss.Left, ddTitle, "", ddBody, "", ddHint)
+		ddBox := ui.OverlayBox(ddContent, ddWidth)
+		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, ddBox))
 	}
 
 	if m.recovering {

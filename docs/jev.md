@@ -4,7 +4,17 @@ Mardi Gras can ask [Jev](https://docs.typesafe.ai), TypeSafe AI's System One mod
 
 **Nothing is sent unless you opt in.** Jev is off until `MG_JEV_API_KEY` is set, and every feature built on it renders exactly as it does today when Jev is off, slow, or wrong.
 
-> This release wires the plumbing: configuration, the client, a startup probe, a verdict cache and a circuit breaker, plus the `jev` chip in the footer. No feature asks Jev anything yet, so the only request mg makes is the probe. Features land behind this in later releases.
+## What it does today
+
+**Duplicate check on create.** When you submit the new-issue form (`N`), mg picks up to eight existing issues whose titles overlap the new one (open, in progress, or closed in the last two weeks), asks Jev whether each is the same piece of work, and only then runs `bd create`. While it asks, the toast reads `Checking for duplicates…`; the check has a 1.5 s budget and the issue is created as usual if Jev is slow or down.
+
+- A strong match (80% or more, with confidence) opens a dialog listing the matches with their probabilities: `enter` abandons the new issue and selects the existing one, `c` creates it anyway, `l` creates it and marks it a duplicate of the selected match (`bd dep add --type=duplicates`), `esc` abandons it.
+- A weaker match (50% to 80%) does not interrupt: the issue is created and the toast reads `… → created · similar to mg-002 (64%)`.
+- Below that, or when no existing title shares a word with the new one, nothing changes and Jev is not asked.
+
+What is sent: the new title, type and priority, and the redacted snapshots of the candidates (see below). Nothing is sent when no title overlaps.
+
+More features will follow on the same plumbing; the design notes list formula choice and a Jev-ranked focus mode next.
 
 ## Enabling it
 

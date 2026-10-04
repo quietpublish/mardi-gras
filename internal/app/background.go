@@ -67,6 +67,8 @@ func (m Model) updateBackground(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		model, cmd = m.handleJevProbe(msg)
 	case jevVerdictsMsg:
 		model, cmd = m.handleJevVerdicts(msg)
+	case dupCheckMsg:
+		model, cmd = m.handleDupCheck(msg)
 	default:
 		return m, nil, false
 	}
