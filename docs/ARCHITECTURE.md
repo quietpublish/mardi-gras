@@ -18,6 +18,7 @@ internal/
     deferred_keys.go      Short-delay key staging so the OSC guard can spot fragments
     oscguard.go           Filters terminal capability-reply traffic out of the key stream
     debug.go              Opt-in action/route/state logging
+    jev.go                Jev loop: startup probe, hash-cached sweeps over changed issues, footer status
 
   data/
     issue.go              Domain types: Issue, Status, Priority, Dependency, DepEval
@@ -32,6 +33,7 @@ internal/
     exec.go               Timeout helpers for bd/git commands, bd doctor, SchemaSkewHint
     validate.go           Input validation for user-supplied mutation arguments
     crossrig.go           Cross-rig dependency detection and rendering
+    snapshot.go           IssueSnapshot: the redacted view of an issue sent to Jev, and its hash
 
 
   views/
@@ -88,6 +90,13 @@ internal/
     recommend.go          Formula recommendation heuristics
     comments.go           Issue comment/timeline fetching
 
+  jev/
+    doc.go                Package doc: what Jev is, why it is opt-in, why go-jev is not a dependency
+    proto.go              Question/Answer/Usage wire types, NewNoul/NewChoice/NewScore
+    client.go             POST /v1/systemone over net/http: timeouts, one retry, StatusError
+    config.go             MG_JEV_* env, FromEnv(), SetCmdTimeout scaling
+    health.go             Circuit breaker (healthy → degraded → open → half-open; disabled on 401/403/404)
+
   codexmcp/
     proto.go              JSON-RPC + codex/event wire types
     transport.go          stdio transport over the `codex mcp-server` subprocess
@@ -121,6 +130,7 @@ app.Model
   --> gastown  (Driver, detection, status, sling, convoy, mail, costs, ...)
   --> agent    (runtime detection, launch/tracking, Codex MCP handle)
   --> codexmcp (Codex event + session types)
+  --> jev      (the Jev client, cache and circuit; app is its only importer)
   --> ui       (theme, styles, symbols)
 
 views
@@ -147,6 +157,9 @@ gastown (analytics: velocity, predict, scorecard, recommend)
 codexmcp
   --> (stdlib only, no internal deps)
 
+jev
+  --> (stdlib only, no internal deps)
+
 data
   --> (stdlib only, no internal deps)
 
@@ -154,7 +167,7 @@ ui
   --> (lipgloss + glamour only, no internal deps)
 ```
 
-No package imports `app` — it is the root. `data`, `ui` and `codexmcp` have no internal dependencies. Core `gastown` files (status, sling, convoy, mail, molecule, problems, recovery, detect) still import nothing from `internal/data`; only the analytics files (velocity, predict, scorecard, recommend) do, for issue types. The generated `gcclient` is the one internal import the core `gastown` package carries, and it is confined to `gc_driver.go`.
+No package imports `app` — it is the root. `data`, `ui`, `codexmcp` and `jev` have no internal dependencies. `jev` is imported by `app` alone: `data` builds the redacted `IssueSnapshot` that is sent, and views receive verdicts as plain values, so no other package knows the judge exists. Core `gastown` files (status, sling, convoy, mail, molecule, problems, recovery, detect) still import nothing from `internal/data`; only the analytics files (velocity, predict, scorecard, recommend) do, for issue types. The generated `gcclient` is the one internal import the core `gastown` package carries, and it is confined to `gc_driver.go`.
 
 ## BubbleTea Model Structure
 

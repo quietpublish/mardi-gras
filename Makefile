@@ -4,7 +4,7 @@ GO := go
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -ldflags "-s -w -X main.version=$(VERSION)"
 
-.PHONY: build run run-sample test clean dev dev-gt dev-gc dev-bd contract-bd screenshot screenshots-gc screenshot-light demo-gif tidy fmt lint gc-client
+.PHONY: build run run-sample test clean dev dev-gt dev-gc dev-bd dev-jev contract-bd contract-jev screenshot screenshots-gc screenshot-light demo-gif tidy fmt lint gc-client
 
 # GCDIR is the generated Gas City client package.
 GCDIR := internal/gastown/gcclient
@@ -51,6 +51,21 @@ contract-bd:
 # demos and screenshots without a real `gc` install.
 dev-gc: build
 	./testdata/dev-gc.sh
+
+# dev-jev runs mg against a fake Jev (System One) server (testdata/fakejev),
+# so the Jev plumbing can be exercised without a TypeSafe key. The fake logs
+# what mg sends to /tmp/mg-fakejev.log. FAKEJEV_FLAGS="-status 401" shows Jev
+# disabling itself; "-fail-every 2" trips the circuit breaker.
+dev-jev: build
+	./testdata/dev-jev.sh
+
+# contract-jev runs mg's Jev client against a real System One endpoint. It
+# costs a fraction of a cent and needs network, so it is never part of
+# `make test`. Usage: make contract-jev KEY=$$TYPESAFE_API_KEY
+# (MG_JEV_CONTRACT_URL=http://host:port points it at a self-hosted server.)
+contract-jev:
+	@test -n "$(KEY)" || { echo "usage: make contract-jev KEY=<api key>"; exit 2; }
+	MG_JEV_CONTRACT_KEY="$(KEY)" $(GO) test -tags jevcontract -run TestJevContract -count=1 -v ./internal/jev
 
 screenshot: build
 	@echo "Launching mg with screenshot dataset..."

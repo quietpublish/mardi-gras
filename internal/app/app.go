@@ -202,6 +202,9 @@ type Model struct {
 	// The orchestrator's bead event stream, another reload trigger
 	beadStream beadStream
 
+	// Jev, the optional judge: client, verdict cache, circuit breaker
+	jev jevLoop
+
 	// Dolt resilience state machine
 	sourceHealth   data.SourceHealth
 	jsonlPath      string // Cached JSONL path resolved on first fallback probe
@@ -336,6 +339,7 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 		codexSessions:  make(map[string]*codexSession),
 	}
 	m.journal = newJournalLoop(source.Mode, journalOptedOut() || m.orchestratorAvailable())
+	m.jev = newJevLoop()
 	return m
 }
 
@@ -364,6 +368,9 @@ func (m Model) Init() tea.Cmd {
 	}
 	if cmd := m.startBeadStream(); cmd != nil {
 		cmds = append(cmds, cmd)
+	}
+	if m.jev.enabled() {
+		cmds = append(cmds, m.jevProbe())
 	}
 	return tea.Batch(cmds...)
 }
@@ -3663,6 +3670,7 @@ func (m Model) View() tea.View {
 		footer.SourceMode = m.sourceMode
 		footer.BeadsContext = m.beadsContext
 		footer.SourceHealth = &m.sourceHealth
+		footer.Jev = m.jevFooter()
 		bottomBar = footer.View()
 	}
 

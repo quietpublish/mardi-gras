@@ -1,6 +1,7 @@
 package components
 
 import (
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 	"testing"
 	"time"
@@ -193,5 +194,28 @@ func TestFooterViewWithoutBeadsContext(t *testing.T) {
 	output := f.View()
 	if strings.Contains(output, "mardi_gras") {
 		t.Fatalf("footer should not contain context info when nil, got: %s", output)
+	}
+}
+
+func TestFooterViewJevChip(t *testing.T) {
+	f := Footer{Width: 120, Bindings: ParadeBindings, SourceMode: data.SourceCLI, LastRefresh: time.Now()}
+	if out := f.View(); strings.Contains(out, "jev") {
+		t.Fatalf("no chip when Jev is off, got: %s", out)
+	}
+	f.Jev = &JevStatus{}
+	if out := ansi.Strip(f.View()); !strings.Contains(out, "· jev") {
+		t.Fatalf("healthy chip should read 'jev' after the source info, got: %s", out)
+	}
+	f.Jev = &JevStatus{Label: "paused", Level: 2}
+	if out := f.View(); !strings.Contains(out, "jev paused") {
+		t.Fatalf("paused chip should carry its label, got: %s", out)
+	}
+}
+
+func TestFooterViewJevChipEdgeCaseNoSource(t *testing.T) {
+	f := Footer{Width: 120, Bindings: ParadeBindings, Jev: &JevStatus{Label: "off", Level: 2}}
+	out := ansi.Strip(f.View())
+	if !strings.Contains(out, "jev off") || strings.Contains(out, "· jev") {
+		t.Fatalf("with no source info the chip stands alone, got: %s", out)
 	}
 }

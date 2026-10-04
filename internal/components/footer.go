@@ -27,9 +27,34 @@ type Footer struct {
 	SourceMode   data.SourceMode
 	BeadsContext *data.BeadsContext
 	SourceHealth *data.SourceHealth
-	Focus        bool // focus mode active — show a persistent badge (audit #12)
-	Live         bool // reloads are driven by the bd events journal
-	LivePartial  bool // ...which has been seen missing writes
+	Focus        bool       // focus mode active — show a persistent badge (audit #12)
+	Live         bool       // reloads are driven by the bd events journal
+	LivePartial  bool       // ...which has been seen missing writes
+	Jev          *JevStatus // the Jev judge, when the operator enabled it
+}
+
+// JevStatus is what the footer shows about the Jev judge. The app builds it
+// from the jev package's health so this package never imports jev.
+type JevStatus struct {
+	Label string // "" while healthy, else "degraded", "paused" or "off"
+	Level int    // 0 normal, 1 amber, 2 red
+}
+
+// chip renders the status as a footer chip: "jev" dimmed while healthy,
+// "jev paused" in amber or red otherwise.
+func (j JevStatus) chip() string {
+	text := "jev"
+	if j.Label != "" {
+		text += " " + j.Label
+	}
+	switch j.Level {
+	case 1:
+		return lipgloss.NewStyle().Foreground(ui.StateStuck).Render(text)
+	case 2:
+		return lipgloss.NewStyle().Foreground(ui.StatusStalled).Render(text)
+	default:
+		return ui.FooterSource.Render(text)
+	}
 }
 
 // FooterModeChip renders a small gold mode indicator for bottom-bar overlays.
@@ -111,6 +136,17 @@ func (f Footer) View() string {
 			sourceInfo = f.renderHealthState(age)
 		} else {
 			sourceInfo = ui.FooterSource.Render(fmt.Sprintf("%s %s · %s%s", name, mode, age, contextInfo))
+		}
+	}
+
+	// The Jev chip sits after the source info, so a paused judge is visible
+	// without being mistaken for a data-source problem.
+	if f.Jev != nil {
+		chip := f.Jev.chip()
+		if sourceInfo != "" {
+			sourceInfo += ui.FooterSource.Render(" · ") + chip
+		} else {
+			sourceInfo = chip
 		}
 	}
 
