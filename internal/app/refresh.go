@@ -281,6 +281,9 @@ func (m *Model) applyIssues(msg data.FileChangedMsg) (cmds []tea.Cmd, touched []
 	}
 	m.recomputeVelocity()
 	cmds = append(cmds, m.detailFetchBatch()...)
+	if cmd := m.scheduleJev(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	return cmds, append(changed, removed...)
 }
 

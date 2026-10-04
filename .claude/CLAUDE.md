@@ -13,7 +13,9 @@ make dev          # Build and run with testdata/sample.jsonl
 make dev-gt       # Same, with testdata/fake-gt.sh on PATH (fake Gas Town)
 make dev-gc       # Same, against testdata/fakegc (fake Gas City supervisor)
 make dev-bd       # CLI mode against testdata/fake-bd (fake bd; MG_FAKE_BD_LOG=<file> logs calls)
+make dev-jev      # Same as dev, against testdata/fakejev (fake Jev judge; logs what mg sends)
 make contract-bd BD=/path/to/bd  # journal client vs a real bd in a throwaway workspace
+make contract-jev KEY=<api key>  # Jev client vs a real System One endpoint (costs a fraction of a cent)
 make gc-client    # Regenerate the Gas City API client (internal/gastown/gcclient) from the pinned spec
 ```
 
@@ -26,12 +28,13 @@ Always run `make test` after changes. Run `make lint` before committing.
 | `cmd/mg` | Entry point, flag parsing (`--path`, `--block-types`, `--exclude-type`, `--exclude-label`, `--status`, `--version`, `--theme`, `--agent`, `--agent-cmd`, `--cmd-timeout`, `--no-animations`) |
 | `internal/app` | Root BubbleTea model, key handlers, message routing, confetti animation |
 | `internal/views` | Parade list, Detail panel (deps, molecule DAG, HOP, comments), Gas Town panel, Problems overlay, `bd doctor` overlay, Codex transcript |
-| `internal/components` | Header, footer, help overlay, command palette, toast notifications, issue create/edit forms, approval + recovery dialogs, float utility |
+| `internal/components` | Header, footer, help overlay, command palette, toast notifications, issue create/edit forms, approval + recovery + duplicate dialogs, float utility |
 | `internal/ui` | Theme colors, styles, symbols, HOP badges, gradients, sparklines — no logic. Includes `RoleColor()`, `AgentStateColor()`, DAG connector symbols |
 | `internal/data` | Issue loading (`bd list --json` via SourceCLI, JSONL fallback), issue types, filtering, focus mode, file watcher, mutations (`bd` CLI), cross-rig deps, HOP types, source health |
 | `internal/gastown` | Orchestrator integration behind a `Driver` seam (see below): `GTDriver` (gt CLI) + `GCDriver` (Gas City HTTP API). Core files have no internal deps; analytics files import `internal/data`. `gcclient/` is the generated Gas City client |
 | `internal/agent` | Agent runtime detection and launch (`claude`, `cursor-agent`, `codex`), tmux split-pane dispatch |
 | `internal/codexmcp` | JSON-RPC client for `codex mcp-server` — transport, session, protocol types. Powers the live Codex transcript and approval routing |
+| `internal/jev` | Stdlib-only client for TypeSafe's System One ("Jev") judge: typed questions, calibrated answers, env config, circuit breaker. Imported by `app` only (see below) |
 | `internal/tmux` | `mg --status` widget for tmux status bar |
 
 ## Conventions
@@ -88,6 +91,17 @@ The `internal/gastown` package handles:
 **Key gotcha**: `gt status --json` latency is highly variable (measured seconds-to-tens-of-seconds depending on rig count, agent count, and whether backing services like dolt/daemon are running). Background polling via BubbleTea Cmds may not return before the user interacts. The Gas Town panel (`ctrl+g`) triggers an on-demand fetch if status is nil and shows a loading state while waiting. Always handle nil status gracefully.
 
 **Testing with real gt**: Run mg from a Gas Town workspace (e.g., `cd ~/gt/<rig>/crew/<name> && ~/Work/mardi-gras/mg`). Gas Town is *not* a Go dependency — `gt` and `bd` are external binaries mg shells out to, so there is nothing in `go.mod` or the module cache to read. When you need struct shapes, check the upstream source at [gastownhall/gastown](https://github.com/gastownhall/gastown) (or a local clone) rather than guessing. Rig names cannot contain hyphens (use underscores). For a no-install loop, `make dev-gt` (fake `gt`) and `make dev-gc` (fake Gas City supervisor) cover most UI work.
+
+## Jev (optional judge)
+
+[Jev](https://docs.typesafe.ai) is TypeSafe AI's System One model: it answers typed questions about a JSON state (yes/no probability, pick-one, ordinal score) with calibrated confidence in well under a second. mg can use it as a fast judge where it otherwise has hand-written heuristics. The plumbing lives in `internal/jev` (client, config, circuit) and `internal/app/jev.go` (the loop); `docs/jev.md` is the user-facing doc. Rules:
+
+- **Strictly opt-in.** Jev is on only when `MG_JEV_API_KEY` is set (`MG_JEV=off` / `--no-jev` overrides). No evidence-based auto-detect: issue text leaves the machine and calls cost money. `MG_JEV_URL` points at an API-compatible self-hosted server (OpenJev, Von, tensai).
+- **Heuristic first, Jev as an overlay.** A feature reads cached verdicts via `jevAnswers(issueID)` and must render today's output when that is nil. Jev off, slow, or broken is byte-identical to the heuristic.
+- **`app` is the only importer of `internal/jev`.** `data.SnapshotForJudge` is the one redaction point for what is sent (no people, notes, timestamps or dependency IDs); views receive verdict values through setters.
+- **Never bypass the cache.** The loop asks only about issues whose `IssueSnapshot.Hash()` changed (`scheduleJev`, `workSet`). A full backlog costs a fraction of a cent once; re-asking on every poll would cost dollars a day.
+- **Fail safe by direction.** Advisory badges fail open (disappear); anything gating a destructive action must fail closed (ask the human). Jev never executes an action.
+- Two shapes of feature. A **sweep** feature registers a `jevQuestionSet` on the loop and reads cached answers (none registered yet, so the loop sends only the startup probe). A **point decision** asks once on a user action with a short budget, feeds the same circuit via `jevRecord`, and falls back to today's output on any error: `jev_dup.go` (duplicate check when the create form submits) and `jev_formula.go` (formula choice over the installed list, on selection change, debounced and cached per issue).
 
 ## Agent Dispatch
 

@@ -190,6 +190,11 @@ type Model struct {
 	recovering     bool
 	recoveryDialog components.RecoveryDialog
 
+	// Duplicate check on create: the dialog, and the create it holds back
+	dupDialogOpen bool
+	dupDialog     components.DuplicateDialog
+	pendingCreate *components.CreateFormResult
+
 	// Data source mode (JSONL file watcher vs bd CLI polling)
 	sourceMode data.SourceMode
 
@@ -201,6 +206,11 @@ type Model struct {
 
 	// The orchestrator's bead event stream, another reload trigger
 	beadStream beadStream
+
+	// Jev, the optional judge: client, verdict cache, circuit breaker
+	jev jevLoop
+	// Jev's formula ranking for the selected issue (installed list + cache)
+	jevFormula jevFormula
 
 	// Dolt resilience state machine
 	sourceHealth   data.SourceHealth
@@ -336,6 +346,7 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 		codexSessions:  make(map[string]*codexSession),
 	}
 	m.journal = newJournalLoop(source.Mode, journalOptedOut() || m.orchestratorAvailable())
+	m.jev = newJevLoop()
 	return m
 }
 
@@ -364,6 +375,9 @@ func (m Model) Init() tea.Cmd {
 	}
 	if cmd := m.startBeadStream(); cmd != nil {
 		cmds = append(cmds, cmd)
+	}
+	if m.jev.enabled() {
+		cmds = append(cmds, m.jevProbe())
 	}
 	return tea.Batch(cmds...)
 }
@@ -749,22 +763,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if result.Cancelled || result.Title == "" {
 			return m, nil
 		}
-		title := result.Title
-		issueType := data.IssueType(result.Type)
-		priority := components.ParsePriority(result.Priority)
-		if result.CrewMember != "" {
-			crew := result.CrewMember
-			driver := m.driver
-			return m, func() tea.Msg {
-				_, err := driver.Assign(context.Background(), crew, title, result.Type, result.Priority, "", true)
-				action := fmt.Sprintf("assigned to %s", crew)
-				return mutateResultMsg{issueID: title, action: action, err: err}
-			}
-		}
-		return m, func() tea.Msg {
-			_, err := data.CreateIssue(title, issueType, priority)
-			return mutateResultMsg{issueID: title, action: "created", err: err}
-		}
+		return m.submitCreate(result)
+	}
+	if result, ok := msg.(components.DuplicateDialogResult); ok {
+		return m.handleDupDialogResult(result)
 	}
 
 	// Handle edit form result
@@ -885,6 +887,18 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		logRoute("recoveryDialog forward")
 		var cmd tea.Cmd
 		m.recoveryDialog, cmd = m.recoveryDialog.Update(msg)
+		return m, cmd
+	}
+
+	// Forward all messages to the duplicate dialog when active
+	if m.dupDialogOpen {
+		if km, ok := msg.(tea.KeyPressMsg); ok && km.String() == "ctrl+c" {
+			logRoute("dupDialog ctrl+c -> quit")
+			return m, tea.Quit
+		}
+		logRoute("dupDialog forward")
+		var cmd tea.Cmd
+		m.dupDialog, cmd = m.dupDialog.Update(msg)
 		return m, cmd
 	}
 
@@ -1330,14 +1344,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.toast = toast
 			return m, tea.Batch(toastCmd, slingCmd)
 		}
-		cmds := make([]components.PaletteCommand, len(msg.formulas))
-		for i, f := range msg.formulas {
-			cmds[i] = components.PaletteCommand{
-				Name:   f,
-				Desc:   "Formula",
-				Action: components.ActionFormulaSelect,
-			}
-		}
+		// The picker's list is also the freshest installed-formula list.
+		m.jevFormula.formulas = msg.formulas
+		m.jevFormula.fetchedAt = m.jev.now()
+		cmds := m.formulaPickerCommands(msg.formulas, m.formulaTarget)
 		m.formulaPicking = true
 		m.showPalette = true
 		m.palette = components.NewPalette(m.width, m.height, cmds)
@@ -2257,7 +2267,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(cmds...)
 			}
 		}
-		return m, nil
+		// A selection change may want a formula suggestion for the new issue.
+		// Evaluated before the return copies m: the call mutates the model.
+		cmd := m.scheduleFormulaSuggest()
+		return m, cmd
 	}
 
 	// Detail pane navigation (or Gas Town panel when active)
@@ -3116,6 +3129,9 @@ func (m *Model) detailFetchBatch() []tea.Cmd {
 	if cmd := m.maybeFetchIssueDetail(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
+	if cmd := m.scheduleFormulaSuggest(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	return cmds
 }
 
@@ -3669,6 +3685,7 @@ func (m Model) View() tea.View {
 		footer.SourceMode = m.sourceMode
 		footer.BeadsContext = m.beadsContext
 		footer.SourceHealth = &m.sourceHealth
+		footer.Jev = m.jevFooter()
 		bottomBar = footer.View()
 	}
 
@@ -3733,6 +3750,16 @@ func (m Model) View() tea.View {
 		adContent := lipgloss.JoinVertical(lipgloss.Left, adTitle, "", adBody)
 		adBox := ui.OverlayBox(adContent, m.width-8)
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, adBox))
+	}
+
+	if m.dupDialogOpen {
+		ddWidth := min(m.width-8, 72)
+		ddTitle := ui.HelpTitle.Width(ddWidth - 4).Render("[ POSSIBLE DUPLICATE ]")
+		ddBody := m.dupDialog.View()
+		ddHint := ui.HelpHint.Width(ddWidth - 4).Render("enter go to it · c create anyway · l create + mark duplicate · esc cancel")
+		ddContent := lipgloss.JoinVertical(lipgloss.Left, ddTitle, "", ddBody, "", ddHint)
+		ddBox := ui.OverlayBox(ddContent, ddWidth)
+		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, ddBox))
 	}
 
 	if m.recovering {

@@ -1,6 +1,7 @@
 package gastown
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/matt-wright86/mardi-gras/internal/data"
@@ -10,7 +11,46 @@ import (
 type FormulaRecommendation struct {
 	Formula string
 	Reason  string
-	Score   int // higher = stronger match
+	Score   int     // higher = stronger match (heuristic recommendations)
+	P       float64 // probability, when a judge ranked the installed formulas
+}
+
+// FormulaDescriptions explains the formulas mg knows about, for a judge and
+// for the picker. A formula that is installed but not listed here is still
+// offered, by name alone.
+var FormulaDescriptions = map[string]string{
+	"mol-polecat-work": "standard polecat lifecycle: implement, test, submit",
+	"shiny":            "full feature lifecycle: design, implement, review, test, submit",
+	"security-audit":   "multi-aspect security analysis before any change",
+	"code-review":      "review-focused pass over an existing change",
+	"rule-of-five":     "five parallel reviewers for high-stakes work",
+}
+
+// DescribeFormula returns the description for a formula, or "" if unknown.
+func DescribeFormula(name string) string { return FormulaDescriptions[name] }
+
+// RankFormulas turns a judge's probabilities over the installed formulas
+// into recommendations, best first. It returns nil when the best is below
+// minP, so the caller keeps its heuristic. Formulas the judge did not score
+// are left out.
+func RankFormulas(formulas []string, probs map[string]float64, minP float64) []FormulaRecommendation {
+	var recs []FormulaRecommendation
+	for _, f := range formulas {
+		p, ok := probs[f]
+		if !ok {
+			continue
+		}
+		reason := DescribeFormula(f)
+		if reason == "" {
+			reason = "installed formula"
+		}
+		recs = append(recs, FormulaRecommendation{Formula: f, Reason: reason, P: p})
+	}
+	sort.SliceStable(recs, func(i, j int) bool { return recs[i].P > recs[j].P })
+	if len(recs) == 0 || recs[0].P < minP {
+		return nil
+	}
+	return recs
 }
 
 // RecommendFormulas suggests formulas for an issue based on its labels, type,

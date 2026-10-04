@@ -63,6 +63,18 @@ func (m Model) updateBackground(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		model, cmd = m.handleBeadStream(msg)
 	case serveMsg:
 		model, cmd = m.handleServe(msg)
+	case jevProbeMsg:
+		model, cmd = m.handleJevProbe(msg)
+	case jevVerdictsMsg:
+		model, cmd = m.handleJevVerdicts(msg)
+	case dupCheckMsg:
+		model, cmd = m.handleDupCheck(msg)
+	case formulaCacheMsg:
+		model, cmd = m.handleFormulaCache(msg)
+	case formulaAskMsg:
+		model, cmd = m.handleFormulaAsk(msg)
+	case formulaVerdictMsg:
+		model, cmd = m.handleFormulaVerdict(msg)
 	default:
 		return m, nil, false
 	}

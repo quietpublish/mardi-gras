@@ -18,6 +18,7 @@ import (
 	"github.com/matt-wright86/mardi-gras/internal/app"
 	"github.com/matt-wright86/mardi-gras/internal/data"
 	"github.com/matt-wright86/mardi-gras/internal/gastown"
+	"github.com/matt-wright86/mardi-gras/internal/jev"
 	"github.com/matt-wright86/mardi-gras/internal/tmux"
 	"github.com/matt-wright86/mardi-gras/internal/ui"
 )
@@ -43,6 +44,7 @@ func main() {
 	agentRuntime := flag.String("agent", "", "Preferred agent runtime: claude, cursor, or codex (default: first on PATH — claude, then cursor, then codex)")
 	agentCmd := flag.String("agent-cmd", "", "Single executable (no arguments) to launch instead of the agent binary; the runtime's flags are still passed, and mg will not start if it is not executable (default: MG_AGENT_CMD env, or the runtime binary)")
 	themeFlag := flag.String("theme", "", "Color theme: auto, dark, or light (default: MG_THEME env or auto)")
+	noJev := flag.Bool("no-jev", false, "Disable the Jev judge for this run even when MG_JEV_API_KEY is set")
 	flag.Parse()
 
 	// MG_NO_ANIMATIONS=1 env var as alternative to --no-animations flag
@@ -79,6 +81,14 @@ func main() {
 	if *cmdTimeout > 0 {
 		gastown.SetCmdTimeout(*cmdTimeout)
 		data.SetCmdTimeout(*cmdTimeout)
+		jev.SetCmdTimeout(*cmdTimeout)
+	}
+
+	// --no-jev feeds the same env contract app reads (MG_JEV=off), like
+	// --agent does for MG_AGENT_RUNTIME. Jev is opt-in: without
+	// MG_JEV_API_KEY nothing here changes anything.
+	if *noJev {
+		os.Setenv(jev.EnvToggle, "off")
 	}
 
 	if *showVersion {
@@ -148,7 +158,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Run TUI
+	// Run TUI. The app reads the Jev config itself; the warning for a
+	// misconfigured one belongs on stderr before the TUI takes the terminal.
+	if _, err := jev.FromEnv(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: %v; running without Jev\n", err)
+	}
 	applyTheme(*themeFlag)
 	guard := app.NewOSCGuard()
 	model := app.NewWithGuard(issues, source, blockingTypes, guard, *noAnimations, filters)
