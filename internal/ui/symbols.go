@@ -49,6 +49,9 @@ const (
 	SymDeferred = "⏸"
 	SymDueDate  = "◷"
 
+	// Focus mode: the judge's urgency rank, coloured by heat
+	SymRank = "›"
+
 	// Rich dependency types
 	SymRelated    = "↔"
 	SymDuplicates = "⊜"

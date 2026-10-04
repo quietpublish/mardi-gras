@@ -37,6 +37,10 @@ type Detail struct {
 	// heuristic recommendation in the FORMULA section.
 	FormulaRecs    []gastown.FormulaRecommendation
 	FormulaIssueID string
+	// Focus is the judge's focus-mode verdict for FocusIssueID, shown as a
+	// "Next up:" row while it matches the displayed issue.
+	Focus          *data.FocusVerdict
+	FocusIssueID   string
 	MetadataSchema *data.MetadataSchema
 	AgentOutput    []string // live captured lines from agent's tmux pane
 	AgentOutputID  string   // which issue the agent output belongs to
@@ -126,6 +130,28 @@ func (d *Detail) SetAgentOutput(issueID string, lines []string) {
 	if d.Issue != nil {
 		d.Viewport.SetContent(d.renderContent())
 	}
+}
+
+// SetFocusVerdict installs the judge's focus verdict for issueID; nil drops it.
+func (d *Detail) SetFocusVerdict(issueID string, v *data.FocusVerdict) {
+	d.FocusIssueID = issueID
+	d.Focus = v
+	if d.Issue != nil {
+		d.Viewport.SetContent(d.renderContent())
+	}
+}
+
+// renderFocusVerdict reads "Do now · actionable 91% · jev", dimmed with a
+// note when the judge was not confident enough for focus mode to act on it.
+func renderFocusVerdict(v data.FocusVerdict) string {
+	label := data.FocusLevelLabel(v.Urgency)
+	levelStyle := ui.GradientHeat.At(int(v.Urgency / 3 * 100)).Bold(true)
+	muted := lipgloss.NewStyle().Foreground(ui.Muted)
+	out := levelStyle.Render(label) + muted.Render(fmt.Sprintf(" · actionable %.0f%% · jev", v.Actionable*100))
+	if v.Confidence < data.FocusConfidenceFloor {
+		out += lipgloss.NewStyle().Foreground(ui.Dim).Render(" (low confidence, not used for ordering)")
+	}
+	return out
 }
 
 // SetFormulaRecs installs a judge's formula ranking for issueID. Pass nil
@@ -269,6 +295,11 @@ func (d *Detail) renderContent() string {
 	prioColor := ui.PriorityColor(int(issue.Priority))
 	prioLabel := fmt.Sprintf("%s (%s)", data.PriorityLabel(issue.Priority), data.PriorityName(issue.Priority))
 	lines = append(lines, d.row("Priority:", lipgloss.NewStyle().Foreground(prioColor).Bold(true).Render(prioLabel)))
+
+	// Next up: the judge's urgency for this issue, when it has one
+	if d.Focus != nil && d.FocusIssueID == issue.ID && issue.Status != data.StatusClosed {
+		lines = append(lines, d.row("Next up:", renderFocusVerdict(*d.Focus)))
+	}
 
 	// Owner
 	if issue.Owner != "" {

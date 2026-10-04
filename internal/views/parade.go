@@ -68,11 +68,12 @@ type Parade struct {
 	SelectedIssue   *data.Issue
 	ActiveAgents    map[string]string // issueID -> tmux window name
 	TownStatus      *gastown.TownStatus
-	ChangedIDs      map[string]bool  // recently changed issues (change indicator dot)
-	OrphanedIDs     map[string]bool  // orphaned issues from dead rigs
-	ZombieIDs       map[string]bool  // issues with dead agent sessions (zombie polecats)
-	Selected        map[string]bool  // multi-selected issue IDs
-	MatchHighlights map[string][]int // issueID -> matched char indices in title (fuzzy search)
+	ChangedIDs      map[string]bool    // recently changed issues (change indicator dot)
+	OrphanedIDs     map[string]bool    // orphaned issues from dead rigs
+	ZombieIDs       map[string]bool    // issues with dead agent sessions (zombie polecats)
+	Selected        map[string]bool    // multi-selected issue IDs
+	MatchHighlights map[string][]int   // issueID -> matched char indices in title (fuzzy search)
+	Ranks           map[string]float64 // issueID -> judge's urgency (0 Park … 3 Do now); focus mode only
 }
 
 // NewParade creates a parade view from a set of issues.
@@ -556,6 +557,16 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 		zombieWidth = 2
 	}
 
+	// Focus-mode rank: the judge's urgency as a heat-coloured ›
+	rankPrefix := ""
+	rankWidth := 0
+	if p.Ranks != nil {
+		if u, ok := p.Ranks[issue.ID]; ok {
+			rankPrefix = ui.GradientHeat.At(int(u/3*100)).Render(ui.SymRank) + " "
+			rankWidth = 2
+		}
+	}
+
 	// Agent badge prefix
 	agentPrefix := ""
 	agentWidth := 0
@@ -646,7 +657,7 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 	// hint: the issue's own title is the primary scent, the hint is context
 	// (audit #2). The hint degrades to id-only before character truncation.
 	titleFloor := min(lipgloss.Width(issue.Title), max(innerWidth/3, 12))
-	maxHint := innerWidth - 16 - titleFloor - agentWidth - indentWidth - dueWidth - deferWidth - commentWidth - orphanWidth - zombieWidth
+	maxHint := innerWidth - 16 - titleFloor - agentWidth - rankWidth - indentWidth - dueWidth - deferWidth - commentWidth - orphanWidth - zombieWidth
 	if maxHint < 0 {
 		maxHint = 0
 	}
@@ -670,7 +681,7 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 	}
 
 	hintLen := lipgloss.Width(hint)
-	maxTitle := innerWidth - 16 - hintLen - agentWidth - changeWidth - selectWidth - indentWidth - dueWidth - deferWidth - commentWidth - orphanWidth - zombieWidth
+	maxTitle := innerWidth - 16 - hintLen - agentWidth - rankWidth - changeWidth - selectWidth - indentWidth - dueWidth - deferWidth - commentWidth - orphanWidth - zombieWidth
 	if maxTitle < 0 {
 		maxTitle = 0
 	}
@@ -704,7 +715,7 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 		renderedID = idStyle.Render(issue.ID)
 	}
 
-	line := fmt.Sprintf("%s%s %s%s%s%s%s%s %s %s",
+	line := fmt.Sprintf("%s%s %s%s%s%s%s%s%s %s %s",
 		indent,
 		symStr,
 		selectPrefix,
@@ -712,6 +723,7 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 		orphanPrefix,
 		zombiePrefix,
 		agentPrefix,
+		rankPrefix,
 		renderedID,
 		renderedTitle,
 		prioStr,

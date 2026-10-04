@@ -23,7 +23,16 @@ The ask is debounced so scrolling with `j`/`k` does not ask about every issue pa
 
 What is sent: the redacted snapshot of the selected issue (see below) and the installed formula names with mg's short description of each.
 
-More features follow on the same plumbing; the design notes list a Jev-ranked focus mode and problem triage next.
+**Jev-ranked focus mode.** Focus mode (`f`) shows your in-progress work, then the five ready issues to take next, then a few blocked ones for context. Without Jev, "next" means highest priority. With Jev on, mg asks two questions about every open issue in the background (how soon it should be started, on a Park / Can wait / Do next / Do now scale, and whether it can be started right now) and focus mode orders the ready list by the answers:
+
+- confident urgency comes first, and ranked rows carry a heat-coloured `›` before their id;
+- an issue the judge is confident cannot be started now moves down with the blocked ones;
+- an issue without a confident verdict keeps the place its priority alone would give it, so a shaky verdict never jumps the queue;
+- the footer badge reads `FOCUS · jev` while the list is Jev-ordered, and the detail panel shows the verdict as `Next up: Do now · actionable 91% · jev` for any issue the judge has rated.
+
+This is the sweep feature the plumbing was built for: it asks only about issues whose snapshot changed since they were last asked about, in chunks, so a backlog costs a fraction of a cent once and nothing on an unchanged reload. Jev off, or no verdicts yet, is exactly today's focus mode.
+
+More features follow on the same plumbing; the design notes list the Codex approval gate and problem triage next.
 
 ## Enabling it
 
