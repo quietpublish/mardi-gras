@@ -4,8 +4,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/matt-wright86/mardi-gras/internal/agent"
 	"github.com/matt-wright86/mardi-gras/internal/data"
 )
 
@@ -311,5 +313,47 @@ func TestFindBeadsDirNotFound(t *testing.T) {
 	got := findBeadsDir(dir)
 	if got != "" {
 		t.Errorf("findBeadsDir(%q) = %q, want empty string", dir, got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// resolveAgentCmd tests
+// ---------------------------------------------------------------------------
+
+func TestResolveAgentCmdUnsetIsFine(t *testing.T) {
+	t.Setenv(agent.AgentCommandEnv, "  ")
+
+	if err := resolveAgentCmd(); err != nil {
+		t.Fatalf("resolveAgentCmd() with no wrapper = %v, want nil", err)
+	}
+	if got := os.Getenv(agent.AgentCommandEnv); strings.TrimSpace(got) != "" {
+		t.Errorf("%s = %q, want it left unset", agent.AgentCommandEnv, got)
+	}
+}
+
+func TestResolveAgentCmdPinsAnAbsolutePath(t *testing.T) {
+	dir := t.TempDir()
+	shim := filepath.Join(dir, "agent-shim")
+	if err := os.WriteFile(shim, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	t.Setenv(agent.AgentCommandEnv, "./agent-shim")
+
+	if err := resolveAgentCmd(); err != nil {
+		t.Fatalf("resolveAgentCmd(): %v", err)
+	}
+	if got := os.Getenv(agent.AgentCommandEnv); got != shim {
+		t.Errorf("%s = %q, want the absolute path %q", agent.AgentCommandEnv, got, shim)
+	}
+}
+
+func TestResolveAgentCmdRejectsAMissingWrapper(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv(agent.AgentCommandEnv, "definitely-not-a-binary-xyz")
+
+	err := resolveAgentCmd()
+	if err == nil || !strings.Contains(err.Error(), agent.AgentCommandEnv) {
+		t.Errorf("resolveAgentCmd() = %v, want an error naming %s", err, agent.AgentCommandEnv)
 	}
 }

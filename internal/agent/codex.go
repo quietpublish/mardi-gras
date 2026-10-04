@@ -39,9 +39,16 @@ func CodexHasPriorSession(sessionsDir string) bool {
 // LaunchCodexResumeInTmux opens a new tmux pane running `codex resume --last`
 // rooted at projectDir. Returns the pane ID. Caller is responsible for
 // preflighting CodexHasPriorSession to avoid empty-pane surprises.
+//
+// The binary is codexCommand(): MG_AGENT_CMD when it stands in for codex,
+// else codex itself, as an absolute path either way.
 func LaunchCodexResumeInTmux(projectDir string) (string, error) {
+	bin, err := codexCommand()
+	if err != nil {
+		return "", err
+	}
 	agentArgs := []string{
-		"codex", "resume", "--last",
+		bin, "resume", "--last",
 		"--no-alt-screen",
 		"-C", projectDir,
 	}

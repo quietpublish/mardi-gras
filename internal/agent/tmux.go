@@ -30,27 +30,16 @@ func WindowName(issueID string) string {
 // LaunchInTmux opens a new tmux pane running the agent to the right of the current pane.
 func LaunchInTmux(prompt, projectDir, issueID string) (string, error) {
 	paneName := WindowName(issueID)
-	// Build agent command based on detected runtime. The binary comes from
-	// agentCommand so MG_AGENT_CMD can interpose a wrapper, and it is absolute
-	// for the reason documented there: tmux resolves the pane command against
-	// the tmux SERVER's PATH, not this process's.
+	// The binary comes from agentCommand so MG_AGENT_CMD can interpose a
+	// wrapper, and it is absolute for the reason documented there: tmux
+	// resolves the pane command against the tmux SERVER's PATH, not this
+	// process's.
 	rt := DetectRuntime()
-	bin := agentCommand(rt)
-	var agentArgs []string
-	switch rt {
-	case RuntimeCursor:
-		agentArgs = []string{bin, "-f", "-p", prompt}
-	case RuntimeCodex:
-		// --no-alt-screen preserves tmux scrollback inside the split pane.
-		agentArgs = []string{bin,
-			"--no-alt-screen",
-			"--sandbox", "workspace-write",
-			"-a", "on-request",
-			"-C", projectDir,
-			prompt}
-	default: // Claude Code
-		agentArgs = []string{bin, "--teammate-mode", "tmux", prompt}
+	bin, err := agentCommand(rt)
+	if err != nil {
+		return "", err
 	}
+	agentArgs := agentArgv(rt, bin, prompt, projectDir, true)
 
 	tmuxArgs := []string{"split-window",
 		"-h",        // vertical split (pane to the right)

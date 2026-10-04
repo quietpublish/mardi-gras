@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -212,20 +213,49 @@ func TestSanitizeCaptureOutputTakesLastLines(t *testing.T) {
 	}
 }
 
-func TestLaunchInTmuxRunsTheConfiguredWrapper(t *testing.T) {
-	dir := t.TempDir()
-
-	// A fake tmux: it logs every invocation and answers the split-window
-	// format query, so LaunchInTmux runs to completion with no server.
-	log := filepath.Join(dir, "calls.log")
+// withFakeTmux makes PATH a temp dir holding only a fake tmux, which logs every
+// invocation and answers the split-window format query with %7, so the launch
+// functions run to completion with no server. It clears MG_AGENT_CMD and
+// MG_AGENT_RUNTIME so the ambient seat cannot decide the result. Returns the
+// dir and the log path.
+func withFakeTmux(t *testing.T) (dir, log string) {
+	t.Helper()
+	dir = t.TempDir()
+	log = filepath.Join(dir, "calls.log")
 	script := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> " + log + "\n" +
 		"if [ \"$1\" = split-window ]; then printf '%%7\\n'; fi\n"
 	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(script), 0o755); err != nil {
 		t.Fatalf("write fake tmux: %v", err)
 	}
-	shim := writeShim(t, dir, "agent-shim")
-
 	t.Setenv("PATH", dir)
+	t.Setenv(AgentCommandEnv, "")
+	t.Setenv("MG_AGENT_RUNTIME", "")
+	return dir, log
+}
+
+// splitWindowCall returns the last split-window invocation the fake tmux
+// logged, or "" if there was none.
+func splitWindowCall(t *testing.T, log string) string {
+	t.Helper()
+	raw, err := os.ReadFile(log)
+	if os.IsNotExist(err) {
+		return ""
+	}
+	if err != nil {
+		t.Fatalf("read fake tmux log: %v", err)
+	}
+	var split string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "split-window ") {
+			split = line
+		}
+	}
+	return split
+}
+
+func TestLaunchInTmuxRunsTheConfiguredWrapper(t *testing.T) {
+	dir, log := withFakeTmux(t)
+	shim := writeShim(t, dir, "agent-shim")
 	t.Setenv(AgentCommandEnv, shim)
 
 	paneID, err := LaunchInTmux("do the thing", "/tmp/project", "bd-1")
@@ -236,18 +266,9 @@ func TestLaunchInTmuxRunsTheConfiguredWrapper(t *testing.T) {
 		t.Errorf("paneID = %q, want the split-window output %%7", paneID)
 	}
 
-	raw, err := os.ReadFile(log)
-	if err != nil {
-		t.Fatalf("read fake tmux log: %v", err)
-	}
-	var split string
-	for _, line := range strings.Split(string(raw), "\n") {
-		if strings.HasPrefix(line, "split-window ") {
-			split = line
-		}
-	}
+	split := splitWindowCall(t, log)
 	if split == "" {
-		t.Fatalf("fake tmux saw no split-window call; log:\n%s", raw)
+		t.Fatal("fake tmux saw no split-window call")
 	}
 
 	// The pane command must be the ABSOLUTE wrapper: tmux resolves it against
@@ -259,6 +280,72 @@ func TestLaunchInTmuxRunsTheConfiguredWrapper(t *testing.T) {
 	}
 	if strings.Contains(split, " claude ") {
 		t.Errorf("split-window still launches the bare claude\n  got: %s", split)
+	}
+}
+
+func TestLaunchInTmuxUnresolvableWrapperOpensNoPane(t *testing.T) {
+	dir, log := withFakeTmux(t)
+	writeShim(t, dir, "claude") // available, and must not be launched instead
+	t.Setenv(AgentCommandEnv, "definitely-not-a-binary-xyz")
+
+	if _, err := LaunchInTmux("do the thing", "/tmp/project", "bd-1"); err == nil {
+		t.Fatal("LaunchInTmux with an unresolvable MG_AGENT_CMD must fail")
+	}
+	if split := splitWindowCall(t, log); split != "" {
+		t.Errorf("no pane may open when the wrapper cannot be resolved\n  got: %s", split)
+	}
+}
+
+func TestLaunchCodexResumeInTmuxRunsTheWrapperForCodex(t *testing.T) {
+	dir, log := withFakeTmux(t) // no codex binary anywhere
+	shim := writeShim(t, dir, "agent-shim")
+	t.Setenv(AgentCommandEnv, shim)
+	t.Setenv("MG_AGENT_RUNTIME", "codex")
+
+	if _, err := LaunchCodexResumeInTmux("/tmp/project"); err != nil {
+		t.Fatalf("LaunchCodexResumeInTmux: %v", err)
+	}
+	split := splitWindowCall(t, log)
+	if want := "-- " + shim + " resume --last --no-alt-screen -C /tmp/project"; !strings.HasSuffix(split, want) {
+		t.Errorf("resume should run through the wrapper\n  got:  %s\n  want: ...%s", split, want)
+	}
+}
+
+func TestLaunchCodexResumeInTmuxRefusesAWrapperForAnotherRuntime(t *testing.T) {
+	dir, log := withFakeTmux(t)
+	writeShim(t, dir, "codex") // on PATH, and must not bypass the wrapper
+	t.Setenv(AgentCommandEnv, writeShim(t, dir, "agent-shim"))
+	t.Setenv("MG_AGENT_RUNTIME", "claude")
+
+	_, err := LaunchCodexResumeInTmux("/tmp/project")
+	if err == nil || !strings.Contains(err.Error(), AgentCommandEnv) {
+		t.Errorf("err = %v, want a refusal naming %s", err, AgentCommandEnv)
+	}
+	if split := splitWindowCall(t, log); split != "" {
+		t.Errorf("no pane may open around the wrapper\n  got: %s", split)
+	}
+}
+
+func TestLaunchCodexResumeInTmuxRunsAbsoluteCodex(t *testing.T) {
+	dir, log := withFakeTmux(t)
+	codex := writeShim(t, dir, "codex")
+
+	if _, err := LaunchCodexResumeInTmux("/tmp/project"); err != nil {
+		t.Fatalf("LaunchCodexResumeInTmux: %v", err)
+	}
+	if split := splitWindowCall(t, log); !strings.Contains(split, "-- "+codex+" resume --last") {
+		t.Errorf("resume should run codex by absolute path %q\n  got: %s", codex, split)
+	}
+}
+
+func TestLaunchCodexResumeInTmuxWithoutCodex(t *testing.T) {
+	_, log := withFakeTmux(t)
+
+	if _, err := LaunchCodexResumeInTmux("/tmp/project"); !errors.Is(err, ErrCodexUnavailable) {
+		t.Errorf("err = %v, want ErrCodexUnavailable", err)
+	}
+	if split := splitWindowCall(t, log); split != "" {
+		t.Errorf("no pane may open without codex\n  got: %s", split)
 	}
 }
 

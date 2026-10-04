@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os/exec"
 	"strings"
 	"sync"
 
@@ -128,10 +127,11 @@ type LaunchCodexMCPOptions struct {
 // Tests override this to inject a pipe-based transport without a real codex
 // binary.
 var codexTransportFactory = func(opts LaunchCodexMCPOptions) (codexmcp.Transport, *codexmcp.SubprocessTransport, error) {
-	if _, err := exec.LookPath("codex"); err != nil {
-		return nil, nil, ErrCodexUnavailable
+	bin, err := codexCommand()
+	if err != nil {
+		return nil, nil, err
 	}
-	t, err := codexmcp.SpawnSubprocess(codexmcp.WithDir(opts.ProjectDir))
+	t, err := codexmcp.SpawnSubprocess(codexmcp.WithBinary(bin), codexmcp.WithDir(opts.ProjectDir))
 	if err != nil {
 		return nil, nil, fmt.Errorf("spawn codex mcp-server: %w", err)
 	}
@@ -142,8 +142,9 @@ var codexTransportFactory = func(opts LaunchCodexMCPOptions) (codexmcp.Transport
 // starts a session against the codex tool. It returns a handle the caller
 // uses to consume events and to clean up.
 //
-// LaunchCodexMCP requires `codex` on PATH. If the binary is missing the call
-// returns ErrCodexUnavailable so callers can fall back to the tmux path.
+// LaunchCodexMCP requires `codex` on PATH, or MG_AGENT_CMD standing in for
+// codex (see codexCommand). If neither is there the call returns
+// ErrCodexUnavailable so callers can fall back to the tmux path.
 func LaunchCodexMCP(ctx context.Context, opts LaunchCodexMCPOptions) (*CodexMCPHandle, error) {
 	if strings.TrimSpace(opts.Prompt) == "" {
 		return nil, errors.New("agent: LaunchCodexMCP requires a prompt")
@@ -201,5 +202,6 @@ func LaunchCodexMCP(ctx context.Context, opts LaunchCodexMCPOptions) (*CodexMCPH
 	}, nil
 }
 
-// ErrCodexUnavailable indicates that the codex binary is not on PATH.
+// ErrCodexUnavailable indicates that the codex binary is not on PATH and no
+// MG_AGENT_CMD wrapper stands in for it.
 var ErrCodexUnavailable = errors.New("agent: codex binary not on PATH")

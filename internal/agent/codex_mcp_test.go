@@ -200,6 +200,29 @@ func TestLaunchCodexMCPReportsTransportError(t *testing.T) {
 	}
 }
 
+// The real factory, not a stub: these never get as far as spawning anything.
+
+func TestCodexTransportFactoryWithoutCodex(t *testing.T) {
+	withFakePath(t /* no fakes */)
+	t.Setenv("MG_AGENT_RUNTIME", "")
+
+	_, _, err := codexTransportFactory(LaunchCodexMCPOptions{Prompt: "x", ProjectDir: t.TempDir()})
+	if !errors.Is(err, ErrCodexUnavailable) {
+		t.Fatalf("expected ErrCodexUnavailable, got %v", err)
+	}
+}
+
+func TestCodexTransportFactoryUnresolvableWrapperFailsClosed(t *testing.T) {
+	withFakePath(t, "codex") // must not be spawned behind the wrapper's back
+	t.Setenv(AgentCommandEnv, "definitely-not-a-binary-xyz")
+	t.Setenv("MG_AGENT_RUNTIME", "codex")
+
+	_, _, err := codexTransportFactory(LaunchCodexMCPOptions{Prompt: "x", ProjectDir: t.TempDir()})
+	if err == nil || !strings.Contains(err.Error(), AgentCommandEnv) {
+		t.Fatalf("expected an error naming %s, got %v", AgentCommandEnv, err)
+	}
+}
+
 // TestLaunchCtxDoesNotKillSession asserts the session outlives the launch
 // context. Without this guarantee, mg's codexLaunchCmd defer-cancel would
 // race awaitResponse's <-ctx.Done() arm and push a context.Canceled result

@@ -41,7 +41,7 @@ func main() {
 	noAnimations := flag.Bool("no-animations", false, "Disable confetti and header shimmer animations")
 	cmdTimeout := flag.Int("cmd-timeout", 0, "Command timeout in seconds (scales all external command timeouts; default 30)")
 	agentRuntime := flag.String("agent", "", "Preferred agent runtime: claude, cursor, or codex (default: first on PATH — claude, then cursor, then codex)")
-	agentCmd := flag.String("agent-cmd", "", "Executable to launch instead of the agent binary; the runtime's flags are still passed (default: MG_AGENT_CMD env, or the runtime binary)")
+	agentCmd := flag.String("agent-cmd", "", "Single executable (no arguments) to launch instead of the agent binary; the runtime's flags are still passed, and mg will not start if it is not executable (default: MG_AGENT_CMD env, or the runtime binary)")
 	themeFlag := flag.String("theme", "", "Color theme: auto, dark, or light (default: MG_THEME env or auto)")
 	flag.Parse()
 
@@ -140,6 +140,14 @@ func main() {
 		return
 	}
 
+	// Validate the agent wrapper before the TUI owns the terminal: past this
+	// point a launch error can only surface as a toast, and only once someone
+	// presses a key that launches an agent.
+	if err := resolveAgentCmd(); err != nil {
+		fmt.Fprintf(os.Stderr, "mg: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Run TUI
 	applyTheme(*themeFlag)
 	guard := app.NewOSCGuard()
@@ -153,6 +161,24 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// resolveAgentCmd checks MG_AGENT_CMD once, at startup, and pins it to the
+// absolute path it resolves to. mg refuses to start on a wrapper it cannot
+// exec: the wrapper may be what keeps the agent off credentials or the
+// network, so launching without it is not a safe fallback. Pinning the
+// absolute path also means a later chdir or PATH change cannot make every
+// launch resolve to a different file. Unset is fine — agents launch directly.
+func resolveAgentCmd() error {
+	v := strings.TrimSpace(os.Getenv(agent.AgentCommandEnv))
+	if v == "" {
+		return nil
+	}
+	abs, err := agent.ResolveAgentCommand(v)
+	if err != nil {
+		return err
+	}
+	return os.Setenv(agent.AgentCommandEnv, abs)
 }
 
 // applyTheme resolves the color theme from the --theme flag, the MG_THEME env

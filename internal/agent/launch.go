@@ -3,9 +3,11 @@
 package agent
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/matt-wright86/mardi-gras/internal/data"
@@ -28,7 +30,41 @@ const (
 // that routes through a gateway, a sandbox, or a credential broker has to be
 // the process mg starts, and no PATH arrangement can express that — see
 // agentCommand for why the tmux path rules out a shim.
+//
+// The value is a single executable, not a command line: it is never split on
+// spaces, so arguments cannot be passed here. A wrapper that needs fixed
+// arguments should be a small script that adds them and execs the agent.
 const AgentCommandEnv = "MG_AGENT_CMD"
+
+// ResolveAgentCommand resolves an MG_AGENT_CMD value to the absolute path of
+// an executable, or fails.
+//
+// A bare name is looked up on PATH, and a relative path is taken against the
+// current directory — either way the result is absolute, because a relative
+// argv[0] would be re-resolved later against whatever directory or PATH the
+// process that finally execs it has (see agentCommand). A name found only via
+// a relative PATH entry (exec.ErrDot) is accepted and made absolute for the
+// same reason: the user put that entry there, and absolutizing it is what
+// keeps it pointing at the same file.
+func ResolveAgentCommand(value string) (string, error) {
+	v := strings.TrimSpace(value)
+	p, err := exec.LookPath(v)
+	if err != nil && !errors.Is(err, exec.ErrDot) {
+		return "", fmt.Errorf("%s=%q is not an executable: %w", AgentCommandEnv, v, err)
+	}
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", fmt.Errorf("%s=%q: %w", AgentCommandEnv, v, err)
+	}
+	return abs, nil
+}
+
+// wrapperConfigured returns the trimmed MG_AGENT_CMD value and whether it is
+// set. A blank or whitespace-only value counts as unset.
+func wrapperConfigured() (string, bool) {
+	v := strings.TrimSpace(os.Getenv(AgentCommandEnv))
+	return v, v != ""
+}
 
 // DetectRuntime returns the agent runtime to launch.
 //
@@ -36,73 +72,137 @@ const AgentCommandEnv = "MG_AGENT_CMD"
 // "codex" and the corresponding binary is on PATH, that runtime wins. Unknown
 // values or missing binaries fall through to the default detection order:
 // claude, then cursor-agent, then codex.
+//
+// A configured MG_AGENT_CMD counts as an agent in its own right: it is what
+// gets exec'd, so whether a runtime's binary is on PATH no longer decides
+// anything. The runtime then only picks the flag set the wrapper receives —
+// MG_AGENT_RUNTIME if it names one, else whatever the PATH order finds, else
+// claude. This is what lets a sandbox that exposes nothing but the wrapper
+// launch agents at all.
 func DetectRuntime() Runtime {
-	if pref := strings.ToLower(strings.TrimSpace(os.Getenv("MG_AGENT_RUNTIME"))); pref != "" {
-		switch pref {
-		case "claude":
-			if _, err := exec.LookPath("claude"); err == nil {
-				return RuntimeClaude
-			}
-		case "cursor", "cursor-agent":
-			if _, err := exec.LookPath("cursor-agent"); err == nil {
-				return RuntimeCursor
-			}
-		case "codex":
-			if _, err := exec.LookPath("codex"); err == nil {
-				return RuntimeCodex
-			}
+	pref := strings.ToLower(strings.TrimSpace(os.Getenv("MG_AGENT_RUNTIME")))
+	_, wrapped := wrapperConfigured()
+	switch pref {
+	case "claude":
+		if wrapped || onPath("claude") {
+			return RuntimeClaude
+		}
+	case "cursor", "cursor-agent":
+		if wrapped || onPath("cursor-agent") {
+			return RuntimeCursor
+		}
+	case "codex":
+		if wrapped || onPath("codex") {
+			return RuntimeCodex
 		}
 	}
-	if _, err := exec.LookPath("claude"); err == nil {
+	if onPath("claude") {
 		return RuntimeClaude
 	}
-	if _, err := exec.LookPath("cursor-agent"); err == nil {
+	if onPath("cursor-agent") {
 		return RuntimeCursor
 	}
-	if _, err := exec.LookPath("codex"); err == nil {
+	if onPath("codex") {
 		return RuntimeCodex
+	}
+	if wrapped {
+		return RuntimeClaude
 	}
 	return ""
 }
 
-// Available returns true if any supported agent CLI is on PATH.
+func onPath(name string) bool {
+	_, err := exec.LookPath(name)
+	return err == nil
+}
+
+// Available returns true if any supported agent CLI is on PATH, or
+// MG_AGENT_CMD names a wrapper to launch instead.
 func Available() bool {
 	return DetectRuntime() != ""
 }
 
-// agentCommand returns the executable to launch for rt.
+// agentCommand returns the absolute path of the executable to launch for rt:
+// MG_AGENT_CMD when set, else rt's own binary (claude when rt is empty).
 //
-// With MG_AGENT_CMD unset it returns rt's own binary name — or claude when no
-// runtime was detected, which is what the hardcoded command did — so the
-// default behaviour is unchanged.
+// The path is ABSOLUTE in both cases. That is what makes the tmux dispatch
+// path work: LaunchInTmux hands argv to `tmux split-window`, and the tmux
+// SERVER resolves the pane command against the server's own PATH, not this
+// process's. A bare name could therefore run a different binary than the one
+// resolved here, or none at all, leaving a pane that exits instantly with no
+// error mg can see.
 //
-// When MG_AGENT_CMD IS set its value is resolved with exec.LookPath and the
-// ABSOLUTE path is returned. That is what makes the tmux dispatch path work:
-// LaunchInTmux hands the name to `tmux split-window`, and the tmux SERVER
-// resolves the pane command against the server's own PATH, not this process's.
-// A bare name could therefore run a different binary than the one resolved
-// here, or none at all, leaving a pane that exits instantly with no error mg
-// can see.
-//
-// A wrapper that is configured but not executable is reported on stderr and
-// the runtime's binary is launched instead, so a typo degrades to the previous
-// behaviour rather than breaking agent launch outright.
-func agentCommand(rt Runtime) string {
+// It fails closed. A wrapper that is configured but not executable is an
+// error, never a silent fallback to the runtime's binary: the wrapper may be
+// the only thing standing between the agent and credentials or the network,
+// and a warning on stderr would be invisible behind the TUI's alt screen. A
+// missing runtime binary is an error for the same reason it was always fatal
+// in practice — there is nothing to launch — but now it says so.
+func agentCommand(rt Runtime) (string, error) {
+	if v, ok := wrapperConfigured(); ok {
+		return ResolveAgentCommand(v)
+	}
 	bin := string(rt)
 	if bin == "" {
-		// Nothing detected on PATH. Name claude anyway: that is what the
-		// hardcoded command did, and an empty argv[0] would make tmux's
-		// split-window fail outright.
 		bin = string(RuntimeClaude)
 	}
-	if cmd := strings.TrimSpace(os.Getenv(AgentCommandEnv)); cmd != "" {
-		if abs, err := exec.LookPath(cmd); err == nil {
-			return abs
-		}
-		fmt.Fprintf(os.Stderr, "mg: %s=%q is not executable; launching %q directly\n",
-			AgentCommandEnv, cmd, bin)
+	p, err := exec.LookPath(bin)
+	if err != nil {
+		return "", fmt.Errorf("%s not found on PATH: %w", bin, err)
 	}
-	return bin
+	return filepath.Abs(p)
+}
+
+// agentArgv returns the full argv that launches rt as bin with prompt in
+// projectDir. inTmux adds the flags that only make sense inside a tmux pane.
+// Command and LaunchInTmux both build their argv here, so the two launch paths
+// cannot drift apart.
+func agentArgv(rt Runtime, bin, prompt, projectDir string, inTmux bool) []string {
+	switch rt {
+	case RuntimeCursor:
+		return []string{bin, "-f", "-p", prompt}
+	case RuntimeCodex:
+		argv := []string{bin}
+		if inTmux {
+			// --no-alt-screen preserves tmux scrollback inside the split pane.
+			argv = append(argv, "--no-alt-screen")
+		}
+		return append(argv,
+			"--sandbox", "workspace-write",
+			"-a", "on-request",
+			"-C", projectDir,
+			prompt)
+	default: // Claude Code
+		argv := []string{bin}
+		if inTmux {
+			argv = append(argv, "--teammate-mode", "tmux")
+		}
+		return append(argv, prompt)
+	}
+}
+
+// codexCommand returns the absolute path to exec for the codex-only launches,
+// `codex resume` and the `codex mcp-server` behind M.
+//
+// Those take codex's own subcommands, so MG_AGENT_CMD is used only when it
+// stands in for codex, i.e. the runtime is codex. A wrapper configured for
+// another runtime is refused rather than bypassed: launching codex directly
+// would skip whatever the wrapper exists to enforce, and handing it codex
+// subcommands would be wrong for a wrapper built around a different agent.
+// With no wrapper, codex must be on PATH, or ErrCodexUnavailable.
+func codexCommand() (string, error) {
+	if _, ok := wrapperConfigured(); ok {
+		if rt := DetectRuntime(); rt != RuntimeCodex {
+			return "", fmt.Errorf("%s stands in for %s, not codex; set --agent codex to route codex through it",
+				AgentCommandEnv, rt)
+		}
+		return agentCommand(RuntimeCodex)
+	}
+	p, err := exec.LookPath("codex")
+	if err != nil {
+		return "", ErrCodexUnavailable
+	}
+	return filepath.Abs(p)
 }
 
 // RuntimeLabel returns a display name for the runtime.
@@ -189,24 +289,16 @@ func BuildPrompt(issue data.Issue, deps data.DepEval, issueMap map[string]*data.
 // out of the box. Power users can override via codex profiles or
 // MG_AGENT_RUNTIME=codex combined with a custom shell alias.
 //
-// The binary is agentCommand(rt): the runtime's own name unless MG_AGENT_CMD
-// interposes a wrapper.
-func Command(prompt, projectDir string) *exec.Cmd {
+// The binary is agentCommand(rt): the runtime's own, unless MG_AGENT_CMD
+// interposes a wrapper. An error means there is nothing safe to launch.
+func Command(prompt, projectDir string) (*exec.Cmd, error) {
 	rt := DetectRuntime()
-	bin := agentCommand(rt)
-	var c *exec.Cmd
-	switch rt {
-	case RuntimeCursor:
-		c = exec.Command(bin, "-f", "-p", prompt)
-	case RuntimeCodex:
-		c = exec.Command(bin,
-			"--sandbox", "workspace-write",
-			"-a", "on-request",
-			"-C", projectDir,
-			prompt)
-	default: // Claude Code
-		c = exec.Command(bin, prompt)
+	bin, err := agentCommand(rt)
+	if err != nil {
+		return nil, err
 	}
+	argv := agentArgv(rt, bin, prompt, projectDir, false)
+	c := exec.Command(argv[0], argv[1:]...) //nolint:gosec // argv[0] is the resolved agent or the user's own MG_AGENT_CMD
 	c.Dir = projectDir
-	return c
+	return c, nil
 }
