@@ -21,6 +21,8 @@ type fakeJudge struct {
 	mu    sync.Mutex
 	calls []fakeCall
 	err   error
+	// answer, when set, overrides the fixed verdict for a question.
+	answer func(key string, q jev.Question) (jev.Answer, bool)
 }
 
 type fakeCall struct {
@@ -37,6 +39,12 @@ func (f *fakeJudge) Evaluate(_ context.Context, state any, qs map[string]jev.Que
 	}
 	res := &jev.Result{Model: "fake", Answers: make(map[string]jev.Answer, len(qs))}
 	for k, q := range qs {
+		if f.answer != nil {
+			if a, ok := f.answer(k, q); ok {
+				res.Answers[k] = a
+				continue
+			}
+		}
 		res.Answers[k] = jev.Answer{Type: q.Type, Noul: 0.75, Confidence: 0.9}
 	}
 	res.Usage.InputTokens = 10 * len(qs)

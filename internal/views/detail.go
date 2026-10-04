@@ -32,9 +32,14 @@ type Detail struct {
 	Comments         []gastown.Comment
 	CommentsIssueID  string // which issue the comments belong to
 	RichIssueID      string // which issue has had rich detail fetched
-	MetadataSchema   *data.MetadataSchema
-	AgentOutput      []string // live captured lines from agent's tmux pane
-	AgentOutputID    string   // which issue the agent output belongs to
+	// FormulaRecs are a judge's ranking of the installed formulas for
+	// FormulaIssueID; when they match the displayed issue they replace the
+	// heuristic recommendation in the FORMULA section.
+	FormulaRecs    []gastown.FormulaRecommendation
+	FormulaIssueID string
+	MetadataSchema *data.MetadataSchema
+	AgentOutput    []string // live captured lines from agent's tmux pane
+	AgentOutputID  string   // which issue the agent output belongs to
 	// RecentChanges holds the displayed issue's records from the bd events
 	// journal, oldest first, for the ACTIVITY section.
 	RecentChanges []data.JournalRecord
@@ -118,6 +123,16 @@ func (d *Detail) SetComments(issueID string, comments []gastown.Comment) {
 func (d *Detail) SetAgentOutput(issueID string, lines []string) {
 	d.AgentOutput = lines
 	d.AgentOutputID = issueID
+	if d.Issue != nil {
+		d.Viewport.SetContent(d.renderContent())
+	}
+}
+
+// SetFormulaRecs installs a judge's formula ranking for issueID. Pass nil
+// to drop it; the FORMULA section then shows the heuristic again.
+func (d *Detail) SetFormulaRecs(issueID string, recs []gastown.FormulaRecommendation) {
+	d.FormulaIssueID = issueID
+	d.FormulaRecs = recs
 	if d.Issue != nil {
 		d.Viewport.SetContent(d.renderContent())
 	}
@@ -312,15 +327,23 @@ func (d *Detail) renderContent() string {
 		}
 	}
 
-	// Formula recommendation (for open/in-progress issues)
+	// Formula recommendation (for open/in-progress issues): the judge's
+	// ranking of the installed formulas when it has one, else the heuristic.
 	if issue.Status != data.StatusClosed {
-		recs := gastown.RecommendFormulas(*issue)
+		recs := d.FormulaRecs
+		if d.FormulaIssueID != issue.ID || len(recs) == 0 {
+			recs = gastown.RecommendFormulas(*issue)
+		}
 		if len(recs) > 0 {
 			lines = append(lines, "")
 			lines = append(lines, ui.DetailSection.Render("FORMULA"))
 			top := recs[0]
 			formulaStyle := lipgloss.NewStyle().Foreground(ui.BrightGold).Bold(true)
-			lines = append(lines, d.row("Suggest:", formulaStyle.Render(top.Formula)))
+			suggest := formulaStyle.Render(top.Formula)
+			if top.P > 0 {
+				suggest += "  " + lipgloss.NewStyle().Foreground(ui.Muted).Render(fmt.Sprintf("%.0f%% · jev", top.P*100))
+			}
+			lines = append(lines, d.row("Suggest:", suggest))
 			lines = append(lines, d.row("", lipgloss.NewStyle().Foreground(ui.Dim).Render(top.Reason)))
 			if len(recs) > 1 {
 				altNames := make([]string, 0, min(len(recs)-1, 3))

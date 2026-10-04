@@ -209,6 +209,8 @@ type Model struct {
 
 	// Jev, the optional judge: client, verdict cache, circuit breaker
 	jev jevLoop
+	// Jev's formula ranking for the selected issue (installed list + cache)
+	jevFormula jevFormula
 
 	// Dolt resilience state machine
 	sourceHealth   data.SourceHealth
@@ -1342,14 +1344,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.toast = toast
 			return m, tea.Batch(toastCmd, slingCmd)
 		}
-		cmds := make([]components.PaletteCommand, len(msg.formulas))
-		for i, f := range msg.formulas {
-			cmds[i] = components.PaletteCommand{
-				Name:   f,
-				Desc:   "Formula",
-				Action: components.ActionFormulaSelect,
-			}
-		}
+		// The picker's list is also the freshest installed-formula list.
+		m.jevFormula.formulas = msg.formulas
+		m.jevFormula.fetchedAt = m.jev.now()
+		cmds := m.formulaPickerCommands(msg.formulas, m.formulaTarget)
 		m.formulaPicking = true
 		m.showPalette = true
 		m.palette = components.NewPalette(m.width, m.height, cmds)
@@ -2263,7 +2261,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(cmds...)
 			}
 		}
-		return m, nil
+		// A selection change may want a formula suggestion for the new issue.
+		// Evaluated before the return copies m: the call mutates the model.
+		cmd := m.scheduleFormulaSuggest()
+		return m, cmd
 	}
 
 	// Detail pane navigation (or Gas Town panel when active)
@@ -3120,6 +3121,9 @@ func (m *Model) detailFetchBatch() []tea.Cmd {
 		cmds = append(cmds, cmd)
 	}
 	if cmd := m.maybeFetchIssueDetail(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if cmd := m.scheduleFormulaSuggest(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 	return cmds
