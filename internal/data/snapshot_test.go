@@ -178,7 +178,7 @@ func TestParseSnapshotScope(t *testing.T) {
 }
 
 func TestScrubSecrets(t *testing.T) {
-	cases := map[string]string{
+	cases := map[string]string{ //nolint:gosec // G101: fake secrets the scrubber must redact
 		"":                                 "",
 		"plain title about auth":           "plain title about auth",
 		"key sk-abc123DEF456ghi789 leaked": "key [redacted] leaked",
