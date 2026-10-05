@@ -223,3 +223,38 @@ func TestBuildPaletteCommandsConditional(t *testing.T) {
 		}
 	})
 }
+
+func TestPaletteEditingCommandsMatchTheirKeys(t *testing.T) {
+	// The palette replays each command's key, so both paths open the same
+	// thing (mg-hl4).
+	for _, tc := range []struct {
+		action components.PaletteAction
+		check  func(Model) bool
+		want   string
+	}{
+		{components.ActionEditIssue, func(m Model) bool { return m.editing }, "edit form"},
+		{components.ActionComment, func(m Model) bool { return m.qaMode == "comment" }, "comment prompt"},
+		{components.ActionAssignIssue, func(m Model) bool { return m.qaMode == "assign" }, "assign prompt"},
+		{components.ActionAddLabel, func(m Model) bool { return m.qaMode == "label" }, "label prompt"},
+		{components.ActionAddDependency, func(m Model) bool { return m.qaMode == "link" }, "link prompt"},
+		{components.ActionToggleDoctor, func(m Model) bool { return m.showDoctor }, "doctor overlay"},
+		{components.ActionToggleChanges, func(m Model) bool { return m.showChanges }, "recent changes"},
+	} {
+		model, _ := initModel(t).executePaletteAction(tc.action)
+		if !tc.check(model.(Model)) {
+			t.Errorf("action %d did not open the %s", tc.action, tc.want)
+		}
+	}
+}
+
+func TestPaletteListsEditingCommands(t *testing.T) {
+	keys := map[string]bool{}
+	for _, c := range initModel(t).buildPaletteCommands() {
+		keys[c.Key] = true
+	}
+	for _, k := range []string{"e", "r", "y", "t", "l", "D", "E"} {
+		if !keys[k] {
+			t.Errorf("palette has no command for %q", k)
+		}
+	}
+}

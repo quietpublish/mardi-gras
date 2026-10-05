@@ -74,6 +74,7 @@ func allSections() []helpSection {
 				{key: ": / Ctrl+K", desc: "Open command palette"},
 				{key: "p", desc: "Toggle problems view (gt)"},
 				{key: "E", desc: "Toggle recent changes (bd events journal)"},
+				{key: "D", desc: "Toggle doctor diagnostics (bd doctor)"},
 			},
 		},
 		{
@@ -103,6 +104,16 @@ func allSections() []helpSection {
 				{key: "b", desc: "Copy branch name to clipboard"},
 				{key: "B", desc: "Create + checkout git branch"},
 				{key: "N", desc: "Create new issue"},
+			},
+		},
+		{
+			title: "EDIT",
+			bindings: []helpBinding{
+				{key: "e", desc: "Edit title and priority"},
+				{key: "r", desc: "Add comment"},
+				{key: "y", desc: "Assign"},
+				{key: "t", desc: "Add label"},
+				{key: "l", desc: "Add dependency (this issue depends on…)"},
 			},
 		},
 		{

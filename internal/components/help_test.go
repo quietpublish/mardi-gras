@@ -147,3 +147,18 @@ func TestPaginateSectionsEmptyMaxLines(t *testing.T) {
 		t.Fatalf("expected 1 page with 0 maxLines, got %d", len(pages))
 	}
 }
+
+func TestHelpListsEditingKeys(t *testing.T) {
+	// e/r/y/t/l/D used to be reachable only from docs/keybindings.md (mg-hl4).
+	keys := map[string]bool{}
+	for _, s := range allSections() {
+		for _, b := range s.bindings {
+			keys[b.key] = true
+		}
+	}
+	for _, k := range []string{"e", "r", "y", "t", "l", "D"} {
+		if !keys[k] {
+			t.Errorf("help has no binding for %q", k)
+		}
+	}
+}

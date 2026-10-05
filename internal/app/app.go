@@ -2584,9 +2584,16 @@ func (m Model) buildPaletteCommands() []components.PaletteCommand {
 		{Name: "Copy branch name", Desc: "Copy git branch to clipboard", Key: "b", Action: components.ActionCopyBranch},
 		{Name: "Create git branch", Desc: "Checkout new branch for issue", Key: "B", Action: components.ActionCreateBranch},
 		{Name: "New issue", Desc: "Create a new beads issue", Key: "N", Action: components.ActionNewIssue},
+		{Name: "Edit issue", Desc: "Edit title and priority", Key: "e", Action: components.ActionEditIssue},
+		{Name: "Add comment", Desc: "Comment on the selected issue", Key: "r", Action: components.ActionComment},
+		{Name: "Assign issue", Desc: "Set the assignee", Key: "y", Action: components.ActionAssignIssue},
+		{Name: "Add label", Desc: "Label the selected issue", Key: "t", Action: components.ActionAddLabel},
+		{Name: "Add dependency", Desc: "This issue depends on another", Key: "l", Action: components.ActionAddDependency},
 		{Name: "Add note", Desc: "Add a note to the selected issue", Key: "", Action: components.ActionAddNote},
 		{Name: "Toggle focus mode", Desc: "Show only my work + top priority", Key: "f", Action: components.ActionToggleFocus},
 		{Name: "Toggle closed issues", Desc: "Show/hide past the stand", Key: "c", Action: components.ActionToggleClosed},
+		{Name: "Doctor diagnostics", Desc: "Run bd doctor", Key: "D", Action: components.ActionToggleDoctor},
+		{Name: "Recent changes", Desc: "bd events journal", Key: "E", Action: components.ActionToggleChanges},
 		{Name: "Filter", Desc: "Fuzzy filter the parade list", Key: "/", Action: components.ActionFilter},
 		{Name: "Help", Desc: "Show keybinding help", Key: "?", Action: components.ActionHelp},
 		{Name: "Quit", Desc: "Exit Mardi Gras", Key: "q", Action: components.ActionQuit},
@@ -2681,6 +2688,22 @@ func (m Model) executePaletteAction(action components.PaletteAction) (tea.Model,
 		m.filtering = true
 		m.filterInput.Focus()
 		return m, textinput.Blink
+	// Editing and overlay commands replay their key, so the palette and the
+	// keyboard cannot drift apart (mg-hl4).
+	case components.ActionEditIssue:
+		return m.handleKey(tea.KeyPressMsg{Code: 'e', Text: "e"})
+	case components.ActionComment:
+		return m.handleKey(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	case components.ActionAssignIssue:
+		return m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	case components.ActionAddLabel:
+		return m.handleKey(tea.KeyPressMsg{Code: 't', Text: "t"})
+	case components.ActionAddDependency:
+		return m.handleKey(tea.KeyPressMsg{Code: 'l', Text: "l"})
+	case components.ActionToggleDoctor:
+		return m.handleKey(tea.KeyPressMsg{Code: 'D', Text: "D"})
+	case components.ActionToggleChanges:
+		return m.handleKey(tea.KeyPressMsg{Code: 'E', Text: "E"})
 	case components.ActionLaunchAgent:
 		return m.handleKey(tea.KeyPressMsg{Code: 'a', Text: "a"})
 	case components.ActionKillAgent:
