@@ -874,6 +874,13 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	// The dialog's own result must be handled before the forward below,
+	// which would otherwise hand it back to the dialog and leave the modal
+	// unclosable.
+	if result, ok := msg.(components.ApprovalDialogResult); ok && m.approving {
+		return m.handleApprovalDialogResult(result)
+	}
+
 	// Forward all messages to the codex approval dialog when active
 	if m.approving {
 		if km, ok := msg.(tea.KeyPressMsg); ok && km.String() == "ctrl+c" {

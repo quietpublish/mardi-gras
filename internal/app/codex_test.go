@@ -342,3 +342,24 @@ func TestCodexKStopsSession(t *testing.T) {
 		t.Fatalf("status %q restartable %v after drain", sess.state.Status, codexRestartable(sess))
 	}
 }
+
+func TestApprovalDialogEnterClosesModal(t *testing.T) {
+	// While approving, update() forwarded every message to the dialog,
+	// including the dialog's own ApprovalDialogResult, so Enter and esc
+	// could never close it: found against a real codex session.
+	for _, key := range []tea.KeyPressMsg{{Code: tea.KeyEnter}, {Code: tea.KeyEscape}} {
+		got := setupModel(t)
+		got.codexSessions["open-1"] = &codexSession{state: &views.CodexTranscriptState{IssueID: "open-1"}}
+		got.openApprovalDialog(execApproval(`7`, "curl", "-sI", "https://example.com"))
+
+		model, cmd := got.Update(key)
+		got = model.(Model)
+		if cmd == nil {
+			t.Fatalf("%s: dialog produced no result", key.String())
+		}
+		model, _ = got.Update(cmd())
+		if model.(Model).approving {
+			t.Fatalf("%s: modal still open after its result", key.String())
+		}
+	}
+}
