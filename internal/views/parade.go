@@ -55,6 +55,10 @@ func (item ParadeItem) isSelectable() bool {
 
 // Parade is the grouped issue list view.
 type Parade struct {
+	// EmptyHint is the next step shown under "No issues found": the app
+	// sets it by why the list is empty (no issues yet, a filter, focus
+	// mode); an empty workspace used to say nothing more (mg-9f5).
+	EmptyHint       string
 	Items           []ParadeItem
 	Cursor          int
 	ShowClosed      bool
@@ -347,6 +351,9 @@ func (p *Parade) SetSize(width, height int) {
 func (p *Parade) View() string {
 	if len(p.Items) == 0 {
 		content := "No issues found"
+		if p.EmptyHint != "" {
+			content += "\n" + lipgloss.NewStyle().Foreground(ui.Dim).Render(p.EmptyHint)
+		}
 		return lipgloss.NewStyle().Width(p.Width).Height(p.Height).Render(content)
 	}
 

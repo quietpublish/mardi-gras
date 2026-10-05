@@ -111,7 +111,9 @@ func main() {
 	if source.Mode == SourceJSONL && source.Path == "" {
 		fmt.Fprintf(os.Stderr, "No .beads/issues.jsonl found and bd not on PATH.\n\n")
 		fmt.Fprintf(os.Stderr, "Run mg from inside a project with Beads, or specify a path:\n")
-		fmt.Fprintf(os.Stderr, "  mg --path /path/to/.beads/issues.jsonl\n")
+		fmt.Fprintf(os.Stderr, "  mg --path /path/to/.beads/issues.jsonl\n\n")
+		fmt.Fprintf(os.Stderr, "New to Beads? Install bd (https://github.com/gastownhall/beads),\n")
+		fmt.Fprintf(os.Stderr, "then run `bd init` in your project and start mg there.\n")
 		os.Exit(1)
 	}
 

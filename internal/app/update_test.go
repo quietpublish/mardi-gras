@@ -648,3 +648,23 @@ func TestStartupSkippedLinesToast(t *testing.T) {
 		t.Fatalf("toast = %q", msg)
 	}
 }
+
+func TestEmptyParadeSaysWhatToDo(t *testing.T) {
+	// An empty workspace said only "No issues found" (mg-9f5); the next step
+	// depends on why it is empty.
+	m := New(nil, data.Source{}, data.DefaultBlockingTypes)
+	model, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m = model.(Model)
+	if !strings.Contains(m.parade.View(), "Press N to create the first issue") {
+		t.Fatal("an empty workspace should say how to create an issue")
+	}
+
+	m = New([]data.Issue{testIssue("a", data.StatusOpen)}, data.Source{}, data.DefaultBlockingTypes)
+	model, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m = model.(Model)
+	m.filterInput.SetValue("zzzz-nothing")
+	m.rebuildParade()
+	if !strings.Contains(m.parade.View(), "esc clears it") {
+		t.Fatal("an empty filter result should say how to clear the filter")
+	}
+}

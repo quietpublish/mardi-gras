@@ -3309,6 +3309,20 @@ func paradeWidth(width int) int {
 	return max(width*2/5, min(width*3/5, paradeMinWidth))
 }
 
+// setEmptyHint tells an empty parade what to do next.
+func (m *Model) setEmptyHint() {
+	switch {
+	case m.filterInput.Value() != "":
+		m.parade.EmptyHint = "Nothing matches the filter · esc clears it"
+	case m.focusMode:
+		m.parade.EmptyHint = "Nothing in focus right now · f leaves focus mode"
+	case len(m.issues) == 0:
+		m.parade.EmptyHint = "Press N to create the first issue"
+	default:
+		m.parade.EmptyHint = ""
+	}
+}
+
 func (m *Model) layout() {
 	headerH := 2
 	footerH := 2
@@ -3354,6 +3368,7 @@ func (m *Model) layout() {
 	if len(m.parade.Items) == 0 {
 		visibleIssues := data.ExcludeByLabel(data.ExcludeByType(m.issues, m.excludeTypes), m.excludeLabels)
 		m.parade = views.NewParadeWithData(visibleIssues, m.groups, detailIssueMap, paradeW, bodyH, m.blockingTypes)
+		m.setEmptyHint()
 		m.syncSelection()
 		if m.pendingCurrentID != "" {
 			m.restoreParadeSelection(m.pendingCurrentID)
@@ -3398,6 +3413,7 @@ func (m *Model) rebuildParade() {
 	filteredIssues, highlights := data.FilterIssuesWithHighlights(m.issues, m.filterInput.Value())
 	filteredIssues = data.ExcludeByLabel(data.ExcludeByType(filteredIssues, m.excludeTypes), m.excludeLabels)
 	m.filterMatched = len(filteredIssues)
+	defer m.setEmptyHint()
 	m.filterTotal = len(data.ExcludeByLabel(data.ExcludeByType(m.issues, m.excludeTypes), m.excludeLabels))
 	var ranks map[string]float64 // the judge's urgency per ranked issue, focus mode only
 	if m.focusMode {
