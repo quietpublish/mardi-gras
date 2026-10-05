@@ -37,6 +37,11 @@ type IssueSnapshot struct {
 	DueInDays       *int `json:"due_in_days,omitempty"`       // negative when overdue
 	DeferredForDays *int `json:"deferred_for_days,omitempty"` // only while deferred
 
+	// Claimed says who has the issue without naming anyone: "you" for the
+	// viewer, "someone else", or empty when unassigned. Without it the
+	// judge saw every in-progress issue as someone else's (mg-xge.1).
+	Claimed string `json:"claimed,omitempty"`
+
 	Blocking     int `json:"blocking"`               // open issues this one waits on
 	MissingDeps  int `json:"missing_deps,omitempty"` // blockers that do not exist
 	CommentCount int `json:"comment_count,omitempty"`
@@ -103,6 +108,19 @@ func SnapshotForJudge(iss Issue, eval DepEval, scope SnapshotScope, now time.Tim
 		s.Description = ScrubSecrets(truncateRunes(stripCodeFences(iss.Description), snapshotDescriptionRunes))
 	}
 	return s
+}
+
+// ClaimedBy is the snapshot's Claimed value for an assignee as seen by me.
+// An unknown viewer cannot claim anything, so every assignee is someone else.
+func ClaimedBy(assignee, me string) string {
+	switch {
+	case assignee == "":
+		return ""
+	case me != "" && SameActor(assignee, me):
+		return "you"
+	default:
+		return "someone else"
+	}
 }
 
 // Hash identifies the snapshot's content: two snapshots with the same hash

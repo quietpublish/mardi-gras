@@ -137,6 +137,11 @@ func (m Model) handleJevProbe(msg jevProbeMsg) (tea.Model, tea.Cmd) {
 		if cmd := m.scheduleJev(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+		// The issue selected at startup never changed selection, so it
+		// never got a formula pick (mg-xge.5).
+		if cmd := m.scheduleFormulaSuggest(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	}
 	return m, tea.Batch(cmds...)
 }
@@ -174,7 +179,7 @@ func (m *Model) scheduleJev() tea.Cmd {
 		return nil
 	}
 	now := j.now()
-	work := j.workSet(m.issues, m.blockingTypes, now)
+	work := j.workSet(m.issues, m.blockingTypes, m.focusActor(), now)
 	if len(work) == 0 {
 		return nil
 	}
@@ -193,7 +198,7 @@ func (m *Model) scheduleJev() tea.Cmd {
 
 // workSet snapshots every non-closed issue and keeps the ones the cache
 // cannot answer. It also forgets issues that are gone.
-func (j *jevLoop) workSet(issues []data.Issue, blockingTypes map[string]bool, now time.Time) []data.IssueSnapshot {
+func (j *jevLoop) workSet(issues []data.Issue, blockingTypes map[string]bool, me string, now time.Time) []data.IssueSnapshot {
 	issueMap := data.BuildIssueMap(issues)
 	present := make(map[string]bool, len(issues))
 	var work []data.IssueSnapshot
@@ -204,6 +209,7 @@ func (j *jevLoop) workSet(issues []data.Issue, blockingTypes map[string]bool, no
 			continue
 		}
 		snap := data.SnapshotForJudge(*iss, iss.EvaluateDependencies(issueMap, blockingTypes), j.scope, now)
+		snap.Claimed = data.ClaimedBy(iss.Assignee, me)
 		if e, ok := j.cache[iss.ID]; ok && e.hash == snap.Hash() {
 			continue
 		}

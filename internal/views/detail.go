@@ -18,23 +18,26 @@ import (
 type Detail struct {
 	// HideFormulas drops the FORMULA section: without an orchestrator a
 	// formula cannot run, so suggesting one is noise (mg-j87).
-	HideFormulas     bool
-	Issue            *data.Issue
-	AllIssues        []data.Issue
-	IssueMap         map[string]*data.Issue
-	BlockingTypes    map[string]bool
-	Viewport         viewport.Model
-	Width            int
-	Height           int
-	Focused          bool
-	ActiveAgents     map[string]string
-	TownStatus       *gastown.TownStatus
-	MoleculeDAG      *gastown.DAGInfo
-	MoleculeProgress *gastown.MoleculeProgress
-	MoleculeIssueID  string // which issue the molecule data belongs to
-	Comments         []gastown.Comment
-	CommentsIssueID  string // which issue the comments belong to
-	RichIssueID      string // which issue has had rich detail fetched
+	HideFormulas bool
+	// InstalledFormulas, when known, limits the heuristic suggestion to
+	// formulas that exist; it named uninstalled ones (mg-xge.5).
+	InstalledFormulas []string
+	Issue             *data.Issue
+	AllIssues         []data.Issue
+	IssueMap          map[string]*data.Issue
+	BlockingTypes     map[string]bool
+	Viewport          viewport.Model
+	Width             int
+	Height            int
+	Focused           bool
+	ActiveAgents      map[string]string
+	TownStatus        *gastown.TownStatus
+	MoleculeDAG       *gastown.DAGInfo
+	MoleculeProgress  *gastown.MoleculeProgress
+	MoleculeIssueID   string // which issue the molecule data belongs to
+	Comments          []gastown.Comment
+	CommentsIssueID   string // which issue the comments belong to
+	RichIssueID       string // which issue has had rich detail fetched
 	// FormulaRecs are a judge's ranking of the installed formulas for
 	// FormulaIssueID; when they match the displayed issue they replace the
 	// heuristic recommendation in the FORMULA section.
@@ -144,15 +147,44 @@ func (d *Detail) SetFocusVerdict(issueID string, v *data.FocusVerdict) {
 	}
 }
 
-// renderFocusVerdict reads "Do now · actionable 91% · jev", dimmed with a
-// note when the judge was not confident enough for focus mode to act on it.
+// renderFocusVerdict reads "Do now · actionable 91% · jev", with a short
+// dimmed note when the judge was not confident enough for focus mode to act
+// on it; the longer "(…, not used for ordering)" was cut off at 120 columns
+// (mg-su8).
 func renderFocusVerdict(v data.FocusVerdict) string {
 	label := data.FocusLevelLabel(v.Urgency)
 	levelStyle := ui.GradientHeat.At(int(v.Urgency / 3 * 100)).Bold(true)
 	muted := lipgloss.NewStyle().Foreground(ui.Muted)
 	out := levelStyle.Render(label) + muted.Render(fmt.Sprintf(" · actionable %.0f%% · jev", v.Actionable*100))
 	if v.Confidence < data.FocusConfidenceFloor {
-		out += lipgloss.NewStyle().Foreground(ui.Dim).Render(" (low confidence, not used for ordering)")
+		out += lipgloss.NewStyle().Foreground(ui.Dim).Render(" · low confidence")
+	}
+	return out
+}
+
+// SetInstalledFormulas records the installed formula list for the heuristic.
+func (d *Detail) SetInstalledFormulas(formulas []string) {
+	d.InstalledFormulas = formulas
+	if d.Issue != nil {
+		d.Viewport.SetContent(d.renderContent())
+	}
+}
+
+// installedOnly keeps the recommendations whose formula is installed. An
+// unknown list (nil) keeps them all: there is nothing to check against.
+func installedOnly(recs []gastown.FormulaRecommendation, installed []string) []gastown.FormulaRecommendation {
+	if installed == nil {
+		return recs
+	}
+	have := make(map[string]bool, len(installed))
+	for _, f := range installed {
+		have[f] = true
+	}
+	var out []gastown.FormulaRecommendation
+	for _, r := range recs {
+		if have[r.Formula] {
+			out = append(out, r)
+		}
 	}
 	return out
 }
@@ -366,7 +398,7 @@ func (d *Detail) renderContent() string {
 	if issue.Status != data.StatusClosed && !d.HideFormulas {
 		recs := d.FormulaRecs
 		if d.FormulaIssueID != issue.ID || len(recs) == 0 {
-			recs = gastown.RecommendFormulas(*issue)
+			recs = installedOnly(gastown.RecommendFormulas(*issue), d.InstalledFormulas)
 		}
 		if len(recs) > 0 {
 			lines = append(lines, "")

@@ -1260,3 +1260,30 @@ func TestDetailFocusVerdictRow(t *testing.T) {
 		t.Fatal("nil drops the row")
 	}
 }
+
+func TestRenderFocusVerdictFitsDetailPane(t *testing.T) {
+	// At 120 columns the low-confidence note was cut off (mg-su8). The row
+	// label takes 13 columns; the verdict must fit what a 120-column
+	// terminal leaves the detail pane.
+	got := ansi.Strip(renderFocusVerdict(data.FocusVerdict{Urgency: 1, Actionable: 0.81, Confidence: 0.3}))
+	if !strings.Contains(got, "low confidence") || 13+len([]rune(got)) > 120-48-4 {
+		t.Fatalf("verdict %q (%d runes) does not fit", got, len([]rune(got)))
+	}
+}
+
+func TestFormulaHeuristicOnlyInstalled(t *testing.T) {
+	// The heuristic named formulas the town did not have (mg-xge.5).
+	issues := []data.Issue{{ID: "bd-001", Title: "Add authentication middleware", Status: data.StatusOpen,
+		Priority: data.PriorityHigh, IssueType: data.TypeFeature, CreatedAt: time.Now()}}
+	d := NewDetail(80, 40, issues)
+	d.SetIssue(&issues[0])
+	d.SetInstalledFormulas([]string{"shiny", "hotfix"})
+	content := ansi.Strip(d.renderContent())
+	if strings.Contains(content, "security-audit") || strings.Contains(content, "rule-of-five") {
+		t.Fatalf("suggested an uninstalled formula:\n%s", content)
+	}
+	d.SetInstalledFormulas([]string{"something-else"})
+	if strings.Contains(ansi.Strip(d.renderContent()), "FORMULA") {
+		t.Fatal("with nothing installed to suggest, the section should not show")
+	}
+}

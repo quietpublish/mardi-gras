@@ -1221,8 +1221,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.layout()
+		var cmd tea.Cmd
+		if !m.ready {
+			cmd = m.maybeFetchFormulas() // filters the heuristic from the start
+		}
 		m.ready = true
-		return m, nil
+		return m, cmd
 
 	case refreshTickMsg:
 		return m.handleRefreshTick(msg)
@@ -3251,6 +3255,9 @@ func (m *Model) detailFetchBatch() []tea.Cmd {
 		cmds = append(cmds, cmd)
 	}
 	if cmd := m.maybeFetchIssueDetail(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if cmd := m.maybeFetchFormulas(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 	if cmd := m.scheduleFormulaSuggest(); cmd != nil {

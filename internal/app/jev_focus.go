@@ -32,7 +32,7 @@ func focusQuestions(data.IssueSnapshot) map[string]jev.Question {
 			"How soon should this issue be started, relative to the other issues in this list? "+
 				"Being overdue or due within a few days raises it; blocking other open work raises it; "+
 				"P0/P1 raises it; being stale, deferred, or vaguely titled lowers it; "+
-				"an issue someone else is already working on is Park.",
+				"An issue claimed by someone else is Park; one claimed by you is already under way, so rate how soon it should be finished.",
 			data.FocusLevels...),
 		focusQActionable: jev.NewNoul(
 			"Could a developer start this issue right now without first asking a question or waiting on someone? " +
@@ -106,9 +106,17 @@ func (m Model) focusRanks(verdicts map[string]data.FocusVerdict) map[string]floa
 	if !m.focusMode || len(verdicts) == 0 {
 		return nil
 	}
+	// Badge only what the verdict ordered: focus mode sorts the ready list
+	// by urgency, while in-progress work keeps its own place (mg-xge.1).
+	inProgress := make(map[string]bool)
+	for _, iss := range m.issues {
+		if iss.Status == data.StatusInProgress {
+			inProgress[iss.ID] = true
+		}
+	}
 	ranks := make(map[string]float64, len(verdicts))
 	for id, v := range verdicts {
-		if v.Confidence >= data.FocusConfidenceFloor {
+		if v.Confidence >= data.FocusConfidenceFloor && !inProgress[id] {
 			ranks[id] = v.Urgency
 		}
 	}
