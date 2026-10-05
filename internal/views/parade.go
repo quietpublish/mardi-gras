@@ -402,7 +402,10 @@ func (p *Parade) renderLegend() string {
 	return ansi.Truncate(legend, p.Width, "")
 }
 
-// renderBorderTop builds a top border line: ╭─ ● Rolling (2) ────────╮
+// renderBorderTop builds a top border line with the count in the right
+// corner, btop-style: ╭─ ● Rolling ──────────── 8 ╮. The count used to be
+// a superscript on the title (hard to read small) and a space sat before
+// the corner instead (mg-3n0).
 func (p *Parade) renderBorderTop(sec paradeSection) string {
 	count := len(p.Groups[sec.Status])
 	borderStyle := lipgloss.NewStyle().Foreground(sec.Color)
@@ -414,39 +417,33 @@ func (p *Parade) renderBorderTop(sec paradeSection) string {
 		if p.ShowClosed {
 			toggle = ui.Expanded
 		}
-		titleText = fmt.Sprintf("%s %s %s%s", toggle, sec.Symbol, sec.Title, ui.Superscript(count))
+		titleText = fmt.Sprintf("%s %s %s", toggle, sec.Symbol, sec.Title)
 		if !p.ShowClosed {
 			titleText += " press c"
 		}
 	} else {
-		titleText = fmt.Sprintf("%s %s%s", sec.Symbol, sec.Title, ui.Superscript(count))
+		titleText = fmt.Sprintf("%s %s", sec.Symbol, sec.Title)
 	}
 
+	// ╭─ <title> ───────── <count> ╮
+	prefix := borderStyle.Render(ui.BoxTopLeft + ui.BoxHorizontal + " ")
+	countPart := " " + sec.Style.Render(strconv.Itoa(count)) + borderStyle.Render(" "+ui.BoxTopRight)
+	prefixW := lipgloss.Width(prefix)
+	countW := lipgloss.Width(countPart)
+
+	// The title gives way first, so the line never outgrows the box: at
+	// narrow widths a forced fill used to push the corner one column out.
+	availableForTitle := p.Width - prefixW - countW - 2 // space after title + at least one ─
+	if lipgloss.Width(titleText) > availableForTitle {
+		titleText = truncate(titleText, max(availableForTitle, 0))
+	}
 	coloredTitle := sec.Style.Render(titleText)
 	titleWidth := lipgloss.Width(coloredTitle)
 
-	// ╭─ <title> ─────────────╮
-	prefix := borderStyle.Render(ui.BoxTopLeft + ui.BoxHorizontal + " ")
-	suffix := borderStyle.Render(" " + ui.BoxTopRight)
-
-	prefixW := lipgloss.Width(prefix)
-	suffixW := lipgloss.Width(suffix)
-
-	// Truncate title text if it exceeds available space
-	availableForTitle := p.Width - prefixW - suffixW - 1 // -1 for space after title
-	if titleWidth > availableForTitle && availableForTitle > 0 {
-		titleText = truncate(titleText, availableForTitle)
-		coloredTitle = sec.Style.Render(titleText)
-		titleWidth = lipgloss.Width(coloredTitle)
-	}
-
-	fillLen := p.Width - prefixW - titleWidth - 1 - suffixW
-	if fillLen < 1 {
-		fillLen = 1
-	}
+	fillLen := max(p.Width-prefixW-titleWidth-1-countW, 0)
 	fill := borderStyle.Render(" " + strings.Repeat(ui.BoxHorizontal, fillLen))
 
-	return prefix + coloredTitle + fill + suffix
+	return prefix + coloredTitle + fill + countPart
 }
 
 // renderBorderBottom builds a bottom border line: ╰────────────────────╯

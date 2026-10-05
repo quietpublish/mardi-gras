@@ -1,6 +1,7 @@
 package views
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -332,6 +333,29 @@ func TestParadeRankBadgeRespectsWidth(t *testing.T) {
 	for _, line := range strings.Split(ansi.Strip(p.View()), "\n") {
 		if w := lipgloss.Width(line); w > 60 {
 			t.Fatalf("row wider than the parade (%d): %q", w, line)
+		}
+	}
+}
+
+func TestRenderBorderTopCountInCornerFitsWidth(t *testing.T) {
+	// The count moved from a superscript on the title into the right corner,
+	// and at narrow widths the line used to overrun its box by a column
+	// (mg-3n0).
+	p := NewParade(paradeIssues(), 80, 20, data.DefaultBlockingTypes)
+	for _, w := range []int{12, 20, 30, 46, 48, 80, 120} {
+		p.Width = w
+		for _, sec := range sections() {
+			line := ansi.Strip(p.renderBorderTop(sec))
+			if got := lipgloss.Width(line); got != w {
+				t.Fatalf("width %d, %s: border is %d wide: %q", w, sec.Title, got, line)
+			}
+			want := fmt.Sprintf(" %d %s", len(p.Groups[sec.Status]), ui.BoxTopRight)
+			if !strings.HasSuffix(line, want) {
+				t.Fatalf("width %d, %s: %q should end with the count %q", w, sec.Title, line, want)
+			}
+			if strings.ContainsAny(line, "⁰¹²³⁴⁵⁶⁷⁸⁹") {
+				t.Fatalf("superscript count left in %q", line)
+			}
 		}
 	}
 }
