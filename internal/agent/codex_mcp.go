@@ -205,3 +205,11 @@ func LaunchCodexMCP(ctx context.Context, opts LaunchCodexMCPOptions) (*CodexMCPH
 // ErrCodexUnavailable indicates that the codex binary is not on PATH and no
 // MG_AGENT_CMD wrapper stands in for it.
 var ErrCodexUnavailable = errors.New("agent: codex binary not on PATH")
+
+// CodexLaunchable reports why a codex session cannot start, or nil if it
+// can: the same resolution the launch uses (codex on PATH, or MG_AGENT_CMD
+// standing in for codex), so the UI never offers a start that would fail.
+func CodexLaunchable() error {
+	_, err := codexCommand()
+	return err
+}

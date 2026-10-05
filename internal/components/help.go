@@ -88,7 +88,7 @@ func allSections() []helpSection {
 				{key: "f", desc: "Toggle focus mode (my work + top priority)"},
 				{key: "a", desc: "Launch agent (tmux: split pane)"},
 				{key: "A", desc: "Kill active agent on issue"},
-				{key: "M", desc: "Toggle codex (MCP) live transcript"},
+				{key: "M", desc: "Codex transcript (enter starts, K stops a session)"},
 			},
 		},
 		{

@@ -1209,6 +1209,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case codexLaunchedMsg:
+		msg.sess.pumping = true
 		m.codexSessions[msg.issueID] = msg.sess
 		if m.isCodexShownFor(msg.issueID) {
 			m.codexTranscript.SetState(msg.sess.state)
@@ -1221,6 +1222,18 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmd, codexNextEventCmd(msg.issueID, msg.sess.handle.Session(), msg.sess.handle.ServerRequests()))
 
 	case codexLaunchErrorMsg:
+		// Mark the launch placeholder errored so the transcript stops
+		// claiming "running" for a session that never started (mg-ney).
+		if sess := m.codexSessions[msg.issueID]; sess != nil && sess.launching {
+			sess.launching = false
+			now := time.Now()
+			sess.state.Status = "errored"
+			sess.state.EndAt = now
+			sess.state.AppendEntry(views.CodexTranscriptEntry{At: now, Kind: "error", Title: "launch failed: " + msg.err.Error(), Error: true})
+			if m.isCodexShownFor(msg.issueID) {
+				m.codexTranscript.SetState(sess.state)
+			}
+		}
 		toast, cmd := components.ShowToast(
 			fmt.Sprintf("Codex MCP launch failed: %s", msg.err),
 			components.ToastError, toastDuration,
@@ -1251,6 +1264,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if sess == nil {
 			return m, nil
 		}
+		sess.pumping = false
+		if sess.closed {
+			// K already marked it canceled and toasted; this is the
+			// drained pump, which now makes a restart safe.
+			return m, nil
+		}
 		finalizeCodexSession(sess, msg.result)
 		if m.isCodexShownFor(msg.issueID) {
 			m.codexTranscript.SetState(sess.state)
@@ -1276,6 +1295,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if sess == nil || sess.handle == nil {
 			return m, nil
 		}
+		sess.pumping = true
 		return m, codexNextEventCmd(msg.issueID, msg.sess, sess.handle.ServerRequests())
 
 	case codexReplyErrorMsg:
@@ -1831,6 +1851,17 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			var cmd tea.Cmd
 			m.gasTown, cmd = m.gasTown.Update(msg)
 			return m, cmd
+		}
+	}
+
+	// The codex transcript starts and stops sessions explicitly; M only
+	// shows it (mg-ney).
+	if m.showCodex {
+		switch str {
+		case "enter":
+			return m.startCodexSession()
+		case "K":
+			return m.stopCodexSession()
 		}
 	}
 
