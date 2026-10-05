@@ -432,6 +432,14 @@ func (m Model) orchestratorAvailable() bool {
 	return m.gtEnv.Available || m.driver.Backend() == "gascity"
 }
 
+// needsOrchestrator answers an orchestrator-only key on a Beads-only
+// machine. It used to do nothing at all, which reads as broken (mg-j87).
+func (m Model) needsOrchestrator(key string) (tea.Model, tea.Cmd) {
+	toast, cmd := components.ShowToast(key+" needs an orchestrator (Gas Town or Gas City)", components.ToastInfo, toastDuration)
+	m.toast = toast
+	return m, cmd
+}
+
 // gasTownLoading reports whether the Gas Town panel is open and still waiting on
 // a status fetch — the window during which the loading spinner runs.
 //
@@ -743,6 +751,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	nm, ok := next.(Model)
 	if ok && nm.oscGuard != nil {
 		nm.oscGuard.SetTextEntry(nm.inTextEntry())
+	}
+	if ok {
+		// Orchestrator-only UI follows what this machine can do (mg-j87).
+		orch := nm.orchestratorAvailable()
+		nm.help.Orchestrated = orch
+		nm.detail.HideFormulas = !orch
+		next = nm
 	}
 	if !ok || !nm.captureWanted || nm.captureInFlight {
 		return next, cmd
@@ -1950,7 +1965,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "ctrl+g":
 		if !m.orchestratorAvailable() {
-			return m, nil
+			return m.needsOrchestrator("ctrl+g")
 		}
 		m.showGasTown = !m.showGasTown
 		if m.showGasTown {
@@ -1965,7 +1980,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "p":
 		if !m.orchestratorAvailable() {
-			return m, nil
+			return m.needsOrchestrator("p")
 		}
 		m.showProblems = !m.showProblems
 		if m.showProblems {
@@ -2156,7 +2171,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "s":
 		if !m.orchestratorAvailable() {
-			return m, nil
+			return m.needsOrchestrator("s")
 		}
 		// Multi-select: collect IDs for formula picking
 		if selected := m.parade.SelectedIssues(); len(selected) > 0 {
@@ -2187,8 +2202,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "n":
+		if !m.orchestratorAvailable() {
+			return m.needsOrchestrator("n")
+		}
 		issue := m.parade.SelectedIssue
-		if issue == nil || !m.orchestratorAvailable() {
+		if issue == nil {
 			return m, nil
 		}
 		agentName, active := m.activeAgents[issue.ID]
@@ -2258,7 +2276,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "C":
 		if !m.orchestratorAvailable() {
-			return m, nil
+			return m.needsOrchestrator("C")
 		}
 		var ids []string
 		var epicID string
@@ -2797,6 +2815,10 @@ func (m Model) executePaletteAction(action components.PaletteAction) (tea.Model,
 		return m.cascadeCloseIssue()
 	case components.ActionCycleLayout:
 		m.layoutPreset = (m.layoutPreset + 1) % layoutPresetCount
+		// The Gas Town layout is the orchestrator panel; skip it without one.
+		if m.layoutPreset == LayoutGasTown && !m.orchestratorAvailable() {
+			m.layoutPreset = (m.layoutPreset + 1) % layoutPresetCount
+		}
 		labels := [...]string{"Default", "Gas Town", "Wide"}
 		// Auto-toggle gastown panel for the GasTown preset
 		switch m.layoutPreset {

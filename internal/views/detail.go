@@ -16,6 +16,9 @@ import (
 
 // Detail renders the right-panel issue details with a scrollable viewport.
 type Detail struct {
+	// HideFormulas drops the FORMULA section: without an orchestrator a
+	// formula cannot run, so suggesting one is noise (mg-j87).
+	HideFormulas     bool
 	Issue            *data.Issue
 	AllIssues        []data.Issue
 	IssueMap         map[string]*data.Issue
@@ -360,7 +363,7 @@ func (d *Detail) renderContent() string {
 
 	// Formula recommendation (for open/in-progress issues): the judge's
 	// ranking of the installed formulas when it has one, else the heuristic.
-	if issue.Status != data.StatusClosed {
+	if issue.Status != data.StatusClosed && !d.HideFormulas {
 		recs := d.FormulaRecs
 		if d.FormulaIssueID != issue.ID || len(recs) == 0 {
 			recs = gastown.RecommendFormulas(*issue)

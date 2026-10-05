@@ -14,17 +14,47 @@ import (
 type Help struct {
 	Width  int
 	Height int
-	page   int // current page (0-indexed)
+	// Orchestrated shows the orchestrator pages and bindings; the app sets
+	// it from orchestratorAvailable().
+	Orchestrated bool
+	page         int // current page (0-indexed)
 }
 
 type helpBinding struct {
 	key  string
 	desc string
+	orch bool // only meaningful with an orchestrator
 }
 
 type helpSection struct {
 	title    string
 	bindings []helpBinding
+	orch     bool // only meaningful with an orchestrator (Gas Town or Gas City)
+}
+
+// sections is the help content for this environment: without an
+// orchestrator, the Gas Town and Problems pages and the sling bindings are
+// dropped rather than documenting keys that do nothing (mg-j87).
+func (h Help) sections() []helpSection {
+	all := allSections()
+	if h.Orchestrated {
+		return all
+	}
+	out := make([]helpSection, 0, len(all))
+	for _, s := range all {
+		if s.orch {
+			continue
+		}
+		kept := s.bindings[:0:0]
+		for _, b := range s.bindings {
+			if !b.orch {
+				kept = append(kept, b)
+			}
+		}
+		s.bindings = kept
+		out = append(out, s)
+	}
+	return out
 }
 
 // NewHelp creates a new help rendering component.
@@ -72,7 +102,7 @@ func allSections() []helpSection {
 				{key: "tab", desc: "Switch active pane"},
 				{key: "?", desc: "Toggle help"},
 				{key: ": / Ctrl+K", desc: "Open command palette"},
-				{key: "p", desc: "Toggle problems view (gt)"},
+				{key: "p", desc: "Toggle problems view", orch: true},
 				{key: "E", desc: "Toggle recent changes (bd events journal)"},
 				{key: "D", desc: "Toggle doctor diagnostics (bd doctor)"},
 			},
@@ -123,8 +153,8 @@ func allSections() []helpSection {
 				{key: "Shift+J/K", desc: "Select and move down/up"},
 				{key: "X", desc: "Clear all selections"},
 				{key: "1/2/3", desc: "Bulk set status on selected (no claiming)"},
-				{key: "a", desc: "Sling all selected issues"},
-				{key: "s", desc: "Pick formula and sling all selected"},
+				{key: "a", desc: "Sling all selected issues", orch: true},
+				{key: "s", desc: "Pick formula and sling all selected", orch: true},
 			},
 		},
 		{
@@ -150,6 +180,7 @@ func allSections() []helpSection {
 		},
 		{
 			title: "GAS TOWN (when gt detected)",
+			orch:  true,
 			bindings: []helpBinding{
 				{key: "ctrl+g", desc: "Toggle Gas Town panel"},
 				{key: "a", desc: "Sling issue to polecat (or tmux fallback)"},
@@ -160,6 +191,7 @@ func allSections() []helpSection {
 		},
 		{
 			title: "GAS TOWN PANEL (ctrl+g)",
+			orch:  true,
 			bindings: []helpBinding{
 				{key: "j / k", desc: "Navigate agents/convoys"},
 				{key: "g / G", desc: "Jump to first/last"},
@@ -179,6 +211,7 @@ func allSections() []helpSection {
 		},
 		{
 			title: "PROBLEMS (p)",
+			orch:  true,
 			bindings: []helpBinding{
 				{key: "j / k", desc: "Navigate problems"},
 				{key: "g / G", desc: "Jump to first/last"},
@@ -238,7 +271,7 @@ func (h Help) bodyLines() int {
 
 // pageCount returns the total number of pages.
 func (h Help) pageCount() int {
-	pages := paginateSections(allSections(), h.bodyLines())
+	pages := paginateSections(h.sections(), h.bodyLines())
 	return len(pages)
 }
 
@@ -252,7 +285,7 @@ func (h Help) View() string {
 		contentWidth = 44
 	}
 
-	sections := allSections()
+	sections := h.sections()
 	pages := paginateSections(sections, h.bodyLines())
 
 	// Clamp page
@@ -306,7 +339,7 @@ func (h Help) View() string {
 func (h Help) renderSections(width int, sections []helpSection) string {
 	blocks := make([]string, 0, len(sections))
 	for i := range sections {
-		blocks = append(blocks, h.renderSection(width, sections[i], h.maxKeyWidth(allSections())))
+		blocks = append(blocks, h.renderSection(width, sections[i], h.maxKeyWidth(h.sections())))
 	}
 	return strings.Join(blocks, "\n\n")
 }

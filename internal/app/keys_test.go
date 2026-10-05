@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -497,16 +498,36 @@ func TestKeySGasTownFetchesFormulas(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 22. 's' key without Gas Town is a no-op
+// 22. 's' key without an orchestrator opens nothing, and says why (mg-j87)
 // ---------------------------------------------------------------------------
 
-func TestKeySNoGasTownNoop(t *testing.T) {
+func TestKeySNoGasTownExplains(t *testing.T) {
 	got := setupModel(t)
 	got.gtEnv.Available = false
 
-	_, cmd := got.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
-	if cmd != nil {
-		t.Fatal("expected nil cmd from pressing s without Gas Town")
+	model, _ := got.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
+	got = model.(Model)
+	if got.formulaTarget != "" {
+		t.Fatal("s must not open the formula picker without an orchestrator")
+	}
+	if !strings.Contains(got.toast.Message, "needs an orchestrator") {
+		t.Fatalf("toast = %q, want it to say s needs an orchestrator", got.toast.Message)
+	}
+}
+
+func TestBeadsOnlyHidesOrchestratorUI(t *testing.T) {
+	got := setupModel(t)
+	got.gtEnv.Available = false
+	model, _ := got.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	got = model.(Model)
+	if !got.detail.HideFormulas || got.help.Orchestrated {
+		t.Fatalf("HideFormulas %v Orchestrated %v, want formulas and orchestrator help hidden", got.detail.HideFormulas, got.help.Orchestrated)
+	}
+	for _, key := range []tea.KeyPressMsg{{Code: 'g', Mod: tea.ModCtrl}, {Code: 'p', Text: "p"}, {Code: 'C', Text: "C"}} {
+		model, _ := got.Update(key)
+		if m := model.(Model); m.showGasTown || m.showProblems || !strings.Contains(m.toast.Message, "needs an orchestrator") {
+			t.Errorf("%s: want no panel and an explaining toast, got toast %q", key.String(), m.toast.Message)
+		}
 	}
 }
 

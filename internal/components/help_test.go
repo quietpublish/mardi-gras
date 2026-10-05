@@ -162,3 +162,27 @@ func TestHelpListsEditingKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestHelpSectionsFollowOrchestrator(t *testing.T) {
+	// Beads-only users got two of five help pages about keys that do
+	// nothing for them (mg-j87).
+	has := func(h Help, title, key string) (sec, bind bool) {
+		for _, s := range h.sections() {
+			if strings.HasPrefix(s.title, title) {
+				sec = true
+			}
+			for _, b := range s.bindings {
+				if b.key == key {
+					bind = true
+				}
+			}
+		}
+		return
+	}
+	if sec, bind := has(Help{}, "GAS TOWN", "p"); sec || bind {
+		t.Fatalf("without an orchestrator: GAS TOWN section %v, p binding %v; want neither", sec, bind)
+	}
+	if sec, bind := has(Help{Orchestrated: true}, "GAS TOWN", "p"); !sec || !bind {
+		t.Fatalf("with an orchestrator: GAS TOWN section %v, p binding %v; want both", sec, bind)
+	}
+}
