@@ -186,3 +186,19 @@ func TestHelpSectionsFollowOrchestrator(t *testing.T) {
 		t.Fatalf("with an orchestrator: GAS TOWN section %v, p binding %v; want both", sec, bind)
 	}
 }
+
+func TestHelpSectionsNameGasCity(t *testing.T) {
+	// On the Gas City backend the panel help said GAS TOWN (mg-enb).
+	h := Help{Orchestrated: true, OrchestratorName: "Gas City"}
+	var titles []string
+	for _, s := range h.sections() {
+		titles = append(titles, s.title)
+	}
+	joined := strings.Join(titles, "|")
+	if strings.Contains(joined, "GAS TOWN") || !strings.Contains(joined, "GAS CITY PANEL (ctrl+g)") {
+		t.Fatalf("titles = %v, want GAS CITY and no GAS TOWN", titles)
+	}
+	if strings.Contains(strings.Join([]string{allSections()[0].title}, ""), "GAS CITY") {
+		t.Fatal("retitling must not leak into allSections()")
+	}
+}

@@ -755,7 +755,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if ok {
 		// Orchestrator-only UI follows what this machine can do (mg-j87).
 		orch := nm.orchestratorAvailable()
+		name := gastown.BackendName(nm.driver.Backend())
 		nm.help.Orchestrated = orch
+		nm.help.OrchestratorName = name
+		nm.gasTown.SetBackendName(name)
 		nm.detail.HideFormulas = !orch
 		next = nm
 	}
@@ -2700,7 +2703,7 @@ func (m Model) buildPaletteCommands() []components.PaletteCommand {
 
 	if m.orchestratorAvailable() {
 		cmds = append(cmds,
-			components.PaletteCommand{Name: "Toggle Gas Town", Desc: "Show/hide Gas Town panel", Key: "^g", Action: components.ActionToggleGasTown},
+			components.PaletteCommand{Name: "Toggle " + gastown.BackendName(m.driver.Backend()), Desc: "Show/hide the " + gastown.BackendName(m.driver.Backend()) + " panel", Key: "^g", Action: components.ActionToggleGasTown},
 			components.PaletteCommand{Name: "Sling with formula", Desc: "Pick formula and sling to polecat", Key: "s", Action: components.ActionSlingFormula},
 			components.PaletteCommand{Name: "Nudge agent", Desc: "Nudge agent with message", Key: "n", Action: components.ActionNudgeAgent},
 			components.PaletteCommand{Name: "Create & assign to crew", Desc: "Create issue and hook to crew member", Key: "", Action: components.ActionAssign},
@@ -2819,7 +2822,7 @@ func (m Model) executePaletteAction(action components.PaletteAction) (tea.Model,
 		if m.layoutPreset == LayoutGasTown && !m.orchestratorAvailable() {
 			m.layoutPreset = (m.layoutPreset + 1) % layoutPresetCount
 		}
-		labels := [...]string{"Default", "Gas Town", "Wide"}
+		labels := [...]string{"Default", gastown.BackendName(m.driver.Backend()), "Wide"}
 		// Auto-toggle gastown panel for the GasTown preset
 		switch m.layoutPreset {
 		case LayoutGasTown:
@@ -3808,6 +3811,7 @@ func (m Model) View() tea.View {
 		bottomBar = inputBarStyle.Render(line)
 	default:
 		footer := components.NewFooter(m.width, m.activPane == PaneDetail, m.orchestratorAvailable())
+		footer.NameOrchestrator(gastown.BackendName(m.driver.Backend()))
 		footer.Focus = m.focusMode
 		footer.FocusJev = m.focusMode && len(m.parade.Ranks) > 0
 		footer.SourcePath = m.watchPath

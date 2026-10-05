@@ -17,7 +17,10 @@ type Help struct {
 	// Orchestrated shows the orchestrator pages and bindings; the app sets
 	// it from orchestratorAvailable().
 	Orchestrated bool
-	page         int // current page (0-indexed)
+	// OrchestratorName names the backend in the orchestrator sections
+	// ("Gas City" retitles them); "" keeps "Gas Town".
+	OrchestratorName string
+	page             int // current page (0-indexed)
 }
 
 type helpBinding struct {
@@ -38,6 +41,20 @@ type helpSection struct {
 func (h Help) sections() []helpSection {
 	all := allSections()
 	if h.Orchestrated {
+		if h.OrchestratorName == "" || h.OrchestratorName == "Gas Town" {
+			return all
+		}
+		// Retitle for the backend in use, e.g. GAS CITY PANEL (mg-enb).
+		upper := strings.ToUpper(h.OrchestratorName)
+		for i := range all {
+			if !all[i].orch {
+				continue
+			}
+			all[i].title = strings.Replace(all[i].title, "GAS TOWN", upper, 1)
+			for j := range all[i].bindings {
+				all[i].bindings[j].desc = strings.Replace(all[i].bindings[j].desc, "Gas Town", h.OrchestratorName, 1)
+			}
+		}
 		return all
 	}
 	out := make([]helpSection, 0, len(all))
@@ -179,7 +196,7 @@ func allSections() []helpSection {
 			},
 		},
 		{
-			title: "GAS TOWN (when gt detected)",
+			title: "GAS TOWN",
 			orch:  true,
 			bindings: []helpBinding{
 				{key: "ctrl+g", desc: "Toggle Gas Town panel"},

@@ -260,6 +260,16 @@ func insertBefore(bindings []FooterBinding, key string, extra ...FooterBinding) 
 	return append(bindings, extra...)
 }
 
+// NameOrchestrator labels the ^g binding with the backend in use, e.g.
+// "gas city" (mg-enb).
+func (f *Footer) NameOrchestrator(name string) {
+	for i, b := range f.Bindings {
+		if b.Key == "^g" {
+			f.Bindings[i].Desc = strings.ToLower(name)
+		}
+	}
+}
+
 // BulkFooter renders the footer bar shown during multi-select.
 func BulkFooter(width, count int, hasGasTown bool) string {
 	label := ui.FooterKey.Render(fmt.Sprintf(" %d selected: ", count))
