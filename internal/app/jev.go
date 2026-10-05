@@ -137,6 +137,11 @@ func (m Model) handleJevProbe(msg jevProbeMsg) (tea.Model, tea.Cmd) {
 		if cmd := m.scheduleJev(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+		// The issue selected at startup never changed selection, so it
+		// never got a formula pick (mg-xge.5).
+		if cmd := m.scheduleFormulaSuggest(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	}
 	return m, tea.Batch(cmds...)
 }

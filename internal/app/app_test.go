@@ -129,6 +129,9 @@ func TestFileChangedMsgQueuesDetailRefetchesForPendingSelection(t *testing.T) {
 	got.gtEnv.Available = true
 	got.gtPollInFlight = true     // suppress gt status polling
 	got.patrolScanInFlight = true // suppress patrol scan polling
+	// Suppress the formula-list fetch too: whether the first resize started
+	// one depends on whether the host has an orchestrator (gc on PATH).
+	got.jevFormula.fetching = true
 	got.activeAgents["open-2"] = "Toast"
 	got.detail.CommentsIssueID = "open-1"
 	got.detail.Comments = []gastown.Comment{{Author: "alpha", Body: "cached"}}

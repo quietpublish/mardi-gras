@@ -61,6 +61,9 @@ func newFormulaModel(t *testing.T, judge jev.Evaluator, drv *formulaDriver) Mode
 	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = model.(Model)
+	// The first resize starts a formula-list fetch when the host has an
+	// orchestrator; its Cmd is dropped here, so forget it.
+	m.jevFormula = jevFormula{}
 	m.jev.client = judge
 	m.jev.now = time.Now
 	m.gtEnv.Available = true
@@ -287,5 +290,20 @@ func TestFormulaSuggestEdgeCaseClosedIssue(t *testing.T) {
 	}
 	if m.scheduleFormulaSuggest() != nil || drv.calls != 0 {
 		t.Fatal("closed issues get no formula")
+	}
+}
+
+func TestJevProbeAsksAboutStartupSelection(t *testing.T) {
+	// The issue selected at startup never changed selection, so it never got
+	// a formula pick until you moved off it and back (mg-xge.5).
+	drv := &formulaDriver{formulas: installed}
+	m := newFormulaModel(t, choiceJudge(map[string]float64{"shiny": 0.9}), drv)
+	_, cmd := m.Update(jevProbeMsg{})
+	if cmd == nil {
+		t.Fatal("a successful probe should start the formula pick")
+	}
+	runBatch(cmd)
+	if drv.calls == 0 {
+		t.Fatal("the probe's command should fetch the installed formulas")
 	}
 }

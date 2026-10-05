@@ -1270,3 +1270,20 @@ func TestRenderFocusVerdictFitsDetailPane(t *testing.T) {
 		t.Fatalf("verdict %q (%d runes) does not fit", got, len([]rune(got)))
 	}
 }
+
+func TestFormulaHeuristicOnlyInstalled(t *testing.T) {
+	// The heuristic named formulas the town did not have (mg-xge.5).
+	issues := []data.Issue{{ID: "bd-001", Title: "Add authentication middleware", Status: data.StatusOpen,
+		Priority: data.PriorityHigh, IssueType: data.TypeFeature, CreatedAt: time.Now()}}
+	d := NewDetail(80, 40, issues)
+	d.SetIssue(&issues[0])
+	d.SetInstalledFormulas([]string{"shiny", "hotfix"})
+	content := ansi.Strip(d.renderContent())
+	if strings.Contains(content, "security-audit") || strings.Contains(content, "rule-of-five") {
+		t.Fatalf("suggested an uninstalled formula:\n%s", content)
+	}
+	d.SetInstalledFormulas([]string{"something-else"})
+	if strings.Contains(ansi.Strip(d.renderContent()), "FORMULA") {
+		t.Fatal("with nothing installed to suggest, the section should not show")
+	}
+}

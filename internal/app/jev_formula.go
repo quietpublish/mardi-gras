@@ -97,15 +97,7 @@ func (m *Model) scheduleFormulaSuggest() tea.Cmd {
 		return nil
 	}
 	if len(f.formulas) == 0 || m.jev.now().Sub(f.fetchedAt) > formulaListTTL {
-		if f.fetching {
-			return nil
-		}
-		f.fetching = true
-		driver := m.driver
-		return func() tea.Msg {
-			formulas, err := driver.Formulas(context.Background())
-			return formulaCacheMsg{formulas: formulas, err: err}
-		}
+		return m.maybeFetchFormulas()
 	}
 	if f.asking[sel.ID] {
 		return nil
@@ -113,6 +105,26 @@ func (m *Model) scheduleFormulaSuggest() tea.Cmd {
 	f.gen++
 	gen, id := f.gen, sel.ID
 	return tea.Tick(formulaDebounce, func(time.Time) tea.Msg { return formulaAskMsg{issueID: id, gen: gen} })
+}
+
+// maybeFetchFormulas fetches the installed formula list when an
+// orchestrator can run formulas and the list is missing or stale. The list
+// is fetched with Jev off too: it keeps the heuristic suggestion to formulas
+// that exist (mg-xge.5).
+func (m *Model) maybeFetchFormulas() tea.Cmd {
+	f := &m.jevFormula
+	if !m.orchestratorAvailable() || f.fetching {
+		return nil
+	}
+	if len(f.formulas) > 0 && m.jev.now().Sub(f.fetchedAt) <= formulaListTTL {
+		return nil
+	}
+	f.fetching = true
+	driver := m.driver
+	return func() tea.Msg {
+		formulas, err := driver.Formulas(context.Background())
+		return formulaCacheMsg{formulas: formulas, err: err}
+	}
 }
 
 // formulaHash keys a ranking by what it was computed from: the issue as
@@ -123,8 +135,9 @@ func (m Model) formulaHash(iss data.Issue) string {
 	return hex.EncodeToString(sum[:8])
 }
 
-// handleFormulaCache stores the installed formulas and asks about the
-// selected issue. A failed fetch is retried on the next selection change.
+// handleFormulaCache stores the installed formulas, hands them to the detail
+// panel's heuristic, and asks about the selected issue. A failed fetch is
+// retried on the next selection change.
 func (m Model) handleFormulaCache(msg formulaCacheMsg) (tea.Model, tea.Cmd) {
 	m.jevFormula.fetching = false
 	if msg.err != nil || len(msg.formulas) == 0 {
@@ -132,6 +145,7 @@ func (m Model) handleFormulaCache(msg formulaCacheMsg) (tea.Model, tea.Cmd) {
 	}
 	m.jevFormula.formulas = msg.formulas
 	m.jevFormula.fetchedAt = m.jev.now()
+	m.detail.SetInstalledFormulas(msg.formulas)
 	cmd := m.scheduleFormulaSuggest() // before the return copies m
 	return m, cmd
 }
