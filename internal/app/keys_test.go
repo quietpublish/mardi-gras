@@ -771,3 +771,42 @@ func TestEditWritesOnlyChangedFields(t *testing.T) {
 		t.Fatalf("bd calls:\n%s\nwant:\n%s", got, want)
 	}
 }
+
+func TestPromptsSuggestFromTheBacklog(t *testing.T) {
+	// The assign, label and link prompts were bare inputs: a label or an ID
+	// had to be typed from memory (mg-6c8).
+	issues := []data.Issue{testIssue("mg-1", data.StatusOpen), testIssue("mg-2", data.StatusOpen)}
+	issues[0].Labels = []string{"frontend"}
+	issues[0].Assignee = "alice"
+	issues[1].Labels = []string{"backend", "frontend"}
+	issues[1].Title = "Fix the login loop"
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
+	model, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 30})
+	m = model.(Model)
+
+	if got := m.promptSuggestions("label", "mg-1"); strings.Join(got, ",") != "backend" {
+		t.Fatalf("label suggestions = %v, want the labels mg-1 lacks", got)
+	}
+	if got := m.promptSuggestions("assign", "mg-2"); strings.Join(got, ",") != "alice" {
+		t.Fatalf("assign suggestions = %v", got)
+	}
+	if got := m.promptSuggestions("link", "mg-1"); strings.Join(got, ",") != "mg-2" {
+		t.Fatalf("link suggestions = %v, want other issues", got)
+	}
+
+	m.startQuickAction("label", "mg-1", "label> ", "Label name...")
+	for _, k := range []tea.KeyPressMsg{{Code: 'b', Text: "b"}, {Code: tea.KeyTab}} {
+		model, _ := m.Update(k)
+		m = model.(Model)
+	}
+	if m.qaInput.Value() != "backend" {
+		t.Fatalf("tab should complete the label, got %q", m.qaInput.Value())
+	}
+
+	m.startQuickAction("link", "mg-1", "link> ", "Issue ID...")
+	model, _ = m.Update(tea.KeyPressMsg{Code: 'm', Text: "m"})
+	m = model.(Model)
+	if bar := m.promptBar(); !strings.Contains(bar, "→ Fix the login loop") || !strings.Contains(bar, "tab complete") {
+		t.Fatalf("link bar = %q, want the target's title and the hints", bar)
+	}
+}

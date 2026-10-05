@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -548,7 +550,77 @@ func (m *Model) startQuickAction(mode, issueID, prompt, placeholder string) tea.
 	m.qaInput.Placeholder = placeholder
 	m.qaInput.SetWidth(50)
 	m.qaInput.Focus()
+	if sugs := m.promptSuggestions(mode, issueID); len(sugs) > 0 {
+		m.qaInput.ShowSuggestions = true
+		m.qaInput.SetSuggestions(sugs)
+	}
 	return textinput.Blink
+}
+
+// promptSuggestions are the completions a quick-action prompt offers: the
+// people, labels and issue IDs already in the backlog. The prompts used to
+// be bare inputs, so a label or an ID had to be typed from memory (mg-6c8).
+func (m Model) promptSuggestions(mode, issueID string) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(v string) {
+		if v = strings.TrimSpace(v); v != "" && !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	var current *data.Issue
+	for i := range m.issues {
+		if m.issues[i].ID == issueID {
+			current = &m.issues[i]
+		}
+	}
+	for _, iss := range m.issues {
+		switch mode {
+		case "assign":
+			add(iss.Assignee)
+			add(iss.Owner)
+		case "label":
+			for _, l := range iss.Labels {
+				if current == nil || !slices.Contains(current.Labels, l) {
+					add(l)
+				}
+			}
+		case "link":
+			if iss.ID != issueID {
+				add(iss.ID)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// promptBar renders a quick-action prompt with its key hints, and for link
+// the title of the issue it would link to.
+func (m Model) promptBar() string {
+	line := m.qaInput.View()
+	if m.qaMode == "link" {
+		target := m.qaInput.CurrentSuggestion()
+		if target == "" {
+			target = strings.TrimSpace(m.qaInput.Value())
+		}
+		for _, iss := range m.issues {
+			if iss.ID == target {
+				line += lipgloss.NewStyle().Foreground(ui.Dim).Render("  → " + iss.Title)
+				break
+			}
+		}
+	}
+	hint := "enter save · esc cancel"
+	if len(m.qaInput.AvailableSuggestions()) > 0 {
+		hint = "tab complete · ↓ next · " + hint
+	}
+	chip := lipgloss.NewStyle().Foreground(ui.Dim).Render(hint)
+	if gap := m.width - lipgloss.Width(line) - lipgloss.Width(chip) - 3; gap > 0 {
+		line += strings.Repeat(" ", gap) + chip
+	}
+	return line
 }
 
 // agentFinishedMsg is sent when a launched claude session exits.
@@ -3883,7 +3955,7 @@ func (m Model) View() tea.View {
 	case m.slingTargeting:
 		bottomBar = inputBarStyle.Render(m.slingTargetInput.View())
 	case m.qaMode != "":
-		bottomBar = inputBarStyle.Render(m.qaInput.View())
+		bottomBar = inputBarStyle.Render(m.promptBar())
 	case m.mailComposing:
 		bottomBar = inputBarStyle.Render(m.mailComposeInput.View())
 	case m.mailReplying:
