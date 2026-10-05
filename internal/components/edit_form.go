@@ -23,8 +23,9 @@ type EditFormResult struct {
 type EditForm struct {
 	issueID     string
 	titleInput  textinput.Model
-	prioIdx     int // selected index in priorityOptions
-	activeField int // 0=title, 1=priority
+	prioIdx     int    // selected index in priorityOptions
+	activeField int    // 0=title, 1=priority
+	err         string // shown under the title after a rejected save
 	width       int
 	height      int
 }
@@ -87,23 +88,21 @@ func (ef EditForm) Update(msg tea.Msg) (EditForm, tea.Cmd) {
 		return ef, nil
 
 	case "enter":
-		if ef.activeField == 1 {
-			title := ef.titleInput.Value()
-			if title == "" {
-				return ef, nil
-			}
-			return ef, func() tea.Msg {
-				return EditFormResult{
-					IssueID:  ef.issueID,
-					Title:    title,
-					Priority: priorityOptions[ef.prioIdx].Value,
-				}
+		// Enter saves from either field, as the hint says (mg-vtc).
+		title := strings.TrimSpace(ef.titleInput.Value())
+		if title == "" {
+			ef.err = "Title is required"
+			ef.activeField = 0
+			ef.titleInput.Focus()
+			return ef, nil
+		}
+		return ef, func() tea.Msg {
+			return EditFormResult{
+				IssueID:  ef.issueID,
+				Title:    title,
+				Priority: priorityOptions[ef.prioIdx].Value,
 			}
 		}
-		// On title field, advance to priority
-		ef.activeField = 1
-		ef.titleInput.Blur()
-		return ef, nil
 
 	case "j", "down":
 		if ef.activeField == 1 {
@@ -125,6 +124,9 @@ func (ef EditForm) Update(msg tea.Msg) (EditForm, tea.Cmd) {
 	if ef.activeField == 0 {
 		var cmd tea.Cmd
 		ef.titleInput, cmd = ef.titleInput.Update(msg)
+		if strings.TrimSpace(ef.titleInput.Value()) != "" {
+			ef.err = ""
+		}
 		return ef, cmd
 	}
 
@@ -154,6 +156,9 @@ func (ef EditForm) View() string {
 	}
 	lines = append(lines, label)
 	lines = append(lines, "  "+ef.titleInput.View())
+	if ef.err != "" {
+		lines = append(lines, "  "+lipgloss.NewStyle().Foreground(ui.StatusStalled).Render(ef.err))
+	}
 	lines = append(lines, "")
 
 	// Priority field

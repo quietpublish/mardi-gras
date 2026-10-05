@@ -175,3 +175,27 @@ func TestEditFormViewShowsEditHeader(t *testing.T) {
 		t.Fatal("view should contain EDIT in header")
 	}
 }
+
+func TestEditFormEnterOnTitleSaves(t *testing.T) {
+	// Enter on the title used to move to priority; the hint says it saves
+	// (mg-vtc).
+	issue := data.Issue{ID: "mg-1", Title: "Old title", Priority: data.PriorityMedium}
+	ef := NewEditForm(80, 24, &issue)
+	_, cmd := ef.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("enter on the title should save")
+	}
+	if res, ok := cmd().(EditFormResult); !ok || res.Title != "Old title" || res.IssueID != "mg-1" {
+		t.Fatalf("result = %+v", res)
+	}
+}
+
+func TestEditFormEnterEdgeCaseEmptyTitleSaysWhy(t *testing.T) {
+	issue := data.Issue{ID: "mg-1", Title: "x", Priority: data.PriorityMedium}
+	ef := NewEditForm(80, 24, &issue)
+	ef, _ = ef.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	ef, cmd := ef.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd != nil || !strings.Contains(ef.View(), "Title is required") {
+		t.Fatal("an empty title should not save and should say why")
+	}
+}
