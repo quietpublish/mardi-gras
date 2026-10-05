@@ -49,7 +49,7 @@ Keys marked **(orch)** need a live orchestrator — Gas Town (`gt`) or Gas City.
 | `b`           | Copy branch name to clipboard            |
 | `B`           | Create + checkout git branch             |
 | `N`           | Create new issue                         |
-| `e`           | Edit selected issue (title, priority)    |
+| `e`           | Edit selected issue (title, type, priority, status, description; `enter` or `ctrl+s` saves, `enter` in the description adds a line) |
 | `r`           | Add comment to selected issue            |
 | `y`           | Assign selected issue                    |
 | `t`           | Add label to selected issue              |

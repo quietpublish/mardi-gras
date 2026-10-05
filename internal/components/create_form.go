@@ -58,6 +58,11 @@ type CreateForm struct {
 	height      int
 }
 
+// inputWidth is a form input's width for a form of the given content width:
+// the 2-column indent and the cursor cell come off. Forms used to be built
+// with the terminal width, so long values overran the box and re-wrapped.
+func inputWidth(width int) int { return max(width-4, 10) }
+
 // NewCreateForm creates a new issue creation form (without Gas Town crew field).
 func NewCreateForm(width, height int) CreateForm {
 	return newCreateForm(width, height, false)
@@ -72,13 +77,13 @@ func newCreateForm(width, height int, gtAvailable bool) CreateForm {
 	ti := textinput.New()
 	ti.Prompt = ""
 	ti.Placeholder = "Issue title..."
-	ti.SetWidth(width - 16)
+	ti.SetWidth(inputWidth(width))
 	ti.Focus()
 
 	ci := textinput.New()
 	ci.Prompt = ""
 	ci.Placeholder = "Crew member name (optional)..."
-	ci.SetWidth(width - 16)
+	ci.SetWidth(inputWidth(width))
 
 	fieldCount := 3
 	if gtAvailable {

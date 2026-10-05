@@ -112,6 +112,23 @@ func UpdateTitle(issueID, title string) error {
 	return execWithTimeout(timeoutShort, "bd", "update", issueID, "--title="+title)
 }
 
+// SetType runs `bd update <id> --type=<type>` to change an issue's type.
+func SetType(issueID string, issueType IssueType) error {
+	if err := ValidateIssueID(issueID); err != nil {
+		return err
+	}
+	return execWithTimeout(timeoutShort, "bd", "update", issueID, "--type="+sanitizeText(string(issueType), maxTextLen))
+}
+
+// UpdateDescription runs `bd update <id> --description=<text>` to replace an
+// issue's description; an empty one clears it.
+func UpdateDescription(issueID, description string) error {
+	if err := ValidateIssueID(issueID); err != nil {
+		return err
+	}
+	return execWithTimeout(timeoutShort, "bd", "update", issueID, "--description="+sanitizeText(description, maxTextLen))
+}
+
 // AddComment runs `bd comments add <id> -- <body>` to add a comment to an issue.
 func AddComment(issueID, body string) error {
 	if err := ValidateIssueID(issueID); err != nil {

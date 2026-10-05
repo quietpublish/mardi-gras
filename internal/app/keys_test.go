@@ -753,3 +753,21 @@ func TestProblemJumpSelectsIssue(t *testing.T) {
 		t.Fatalf("problems %v selected %v; want Problems closed and open-2 selected", got.showProblems, got.parade.SelectedIssue)
 	}
 }
+
+func TestEditWritesOnlyChangedFields(t *testing.T) {
+	// One bd update per changed field, nothing for the rest (mg-nd2).
+	bin, log := t.TempDir(), filepath.Join(t.TempDir(), "bd.log")
+	script := "#!/bin/sh\necho \"$@\" >> " + log + "\n"
+	if err := os.WriteFile(filepath.Join(bin, "bd"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+	msg := editIssueCmd(components.EditFormResult{IssueID: "mg-1", Type: "bug", Description: "two\nlines", Changed: []string{"type", "description"}})()
+	if res := msg.(mutateResultMsg); res.err != nil || res.action != "updated type, description" {
+		t.Fatalf("result = %+v", res)
+	}
+	got, _ := os.ReadFile(log)
+	if want := "update mg-1 --type=bug\nupdate mg-1 --description=two\nlines\n"; string(got) != want {
+		t.Fatalf("bd calls:\n%s\nwant:\n%s", got, want)
+	}
+}
