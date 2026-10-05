@@ -2348,12 +2348,15 @@ func (m Model) quickAction(status data.Status, label string) (tea.Model, tea.Cmd
 	issueID := issue.ID
 	return m, func() tea.Msg {
 		var err error
+		action := label
 		if status == data.StatusInProgress {
+			// A claim also takes the assignee; say so (mg-83g).
 			err = data.ClaimIssue(issueID)
+			action = "claimed · " + label
 		} else {
 			err = data.SetStatus(issueID, status)
 		}
-		return mutateResultMsg{issueID: issueID, action: label, err: err}
+		return mutateResultMsg{issueID: issueID, action: action, err: err}
 	}
 }
 
@@ -2571,9 +2574,9 @@ func createBranchCmd(ctx context.Context, projectDir, branch string) *exec.Cmd {
 // buildPaletteCommands returns the context-aware list of palette commands.
 func (m Model) buildPaletteCommands() []components.PaletteCommand {
 	cmds := []components.PaletteCommand{
-		{Name: "Set status: in_progress", Desc: "Mark issue as rolling", Key: "1", Action: components.ActionSetInProgress},
+		{Name: "Claim issue", Desc: "Assign to you and mark in_progress (bd update --claim)", Key: "1", Action: components.ActionSetInProgress},
 		{Name: "Set status: open", Desc: "Mark issue as lined up", Key: "2", Action: components.ActionSetOpen},
-		{Name: "Close issue", Desc: "Mark issue as closed", Key: "3", Action: components.ActionCloseIssue},
+		{Name: "Close + claim next", Desc: "Close, then claim the top ready issue (bd close --claim-next)", Key: "3", Action: components.ActionCloseIssue},
 		{Name: "Set priority: P1 high", Desc: "Urgent work", Key: "!", Action: components.ActionSetPriorityHigh},
 		{Name: "Set priority: P2 medium", Desc: "Normal priority", Key: "@", Action: components.ActionSetPriorityMedium},
 		{Name: "Set priority: P3 low", Desc: "Can wait", Key: "#", Action: components.ActionSetPriorityLow},

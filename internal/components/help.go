@@ -93,9 +93,9 @@ func allSections() []helpSection {
 		{
 			title: "QUICK ACTIONS",
 			bindings: []helpBinding{
-				{key: "1", desc: "Set status: in_progress"},
+				{key: "1", desc: "Claim: assign to you + in_progress"},
 				{key: "2", desc: "Set status: open"},
-				{key: "3", desc: "Close issue"},
+				{key: "3", desc: "Close, then claim the next ready issue"},
 				{key: "!", desc: "Set priority: P1 (high)"},
 				{key: "@", desc: "Set priority: P2 (medium)"},
 				{key: "#", desc: "Set priority: P3 (low)"},
@@ -111,7 +111,7 @@ func allSections() []helpSection {
 				{key: "space / x", desc: "Toggle select on cursor issue"},
 				{key: "Shift+J/K", desc: "Select and move down/up"},
 				{key: "X", desc: "Clear all selections"},
-				{key: "1/2/3", desc: "Bulk set status on selected"},
+				{key: "1/2/3", desc: "Bulk set status on selected (no claiming)"},
 				{key: "a", desc: "Sling all selected issues"},
 				{key: "s", desc: "Pick formula and sling all selected"},
 			},

@@ -44,7 +44,7 @@ Keys marked **(orch)** need a live orchestrator — Gas Town (`gt`) or Gas City.
 
 | Key           | Action                                   |
 | ------------- | ---------------------------------------- |
-| `1` / `2` / `3` | Set status: in_progress / open / closed |
+| `1` / `2` / `3` | Claim (assign to you + in_progress) / set open / close + claim next |
 | `!` / `@` / `#` / `$` | Set priority: P1 / P2 / P3 / P4 |
 | `b`           | Copy branch name to clipboard            |
 | `B`           | Create + checkout git branch             |
@@ -67,7 +67,7 @@ Keys marked **(orch)** need a live orchestrator — Gas Town (`gt`) or Gas City.
 | `space` / `x` | Toggle select on cursor issue      |
 | `Shift+J/K`   | Select and move down/up            |
 | `X`           | Clear all selections                |
-| `1/2/3`       | Bulk set status on selected         |
+| `1/2/3`       | Bulk set status on selected (no claiming) |
 | `!/@/#/$`     | Bulk set priority on selected       |
 | `a`           | Sling all selected issues           |
 | `s`           | Pick formula and sling all selected |
