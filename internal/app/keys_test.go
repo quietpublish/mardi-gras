@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/matt-wright86/mardi-gras/internal/views"
 	"os"
 	"path/filepath"
 	"strings"
@@ -740,5 +741,15 @@ func TestMutateResultWarnIsNotFailure(t *testing.T) {
 	msg := model.(Model).toast.Message
 	if strings.HasPrefix(msg, "Failed") || !strings.Contains(msg, "open-1 → closed (couldn't read") {
 		t.Fatalf("toast = %q", msg)
+	}
+}
+
+func TestProblemJumpSelectsIssue(t *testing.T) {
+	got := setupModel(t)
+	got.showProblems = true
+	model, _ := got.Update(views.ProblemJumpMsg{IssueID: "open-2"})
+	got = model.(Model)
+	if got.showProblems || got.parade.SelectedIssue == nil || got.parade.SelectedIssue.ID != "open-2" {
+		t.Fatalf("problems %v selected %v; want Problems closed and open-2 selected", got.showProblems, got.parade.SelectedIssue)
 	}
 }

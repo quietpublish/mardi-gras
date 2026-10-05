@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"github.com/charmbracelet/x/ansi"
 	"image/color"
 	"strings"
 	"time"
@@ -734,7 +735,9 @@ func renderTownHeader(name string, env gastown.Env, status *gastown.TownStatus) 
 
 	summary := fmt.Sprintf("%d/%d agents working", working, total)
 	if mail > 0 {
-		summary += fmt.Sprintf("  %s %d unread", ui.SymMail, mail)
+		// Town-wide; the MAIL section below is your inbox. Unlabelled, the
+		// two counts (4 vs 2) read as a contradiction (mg-6ia).
+		summary += fmt.Sprintf("  %s %d unread across agents", ui.SymMail, mail)
 	}
 	lines = append(lines, "")
 	lines = append(lines, ui.GasTownValue.Render(summary))
@@ -771,6 +774,15 @@ func (g *GasTown) renderAgentRoster(width int) string {
 	}
 	showWork := width >= nameW+roleW+stateW+9+minWork
 	showTag := width >= 80 // bracketed session tag is the first thing to go
+
+	// The name column fits the widest "name [tag]", so a runtime tag such
+	// as [claude/haiku] sits inside it instead of shoving the row right
+	// (mg-6ia).
+	for _, a := range agents {
+		if w := ansi.StringWidth(agentNameLabel(a, showTag)); w > nameW {
+			nameW = min(w, 30)
+		}
+	}
 
 	// Header row (extra space for heat indicator column)
 	headerStyle := lipgloss.NewStyle().Foreground(ui.Dim).Bold(true)
@@ -824,37 +836,28 @@ func (g *GasTown) renderAgentRoster(width int) string {
 				stateLabel += " " + formatDuration(time.Since(started))
 			}
 		}
-		stateLabel = truncateGT(stateLabel, stateW)
-		stateStr := stateStyle.Render(fmt.Sprintf("%-*s", stateW, stateLabel))
+		// Cells are padded by display width: an emoji state symbol (🔧) is
+		// two columns but one rune, and %-*s misaligned the row (mg-6ia).
+		stateStr := stateStyle.Render(fitCell(stateLabel, stateW))
 
 		// Role with color
 		roleStyle := lipgloss.NewStyle().Foreground(ui.RoleColor(a.Role))
-		roleStr := roleStyle.Render(fmt.Sprintf("%-*s", roleW, a.Role))
+		roleStr := roleStyle.Render(fitCell(a.Role, roleW))
 
 		// Name (with agent info tag and dog symbol)
 		nameStyle := lipgloss.NewStyle().Foreground(ui.Light)
 		if isSelected {
 			nameStyle = nameStyle.Bold(true).Foreground(ui.White)
 		}
-		name := a.Name
-		if a.Role == "dog" {
-			name = ui.SymDog + " " + name
-		}
-		if len(name) > nameW {
-			name = name[:nameW-1] + "…"
-		}
-		nameStr := nameStyle.Render(fmt.Sprintf("%-*s", nameW, name))
-		tag := ""
-		switch {
-		case a.AgentAlias != "" && a.AgentInfo != "":
-			tag = a.AgentAlias
-		case a.AgentInfo != "":
-			tag = a.AgentInfo
-		}
-		// Skip the tag when it just restates the agent name (audit #5), and
-		// drop it entirely on narrow panes.
-		if tag != "" && showTag && !strings.EqualFold(tag, a.Name) {
-			nameStr += lipgloss.NewStyle().Foreground(ui.Dim).Render("["+tag+"]") + " "
+		label := agentNameLabel(a, showTag)
+		var nameStr string
+		if tag := agentTag(a, showTag); tag != "" && ansi.StringWidth(label) <= nameW {
+			plain := agentNameLabel(a, false)
+			nameStr = nameStyle.Render(plain) +
+				lipgloss.NewStyle().Foreground(ui.Dim).Render(" ["+tag+"]") +
+				strings.Repeat(" ", nameW-ansi.StringWidth(label))
+		} else {
+			nameStr = nameStyle.Render(fitCell(label, nameW))
 		}
 
 		// Heat indicator (single char showing activity level)
@@ -1085,7 +1088,7 @@ func (g *GasTown) renderMail(width int) string {
 
 	titleStr := "MAIL" + ui.Superscript(len(g.mailMessages))
 	if unread > 0 {
-		titleStr = fmt.Sprintf("MAIL%s (%d unread)", ui.Superscript(len(g.mailMessages)), unread)
+		titleStr = fmt.Sprintf("MAIL%s (%d unread in your inbox)", ui.Superscript(len(g.mailMessages)), unread)
 	}
 	lines = append(lines, ui.SectionDivider(titleStr, width, g.section == SectionMail))
 
@@ -1584,6 +1587,44 @@ func progressBar(done, total, width int) string {
 }
 
 // truncateGT truncates a string for the Gas Town panel.
+// agentTag is the bracketed runtime tag shown after an agent's name, or ""
+// (none, the pane is narrow, or it just restates the name; audit #5).
+func agentTag(a gastown.AgentRuntime, show bool) string {
+	tag := ""
+	switch {
+	case a.AgentAlias != "" && a.AgentInfo != "":
+		tag = a.AgentAlias
+	case a.AgentInfo != "":
+		tag = a.AgentInfo
+	}
+	if !show || tag == "" || strings.EqualFold(tag, a.Name) {
+		return ""
+	}
+	return tag
+}
+
+// agentNameLabel is an agent's name column as plain text: the dog symbol
+// for dogs, the name, and the runtime tag when shown.
+func agentNameLabel(a gastown.AgentRuntime, showTag bool) string {
+	name := a.Name
+	if a.Role == "dog" {
+		name = ui.SymDog + " " + name
+	}
+	if tag := agentTag(a, showTag); tag != "" {
+		name += " [" + tag + "]"
+	}
+	return name
+}
+
+// fitCell truncates s to width display columns (with "…") and pads it to
+// exactly width, counting wide characters as two columns.
+func fitCell(s string, width int) string {
+	if ansi.StringWidth(s) > width {
+		s = ansi.Truncate(s, width, "…")
+	}
+	return s + strings.Repeat(" ", max(width-ansi.StringWidth(s), 0))
+}
+
 func truncateGT(s string, maxLen int) string {
 	runes := []rune(s)
 	if len(runes) <= maxLen {

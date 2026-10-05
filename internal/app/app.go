@@ -1622,6 +1622,19 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case views.ProblemJumpMsg:
+		// Close Problems and select the issue, so the detail pane shows it.
+		if !m.restoreParadeSelection(msg.IssueID) {
+			toast, cmd := components.ShowToast(msg.IssueID+" is not in the list (closed or filtered out)", components.ToastWarn, toastDuration)
+			m.toast = toast
+			return m, cmd
+		}
+		m.showProblems = false
+		m.activPane = PaneParade
+		m.detail.Focused = false
+		m.syncSelection()
+		return m, tea.Batch(m.detailFetchBatch()...)
+
 	case views.GasTownActionMsg:
 		return m.handleGasTownAction(msg)
 
@@ -1909,7 +1922,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// When Problems panel is focused, route its keys before global handlers
 	if m.showProblems && m.activPane == PaneDetail {
 		switch msg.String() {
-		case "j", "k", "up", "down", "g", "G", "n", "h", "K", "R":
+		case "j", "k", "up", "down", "g", "G", "n", "h", "K", "R", "enter":
 			logAction("problems panel key: %s", msg.String())
 			var cmd tea.Cmd
 			m.problems, cmd = m.problems.Update(msg)

@@ -232,6 +232,7 @@ func allSections() []helpSection {
 			bindings: []helpBinding{
 				{key: "j / k", desc: "Navigate problems"},
 				{key: "g / G", desc: "Jump to first/last"},
+				{key: "enter", desc: "Go to the problem's issue"},
 				{key: "n", desc: "Nudge agent on selected problem"},
 				{key: "h", desc: "Handoff from agent"},
 				{key: "K", desc: "Decommission polecat"},

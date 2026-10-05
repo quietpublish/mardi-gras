@@ -30,6 +30,9 @@ func NewProblems(width, height int) Problems {
 }
 
 // SetSize updates dimensions.
+// ProblemJumpMsg asks the app to select a problem's issue in the parade.
+type ProblemJumpMsg struct{ IssueID string }
+
 func (p *Problems) SetSize(width, height int) {
 	p.width = width
 	p.height = height
@@ -71,6 +74,13 @@ func (p Problems) Update(msg tea.Msg) (Problems, tea.Cmd) {
 		p.cursor = 0
 	case "G":
 		p.cursor = len(p.problems) - 1
+
+	case "enter":
+		// Jump to the issue the problem is about: a zombie's or stalled
+		// agent's hooked work (mg-6ia).
+		if id := p.problems[p.cursor].Agent.HookBead; id != "" {
+			return p, func() tea.Msg { return ProblemJumpMsg{IssueID: id} }
+		}
 
 	// Actions on selected problem's agent
 	case "n":
@@ -135,7 +145,7 @@ func (p Problems) View() string {
 				break
 			}
 		}
-		hint := "  n nudge  h handoff  K decommission"
+		hint := "  enter go to issue  n nudge  h handoff  K decommission"
 		if hasDeadRig {
 			hint += "  R recover rig"
 		}

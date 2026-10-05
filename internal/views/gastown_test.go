@@ -3,6 +3,7 @@ package views
 import (
 	"encoding/json"
 	"errors"
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 	"testing"
 
@@ -1587,5 +1588,31 @@ func TestGasTownHeaderNamesBackend(t *testing.T) {
 	g.SetBackendName("Gas City")
 	if v := g.View(); !strings.Contains(v, "GAS CITY") || strings.Contains(v, "GAS TOWN") {
 		t.Fatal("Gas City backend should be headed GAS CITY")
+	}
+}
+
+func TestGasTownRosterColumnsAlign(t *testing.T) {
+	// A runtime tag was appended after the name column and emoji states were
+	// padded by rune count, so rows drifted out of line (mg-6ia).
+	g := NewGasTown(160, 40)
+	g.SetStatus(&gastown.TownStatus{Agents: []gastown.AgentRuntime{
+		{Name: "mayor", Role: "coordinator", State: "idle"},
+		{Name: "quartz", Role: "polecat", State: "fix_needed"},
+		{Name: "doctor", Role: "dog", State: "working", AgentInfo: "claude/haiku"},
+	}}, gastown.Env{Available: true})
+	view := ansi.Strip(g.View())
+	col := map[string]int{}
+	for _, line := range strings.Split(view, "\n") {
+		for _, role := range []string{"coordinator", "polecat", "dog "} {
+			if i := strings.Index(line, " "+role); i >= 0 && (strings.Contains(line, "mayor") || strings.Contains(line, "quartz") || strings.Contains(line, "doctor")) {
+				col[role] = ansi.StringWidth(line[:i])
+			}
+		}
+	}
+	if len(col) != 3 || col["coordinator"] != col["polecat"] || col["polecat"] != col["dog "] {
+		t.Fatalf("role column starts at %v; want one column for every row", col)
+	}
+	if !strings.Contains(view, "[claude/haiku]") {
+		t.Fatal("the runtime tag should still show")
 	}
 }

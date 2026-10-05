@@ -115,6 +115,7 @@ The panel takes over the detail pane; give it focus with `tab` (or `enter` from 
 | ------------ | ------------------------------- |
 | `j` / `k`    | Navigate problems              |
 | `g` / `G`    | Jump to first/last             |
+| `enter`      | Go to the issue the problem's agent has hooked |
 | `n`          | Nudge agent on selected problem |
 | `h`          | Handoff from agent              |
 | `K`          | Decommission polecat (polecat role only) |
