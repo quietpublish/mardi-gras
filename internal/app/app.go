@@ -3260,6 +3260,18 @@ func (m *Model) detailFetchBatch() []tea.Cmd {
 }
 
 // layout recalculates dimensions for all sub-components.
+// paradeMinWidth keeps room for ~30 characters of title beside the ID,
+// status glyph and priority.
+const paradeMinWidth = 48
+
+// paradeWidth is the parade's share of a terminal width: two fifths, but at
+// least paradeMinWidth and at most three fifths. At 80 columns two fifths
+// left titles ~9 characters while the detail pane kept more than half
+// (mg-o6v); 120 columns and wider are unchanged.
+func paradeWidth(width int) int {
+	return max(width*2/5, min(width*3/5, paradeMinWidth))
+}
+
 func (m *Model) layout() {
 	headerH := 2
 	footerH := 2
@@ -3274,10 +3286,7 @@ func (m *Model) layout() {
 		paradeW = m.width
 		detailW = 0
 	default:
-		paradeW = m.width * 2 / 5
-		if paradeW < 30 {
-			paradeW = 30
-		}
+		paradeW = paradeWidth(m.width)
 		detailW = m.width - paradeW
 	}
 
@@ -3343,7 +3352,7 @@ func (m *Model) rebuildParade() {
 	paradeW := m.parade.Width
 	bodyH := m.parade.Height
 	if paradeW == 0 {
-		paradeW = m.width * 2 / 5
+		paradeW = paradeWidth(m.width)
 	}
 	if bodyH == 0 {
 		bodyH = m.height - 4

@@ -415,3 +415,19 @@ func TestFilterCounterAndEscClearAfterApply(t *testing.T) {
 		t.Fatalf("esc should clear the applied filter: value %q matched %d", got.filterInput.Value(), got.filterMatched)
 	}
 }
+
+func TestParadeWidthNarrowTerminals(t *testing.T) {
+	// At 80 columns the parade got 32 and titles ~9 characters (mg-o6v).
+	for _, tc := range []struct{ width, want int }{
+		{60, 36}, {80, 48}, {100, 48}, {120, 48}, {160, 64}, {220, 88},
+	} {
+		if got := paradeWidth(tc.width); got != tc.want {
+			t.Errorf("paradeWidth(%d) = %d, want %d", tc.width, got, tc.want)
+		}
+	}
+	for w := 40; w < 300; w++ {
+		if paradeWidth(w+1) < paradeWidth(w) {
+			t.Fatalf("parade shrinks as the terminal grows at %d", w)
+		}
+	}
+}
