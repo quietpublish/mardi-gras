@@ -1,8 +1,11 @@
 package data
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -294,4 +297,14 @@ func TestLoadRealBeads(t *testing.T) {
 		len(groups[ParadeStalled]),
 		len(groups[ParadePastTheStand]),
 	)
+}
+
+func TestLoadIssuesEdgeCaseMissingFileNamesPathOnce(t *testing.T) {
+	// "Error loading issues from /p: open issues file: open /p: no such
+	// file or directory" named the path twice (mg-u8u); callers name it.
+	path := filepath.Join(t.TempDir(), "missing.jsonl")
+	_, _, err := LoadIssues(path)
+	if err == nil || strings.Contains(err.Error(), path) || !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("err = %v, want a not-exist error without the path", err)
+	}
 }

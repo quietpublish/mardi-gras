@@ -638,3 +638,33 @@ func TestTownStatusSuccessClearsError(t *testing.T) {
 		t.Error("expected the status to be stored")
 	}
 }
+
+func TestStartupSkippedLinesToast(t *testing.T) {
+	// The initial load's skipped-line warning went to stderr, which the
+	// TUI covers at once (mg-bmb).
+	m := New([]data.Issue{testIssue("a", data.StatusOpen)}, data.Source{}, data.DefaultBlockingTypes).WithSkippedLines(2)
+	model, _ := m.Update(skippedLinesMsg{n: 2})
+	if msg := model.(Model).toast.Message; msg != "Skipped 2 malformed line(s)" {
+		t.Fatalf("toast = %q", msg)
+	}
+}
+
+func TestEmptyParadeSaysWhatToDo(t *testing.T) {
+	// An empty workspace said only "No issues found" (mg-9f5); the next step
+	// depends on why it is empty.
+	m := New(nil, data.Source{}, data.DefaultBlockingTypes)
+	model, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m = model.(Model)
+	if !strings.Contains(m.parade.View(), "Press N to create the first issue") {
+		t.Fatal("an empty workspace should say how to create an issue")
+	}
+
+	m = New([]data.Issue{testIssue("a", data.StatusOpen)}, data.Source{}, data.DefaultBlockingTypes)
+	model, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m = model.(Model)
+	m.filterInput.SetValue("zzzz-nothing")
+	m.rebuildParade()
+	if !strings.Contains(m.parade.View(), "esc clears it") {
+		t.Fatal("an empty filter result should say how to clear the filter")
+	}
+}

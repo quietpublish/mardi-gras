@@ -232,6 +232,7 @@ func allSections() []helpSection {
 			bindings: []helpBinding{
 				{key: "j / k", desc: "Navigate problems"},
 				{key: "g / G", desc: "Jump to first/last"},
+				{key: "enter", desc: "Go to the problem's issue"},
 				{key: "n", desc: "Nudge agent on selected problem"},
 				{key: "h", desc: "Handoff from agent"},
 				{key: "K", desc: "Decommission polecat"},
@@ -249,6 +250,12 @@ func sectionHeight(s helpSection) int {
 
 // paginateSections splits sections into pages that fit within maxLines.
 func paginateSections(sections []helpSection, maxLines int) [][]helpSection {
+	return paginateSectionsFirst(sections, maxLines, maxLines)
+}
+
+// paginateSectionsFirst paginates with a smaller budget on the first page,
+// which alone carries the banner (mg-7ru).
+func paginateSectionsFirst(sections []helpSection, firstLines, maxLines int) [][]helpSection {
 	if maxLines <= 0 {
 		return [][]helpSection{sections}
 	}
@@ -259,9 +266,13 @@ func paginateSections(sections []helpSection, maxLines int) [][]helpSection {
 
 	for _, s := range sections {
 		sh := sectionHeight(s)
+		budget := maxLines
+		if len(pages) == 0 {
+			budget = firstLines
+		}
 		// If adding this section exceeds the page, start a new page
 		// (unless current page is empty — always add at least one section)
-		if used+sh > maxLines && len(currentPage) > 0 {
+		if used+sh > budget && len(currentPage) > 0 {
 			pages = append(pages, currentPage)
 			currentPage = nil
 			used = 0
@@ -280,16 +291,49 @@ func paginateSections(sections []helpSection, maxLines int) [][]helpSection {
 }
 
 // bodyLines returns the available height for section content.
+// helpBannerLines is the ASCII banner's height; only page 1 shows it.
+const helpBannerLines = 3
+
 func (h Help) bodyLines() int {
-	// header (title 3 lines + subtitle 1 + blank 1) + footer (blank 1 + hint 1 + page indicator 1)
+	// header (banner 3 lines + subtitle 1 + blank 1) + footer (blank 1 + hint 1 + page indicator 1)
 	overhead := 8
 	return max(h.Height-overhead-6, 10) // 6 for box padding/border
 }
 
+// pages paginates the sections; pages after the first get the banner's
+// lines back.
+func (h Help) pages() [][]helpSection {
+	return paginateSectionsFirst(h.sections(), h.bodyLines(), h.bodyLines()+helpBannerLines)
+}
+
 // pageCount returns the total number of pages.
 func (h Help) pageCount() int {
-	pages := paginateSections(h.sections(), h.bodyLines())
-	return len(pages)
+	return len(h.pages())
+}
+
+// pageSubtitle names what a page holds, e.g. "Quick actions · Edit ·
+// Multi-select"; page 1 keeps the tagline. Every page used to repeat
+// "Navigation and filter shortcuts" (mg-7ru).
+func pageSubtitle(page int, sections []helpSection) string {
+	if page == 0 {
+		return "Navigation and filter shortcuts"
+	}
+	names := make([]string, 0, len(sections))
+	for _, s := range sections {
+		names = append(names, sentenceCase(s.title))
+	}
+	return strings.Join(names, " · ")
+}
+
+// sentenceCase turns a section title like "GAS CITY PANEL (ctrl+g)" into
+// "Gas City panel (ctrl+g)", keeping the orchestrator names capitalised.
+func sentenceCase(title string) string {
+	lower := strings.ToLower(title)
+	lower = strings.NewReplacer("gas town", "Gas Town", "gas city", "Gas City").Replace(lower)
+	if lower == "" {
+		return lower
+	}
+	return strings.ToUpper(lower[:1]) + lower[1:]
 }
 
 // View returns the rendered modal block positioned at the center of the terminal.
@@ -302,8 +346,7 @@ func (h Help) View() string {
 		contentWidth = 44
 	}
 
-	sections := h.sections()
-	pages := paginateSections(sections, h.bodyLines())
+	pages := h.pages()
 
 	// Clamp page
 	page := h.page
@@ -314,18 +357,17 @@ func (h Help) View() string {
 		page = 0
 	}
 
-	var titleBlock string
-	if contentWidth >= 44 {
-		titleBlock = renderTitle(contentWidth)
-	} else {
-		titleBlock = ui.HelpTitle.Width(contentWidth).Render("[ MARDI GRAS HELP ]")
+	subtitle := ui.HelpSubtitle.Width(contentWidth).Render(pageSubtitle(page, pages[page]))
+	header := subtitle
+	if page == 0 {
+		var titleBlock string
+		if contentWidth >= 44 {
+			titleBlock = renderTitle(contentWidth)
+		} else {
+			titleBlock = ui.HelpTitle.Width(contentWidth).Render("[ MARDI GRAS HELP ]")
+		}
+		header = lipgloss.JoinVertical(lipgloss.Left, titleBlock, subtitle)
 	}
-
-	header := lipgloss.JoinVertical(
-		lipgloss.Left,
-		titleBlock,
-		ui.HelpSubtitle.Width(contentWidth).Render("Navigation and filter shortcuts"),
-	)
 
 	body := h.renderSections(contentWidth, pages[page])
 
@@ -348,7 +390,7 @@ func (h Help) View() string {
 		strings.Join(footerParts, "\n"),
 	)
 
-	box := ui.OverlayBox(content, contentWidth+4)
+	box := ui.OverlayBox(content, contentWidth+6) // OverlayInnerWidth(contentWidth+6) == contentWidth
 
 	return lipgloss.Place(h.Width, h.Height, lipgloss.Center, lipgloss.Center, box)
 }

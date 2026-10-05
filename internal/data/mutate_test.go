@@ -452,3 +452,13 @@ func TestUpdateTitleRejectsBadID(t *testing.T) {
 		t.Fatal("expected ValidateIssueID error, got nil")
 	}
 }
+
+func TestCloseAndClaimNextEdgeCaseUnreadableOutput(t *testing.T) {
+	// bd exited 0, so the issue is closed; only the claim is unknown. That
+	// used to read as a failed close (mg-299).
+	defer mockRun([]byte(``), nil)()
+	_, err := CloseAndClaimNext("mg-42")
+	if !errors.Is(err, ErrClaimUnreadable) {
+		t.Fatalf("err = %v, want ErrClaimUnreadable", err)
+	}
+}

@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -73,21 +74,24 @@ type Model struct {
 	// by rebuildParade for the filter bar's counter.
 	filterMatched int
 	filterTotal   int
-	filtering     bool
-	showHelp      bool
-	help          components.Help
-	ready         bool
-	spinner       spinner.Model // branded loading spinner (shown until ready)
-	agentAvail    bool
-	agentRuntime  agent.Runtime
-	projectDir    string
-	inTmux        bool
-	activeAgents  map[string]string   // issueID -> tmux window name
-	gtEnv         gastown.Env         // Gas Town environment, read once at startup
-	driver        gastown.Driver      // Orchestrator seam; GTDriver today (gt CLI)
-	townStatus    *gastown.TownStatus // Latest gt status, nil when unavailable
-	gasTown       views.GasTown       // Gas Town control surface panel
-	showGasTown   bool                // Whether the Gas Town panel replaces detail
+	// startupSkipped is the malformed-line count from the initial load,
+	// toasted once the TUI is up (see WithSkippedLines).
+	startupSkipped int
+	filtering      bool
+	showHelp       bool
+	help           components.Help
+	ready          bool
+	spinner        spinner.Model // branded loading spinner (shown until ready)
+	agentAvail     bool
+	agentRuntime   agent.Runtime
+	projectDir     string
+	inTmux         bool
+	activeAgents   map[string]string   // issueID -> tmux window name
+	gtEnv          gastown.Env         // Gas Town environment, read once at startup
+	driver         gastown.Driver      // Orchestrator seam; GTDriver today (gt CLI)
+	townStatus     *gastown.TownStatus // Latest gt status, nil when unavailable
+	gasTown        views.GasTown       // Gas Town control surface panel
+	showGasTown    bool                // Whether the Gas Town panel replaces detail
 
 	// Toast notification
 	toast components.Toast
@@ -362,6 +366,17 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 // Init implements tea.Model.
 // NOTE: Init is a value receiver (tea.Model interface), so pointer-method mutations
 // are lost. We call poll functions directly and pre-set gtPollInFlight in New().
+// skippedLinesMsg reports malformed lines the initial load skipped.
+type skippedLinesMsg struct{ n int }
+
+// WithSkippedLines records malformed lines the initial load skipped. main
+// also prints them to stderr, but the TUI covers that at once, so the
+// TUI says it too, as a reload already does (mg-bmb).
+func (m Model) WithSkippedLines(n int) Model {
+	m.startupSkipped = n
+	return m
+}
+
 func (m Model) Init() tea.Cmd {
 	var agentPoll tea.Cmd
 	if m.orchestratorAvailable() {
@@ -387,6 +402,9 @@ func (m Model) Init() tea.Cmd {
 	}
 	if m.jev.enabled() {
 		cmds = append(cmds, m.jevProbe())
+	}
+	if n := m.startupSkipped; n > 0 {
+		cmds = append(cmds, func() tea.Msg { return skippedLinesMsg{n: n} })
 	}
 	return tea.Batch(cmds...)
 }
@@ -709,6 +727,7 @@ type mutateResultMsg struct {
 	err       error
 	claimedID string // non-empty when --claim-next claimed a follow-up issue
 	createdID string // non-empty when the mutation created this issue
+	warn      string // the mutation succeeded, but with this caveat
 }
 
 // pruneResultMsg is sent when a bd prune invocation completes.
@@ -1217,6 +1236,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		return m.handleKeyPress(msg, !skipDeferredKeyBuffer)
 
+	case skippedLinesMsg:
+		toast, cmd := components.ShowToast(fmt.Sprintf("Skipped %d malformed line(s)", msg.n), components.ToastWarn, toastDuration)
+		m.toast = toast
+		return m, cmd
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -1598,6 +1622,19 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case views.ProblemJumpMsg:
+		// Close Problems and select the issue, so the detail pane shows it.
+		if !m.restoreParadeSelection(msg.IssueID) {
+			toast, cmd := components.ShowToast(msg.IssueID+" is not in the list (closed or filtered out)", components.ToastWarn, toastDuration)
+			m.toast = toast
+			return m, cmd
+		}
+		m.showProblems = false
+		m.activPane = PaneParade
+		m.detail.Focused = false
+		m.syncSelection()
+		return m, tea.Batch(m.detailFetchBatch()...)
+
 	case views.GasTownActionMsg:
 		return m.handleGasTownAction(msg)
 
@@ -1685,10 +1722,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.toast = toast
 			return m, cmd
 		}
-		toast, toastCmd := components.ShowToast(
-			fmt.Sprintf("%s \u2192 %s", msg.issueID, msg.action),
-			components.ToastSuccess, toastDuration,
-		)
+		text, level := fmt.Sprintf("%s \u2192 %s", msg.issueID, msg.action), components.ToastSuccess
+		if msg.warn != "" {
+			text, level = text+" ("+msg.warn+")", components.ToastWarn
+		}
+		toast, toastCmd := components.ShowToast(text, level, toastDuration)
 		m.toast = toast
 		if msg.action == "noted" {
 			m.detail.RichIssueID = ""
@@ -1884,7 +1922,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// When Problems panel is focused, route its keys before global handlers
 	if m.showProblems && m.activPane == PaneDetail {
 		switch msg.String() {
-		case "j", "k", "up", "down", "g", "G", "n", "h", "K", "R":
+		case "j", "k", "up", "down", "g", "G", "n", "h", "K", "R", "enter":
 			logAction("problems panel key: %s", msg.String())
 			var cmd tea.Cmd
 			m.problems, cmd = m.problems.Update(msg)
@@ -2484,6 +2522,11 @@ func (m Model) closeSelectedIssue() (tea.Model, tea.Cmd) {
 	issueID := issue.ID
 	return m, func() tea.Msg {
 		claimedID, err := data.CloseAndClaimNext(issueID)
+		if errors.Is(err, data.ErrClaimUnreadable) {
+			// The close went through; only the claim is unknown. It used to
+			// toast "Failed: closed mg-007 — … parse" (mg-299).
+			return mutateResultMsg{issueID: issueID, action: "closed", warn: "couldn't read which issue was claimed next"}
+		}
 		action := "closed"
 		if claimedID != "" {
 			action = fmt.Sprintf("closed → claimed %s", claimedID)
@@ -3279,6 +3322,20 @@ func paradeWidth(width int) int {
 	return max(width*2/5, min(width*3/5, paradeMinWidth))
 }
 
+// setEmptyHint tells an empty parade what to do next.
+func (m *Model) setEmptyHint() {
+	switch {
+	case m.filterInput.Value() != "":
+		m.parade.EmptyHint = "Nothing matches the filter · esc clears it"
+	case m.focusMode:
+		m.parade.EmptyHint = "Nothing in focus right now · f leaves focus mode"
+	case len(m.issues) == 0:
+		m.parade.EmptyHint = "Press N to create the first issue"
+	default:
+		m.parade.EmptyHint = ""
+	}
+}
+
 func (m *Model) layout() {
 	headerH := 2
 	footerH := 2
@@ -3324,6 +3381,7 @@ func (m *Model) layout() {
 	if len(m.parade.Items) == 0 {
 		visibleIssues := data.ExcludeByLabel(data.ExcludeByType(m.issues, m.excludeTypes), m.excludeLabels)
 		m.parade = views.NewParadeWithData(visibleIssues, m.groups, detailIssueMap, paradeW, bodyH, m.blockingTypes)
+		m.setEmptyHint()
 		m.syncSelection()
 		if m.pendingCurrentID != "" {
 			m.restoreParadeSelection(m.pendingCurrentID)
@@ -3368,6 +3426,7 @@ func (m *Model) rebuildParade() {
 	filteredIssues, highlights := data.FilterIssuesWithHighlights(m.issues, m.filterInput.Value())
 	filteredIssues = data.ExcludeByLabel(data.ExcludeByType(filteredIssues, m.excludeTypes), m.excludeLabels)
 	m.filterMatched = len(filteredIssues)
+	defer m.setEmptyHint()
 	m.filterTotal = len(data.ExcludeByLabel(data.ExcludeByType(m.issues, m.excludeTypes), m.excludeLabels))
 	var ranks map[string]float64 // the judge's urgency per ranked issue, focus mode only
 	if m.focusMode {
@@ -3879,9 +3938,9 @@ func (m Model) View() tea.View {
 		// Content-fit modal: a small form in a full-width box reads as
 		// dead space (audit #8).
 		formWidth := min(m.width-8, 64)
-		formTitle := ui.HelpTitle.Width(formWidth - 4).Render("[ EDIT ISSUE ]")
+		formTitle := ui.HelpTitle.Width(ui.OverlayInnerWidth(formWidth)).Render("[ EDIT ISSUE ]")
 		formBody := m.editForm.View()
-		formHint := ui.HelpHint.Width(formWidth - 4).Render("tab next field · enter save · esc cancel")
+		formHint := ui.HelpHint.Width(ui.OverlayInnerWidth(formWidth)).Render("tab next field · enter save · esc cancel")
 		formContent := lipgloss.JoinVertical(lipgloss.Left, formTitle, "", formBody, "", formHint)
 		formBox := ui.OverlayBox(formContent, formWidth)
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, formBox))
@@ -3889,9 +3948,9 @@ func (m Model) View() tea.View {
 
 	if m.creating {
 		formWidth := min(m.width-8, 64)
-		formTitle := ui.HelpTitle.Width(formWidth - 4).Render("[ NEW ISSUE ]")
+		formTitle := ui.HelpTitle.Width(ui.OverlayInnerWidth(formWidth)).Render("[ NEW ISSUE ]")
 		formBody := m.createForm.View()
-		formHint := ui.HelpHint.Width(formWidth - 4).Render("tab next field · enter create · esc cancel")
+		formHint := ui.HelpHint.Width(ui.OverlayInnerWidth(formWidth)).Render("tab next field · enter create · esc cancel")
 		formContent := lipgloss.JoinVertical(lipgloss.Left, formTitle, "", formBody, "", formHint)
 		formBox := ui.OverlayBox(formContent, formWidth)
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, formBox))
@@ -3910,7 +3969,7 @@ func (m Model) View() tea.View {
 		// OverlayBox's width includes its border and padding, so the content
 		// gets ddWidth-6. The hint is split by hand: as one line it overflows
 		// even that and the box re-wraps it, stranding "esc" and "cancel".
-		ddInner := ddWidth - 6
+		ddInner := ui.OverlayInnerWidth(ddWidth)
 		ddTitle := ui.HelpTitle.Width(ddInner).Render("[ POSSIBLE DUPLICATE ]")
 		ddBody := m.dupDialog.View()
 		ddHint := ui.HelpHint.Width(ddInner).Render("enter go to it · c create anyway\nl create + mark duplicate · esc cancel")
@@ -3921,9 +3980,9 @@ func (m Model) View() tea.View {
 
 	if m.recovering {
 		rdWidth := min(m.width-8, 64)
-		rdTitle := ui.HelpTitle.Width(rdWidth - 4).Render("[ RIG RECOVERY ]")
+		rdTitle := ui.HelpTitle.Width(ui.OverlayInnerWidth(rdWidth)).Render("[ RIG RECOVERY ]")
 		rdBody := m.recoveryDialog.View()
-		rdHint := ui.HelpHint.Width(rdWidth - 4).Render("enter to confirm  esc to cancel")
+		rdHint := ui.HelpHint.Width(ui.OverlayInnerWidth(rdWidth)).Render("enter to confirm  esc to cancel")
 		rdContent := lipgloss.JoinVertical(lipgloss.Left, rdTitle, "", rdBody, "", rdHint)
 		rdBox := ui.OverlayBox(rdContent, rdWidth)
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, rdBox))

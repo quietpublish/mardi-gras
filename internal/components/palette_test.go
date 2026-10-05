@@ -1,6 +1,7 @@
 package components
 
 import (
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 	"testing"
 
@@ -262,5 +263,17 @@ func TestPaletteViewNotEmpty(t *testing.T) {
 	}
 	if !strings.Contains(view, "COMMAND PALETTE") {
 		t.Fatal("expected view to contain 'COMMAND PALETTE'")
+	}
+}
+
+func TestPaletteViewNoStrayDivider(t *testing.T) {
+	// The divider was 2 columns wider than the box's content area, so its
+	// tail wrapped onto a line of its own (mg-zmz).
+	p := NewPalette(120, 40, testCommands())
+	for _, line := range strings.Split(ansi.Strip(p.View()), "\n") {
+		trimmed := strings.Trim(line, " │")
+		if trimmed != "" && strings.Trim(trimmed, "─") == "" && len([]rune(trimmed)) < 10 {
+			t.Fatalf("stray divider fragment %q", trimmed)
+		}
 	}
 }

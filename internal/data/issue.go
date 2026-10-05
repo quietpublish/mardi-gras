@@ -204,6 +204,11 @@ func (i *Issue) Age() time.Duration {
 
 // AgeLabel returns a human-readable age string.
 func (i *Issue) AgeLabel() string {
+	// No created_at reads as the zero time, which rendered "15250 weeks"
+	// (mg-bmb).
+	if i.CreatedAt.IsZero() {
+		return "unknown"
+	}
 	days := int(i.Age().Hours() / 24)
 	switch {
 	case days == 0:

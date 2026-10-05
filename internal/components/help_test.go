@@ -1,6 +1,7 @@
 package components
 
 import (
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 	"testing"
 
@@ -200,5 +201,30 @@ func TestHelpSectionsNameGasCity(t *testing.T) {
 	}
 	if strings.Contains(strings.Join([]string{allSections()[0].title}, ""), "GAS CITY") {
 		t.Fatal("retitling must not leak into allSections()")
+	}
+}
+
+func TestHelpBannerOnlyOnFirstPage(t *testing.T) {
+	// Every page repeated the 4-row banner and "Navigation and filter
+	// shortcuts", including the Problems page (mg-7ru).
+	h := NewHelp(120, 36)
+	h.Orchestrated = true
+	if h.pageCount() < 2 {
+		t.Skip("needs more than one page at this size")
+	}
+	first := ansi.Strip(h.View())
+	h.page = 1
+	second := ansi.Strip(h.View())
+	if !strings.Contains(first, "Navigation and filter shortcuts") {
+		t.Fatal("page 1 should keep the tagline")
+	}
+	if strings.Contains(second, "Navigation and filter shortcuts") || strings.Contains(second, "░") {
+		t.Fatal("later pages should drop the banner and tagline")
+	}
+	if want := pageSubtitle(1, h.pages()[1]); !strings.Contains(second, want) {
+		t.Fatalf("page 2 should be subtitled %q", want)
+	}
+	if got := sentenceCase("GAS CITY PANEL (ctrl+g)"); got != "Gas City panel (ctrl+g)" {
+		t.Fatalf("sentenceCase = %q", got)
 	}
 }

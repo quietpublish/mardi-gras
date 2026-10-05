@@ -312,3 +312,12 @@ func TestDoctorViewMixedStatuses(t *testing.T) {
 		t.Fatal("view should show warning explanation")
 	}
 }
+
+func TestDoctorViewEdgeCaseOKWithoutSummary(t *testing.T) {
+	// A clean run with no summary showed a bare "✓" (mg-wgg).
+	d := NewDoctor(80, 20)
+	d.SetResult(&data.DoctorResult{OK: true})
+	if !strings.Contains(d.View(), "No problems found") {
+		t.Fatal("a clean run should say No problems found")
+	}
+}

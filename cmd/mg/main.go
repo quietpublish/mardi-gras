@@ -111,12 +111,15 @@ func main() {
 	if source.Mode == SourceJSONL && source.Path == "" {
 		fmt.Fprintf(os.Stderr, "No .beads/issues.jsonl found and bd not on PATH.\n\n")
 		fmt.Fprintf(os.Stderr, "Run mg from inside a project with Beads, or specify a path:\n")
-		fmt.Fprintf(os.Stderr, "  mg --path /path/to/.beads/issues.jsonl\n")
+		fmt.Fprintf(os.Stderr, "  mg --path /path/to/.beads/issues.jsonl\n\n")
+		fmt.Fprintf(os.Stderr, "New to Beads? Install bd (https://github.com/gastownhall/beads),\n")
+		fmt.Fprintf(os.Stderr, "then run `bd init` in your project and start mg there.\n")
 		os.Exit(1)
 	}
 
 	// Load issues
 	var issues []data.Issue
+	var skipped int // malformed lines the JSONL load skipped
 	switch source.Mode {
 	case SourceCLI:
 		issues, err = data.FetchIssuesCLI(source.ProjectDir)
@@ -130,7 +133,6 @@ func main() {
 			os.Exit(1)
 		}
 	default:
-		var skipped int
 		issues, skipped, err = data.LoadIssues(source.Path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error loading issues from %s: %v\n", source.Path, err)
@@ -165,7 +167,7 @@ func main() {
 	}
 	applyTheme(*themeFlag)
 	guard := app.NewOSCGuard()
-	model := app.NewWithGuard(issues, source, blockingTypes, guard, *noAnimations, filters)
+	model := app.NewWithGuard(issues, source, blockingTypes, guard, *noAnimations, filters).WithSkippedLines(skipped)
 	p := tea.NewProgram(model, tea.WithFilter(guard.Filter()))
 	finalModel, err := p.Run()
 	if final, ok := finalModel.(app.Model); ok {

@@ -85,7 +85,12 @@ func (d Doctor) View() string {
 		lines = append(lines, headerStyle.Render("DIAGNOSTICS"))
 		lines = append(lines, "")
 		okStyle := lipgloss.NewStyle().Foreground(ui.BrightGreen)
-		lines = append(lines, okStyle.Render("  "+ui.SymResolved+" "+d.result.Summary))
+		// bd can report OK with no summary, which left a bare "✓" (mg-wgg).
+		summary := d.result.Summary
+		if strings.TrimSpace(summary) == "" {
+			summary = "No problems found"
+		}
+		lines = append(lines, okStyle.Render("  "+ui.SymResolved+" "+summary))
 		lines = append(lines, "")
 		// Still show all checks even when OK
 		for i, diag := range d.result.Diagnostics {

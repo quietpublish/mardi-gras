@@ -169,6 +169,12 @@ func OverlayBox(content string, width int) string {
 	return HelpOverlayBg.Width(width).Render(FillBackground(content, HelpBg))
 }
 
+// OverlayInnerWidth is the content width inside an OverlayBox of the given
+// width: lipgloss counts the border (2) and padding (2+2) inside Width.
+// Content rendered wider is re-wrapped by the box, which stranded a "──"
+// under the palette divider and "esc"/"cancel" in the duplicate dialog.
+func OverlayInnerWidth(boxWidth int) int { return boxWidth - 6 }
+
 // rebuildStyles bakes the active palette into the exported styles. Called by
 // SetTheme after the palette vars are assigned.
 func rebuildStyles() {

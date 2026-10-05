@@ -315,3 +315,16 @@ func TestProblemsHints(t *testing.T) {
 		t.Fatal("view should contain hint 'decommission'")
 	}
 }
+
+func TestProblemsEnterJumpsToIssue(t *testing.T) {
+	// A zombie's hooked work could not be reached from the problem (mg-6ia).
+	p := NewProblems(80, 20)
+	p.SetProblems([]gastown.Problem{{Type: "zombie", Agent: gastown.AgentRuntime{Name: "quartz", HookBead: "mg-004"}}})
+	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("enter should jump to the problem's issue")
+	}
+	if msg, ok := cmd().(ProblemJumpMsg); !ok || msg.IssueID != "mg-004" {
+		t.Fatalf("msg = %+v", msg)
+	}
+}

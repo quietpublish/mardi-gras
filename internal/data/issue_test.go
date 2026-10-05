@@ -331,3 +331,14 @@ func TestOrderHierarchicallyEmpty(t *testing.T) {
 		t.Errorf("OrderHierarchically(nil) = %v, %v", ordered, depth)
 	}
 }
+
+func TestAgeLabelEdgeCaseNoCreatedAt(t *testing.T) {
+	// A missing created_at is the zero time: "15250 weeks" (mg-bmb).
+	iss := Issue{ID: "x-1"}
+	if got := iss.AgeLabel(); got != "unknown" {
+		t.Fatalf("AgeLabel() = %q, want unknown", got)
+	}
+	if s := SnapshotForJudge(iss, DepEval{}, SnapshotMinimal, time.Now()); s.AgeDays != 0 || s.SinceUpdateDays != 0 {
+		t.Fatalf("snapshot ages = %d/%d, want 0 for an unknown timestamp", s.AgeDays, s.SinceUpdateDays)
+	}
+}
