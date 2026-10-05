@@ -1260,3 +1260,13 @@ func TestDetailFocusVerdictRow(t *testing.T) {
 		t.Fatal("nil drops the row")
 	}
 }
+
+func TestRenderFocusVerdictFitsDetailPane(t *testing.T) {
+	// At 120 columns the low-confidence note was cut off (mg-su8). The row
+	// label takes 13 columns; the verdict must fit what a 120-column
+	// terminal leaves the detail pane.
+	got := ansi.Strip(renderFocusVerdict(data.FocusVerdict{Urgency: 1, Actionable: 0.81, Confidence: 0.3}))
+	if !strings.Contains(got, "low confidence") || 13+len([]rune(got)) > 120-48-4 {
+		t.Fatalf("verdict %q (%d runes) does not fit", got, len([]rune(got)))
+	}
+}

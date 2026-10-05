@@ -144,15 +144,17 @@ func (d *Detail) SetFocusVerdict(issueID string, v *data.FocusVerdict) {
 	}
 }
 
-// renderFocusVerdict reads "Do now · actionable 91% · jev", dimmed with a
-// note when the judge was not confident enough for focus mode to act on it.
+// renderFocusVerdict reads "Do now · actionable 91% · jev", with a short
+// dimmed note when the judge was not confident enough for focus mode to act
+// on it; the longer "(…, not used for ordering)" was cut off at 120 columns
+// (mg-su8).
 func renderFocusVerdict(v data.FocusVerdict) string {
 	label := data.FocusLevelLabel(v.Urgency)
 	levelStyle := ui.GradientHeat.At(int(v.Urgency / 3 * 100)).Bold(true)
 	muted := lipgloss.NewStyle().Foreground(ui.Muted)
 	out := levelStyle.Render(label) + muted.Render(fmt.Sprintf(" · actionable %.0f%% · jev", v.Actionable*100))
 	if v.Confidence < data.FocusConfidenceFloor {
-		out += lipgloss.NewStyle().Foreground(ui.Dim).Render(" (low confidence, not used for ordering)")
+		out += lipgloss.NewStyle().Foreground(ui.Dim).Render(" · low confidence")
 	}
 	return out
 }
