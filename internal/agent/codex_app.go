@@ -8,30 +8,30 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/matt-wright86/mardi-gras/internal/codexmcp"
+	"github.com/matt-wright86/mardi-gras/internal/codexapp"
 )
 
-// CodexMCPHandle owns the lifecycle of one codex MCP subprocess plus the
+// CodexAppHandle owns the lifecycle of one codex app-server subprocess plus the
 // most recent session running against it. Callers must call Close when done;
 // mg's app closes all handles on quit. Replies rotate the session pointer
 // (see Reply); the underlying subprocess is reused across replies.
-type CodexMCPHandle struct {
-	transport *codexmcp.SubprocessTransport
-	client    *codexmcp.Client
-	session   *codexmcp.Session
+type CodexAppHandle struct {
+	transport *codexapp.SubprocessTransport
+	client    *codexapp.Client
+	session   *codexapp.Session
 
 	closeOnce sync.Once
 	closeErr  error
 }
 
-// Session returns the most recent codexmcp.Session attached to this handle.
+// Session returns the most recent codexapp.Session attached to this handle.
 // After Reply rotates the session, Session() returns the new one.
-func (h *CodexMCPHandle) Session() *codexmcp.Session { return h.session }
+func (h *CodexAppHandle) Session() *codexapp.Session { return h.session }
 
 // ServerRequests returns the client's server-initiated request channel (codex
 // approval prompts). The channel is stable across Reply session rotation since it
 // belongs to the underlying client/subprocess. Returns nil if the handle is closed.
-func (h *CodexMCPHandle) ServerRequests() <-chan codexmcp.ServerRequest {
+func (h *CodexAppHandle) ServerRequests() <-chan codexapp.ServerRequest {
 	if h.client == nil {
 		return nil
 	}
@@ -39,10 +39,10 @@ func (h *CodexMCPHandle) ServerRequests() <-chan codexmcp.ServerRequest {
 }
 
 // Respond answers a server-initiated request (e.g. an approval prompt) with a
-// result, echoing the request's RawID. See codexmcp.Client.Respond.
-func (h *CodexMCPHandle) Respond(rawID json.RawMessage, result any) error {
+// result, echoing the request's RawID. See codexapp.Client.Respond.
+func (h *CodexAppHandle) Respond(rawID json.RawMessage, result any) error {
 	if h.client == nil {
-		return errors.New("agent: CodexMCPHandle has no client (already closed?)")
+		return errors.New("agent: CodexAppHandle has no client (already closed?)")
 	}
 	return h.client.Respond(rawID, result)
 }
@@ -54,14 +54,14 @@ func (h *CodexMCPHandle) Respond(rawID json.RawMessage, result any) error {
 // session's terminal Done, per #47's v0 design).
 //
 // The ctx parameter is currently unused for the session lifetime — like
-// LaunchCodexMCP, Reply detaches the session from the caller's ctx so a
+// LaunchCodexApp, Reply detaches the session from the caller's ctx so a
 // defer-cancel in the dispatch goroutine doesn't kill the session before
 // any reply event is rendered (the same trap v0.21.1 fixed on the launch
 // path). ctx is reserved for a future setup-only timeout if needed.
-func (h *CodexMCPHandle) Reply(ctx context.Context, prompt string) (*codexmcp.Session, error) {
+func (h *CodexAppHandle) Reply(ctx context.Context, prompt string) (*codexapp.Session, error) {
 	_ = ctx // reserved; intentionally not propagated to StartReplySession
 	if h.client == nil {
-		return nil, errors.New("agent: CodexMCPHandle has no client (already closed?)")
+		return nil, errors.New("agent: CodexAppHandle has no client (already closed?)")
 	}
 	threadID := ""
 	if h.session != nil {
@@ -80,7 +80,7 @@ func (h *CodexMCPHandle) Reply(ctx context.Context, prompt string) (*codexmcp.Se
 
 // Close cancels the session, terminates the subprocess, and releases pipes.
 // Safe to call multiple times.
-func (h *CodexMCPHandle) Close() error {
+func (h *CodexAppHandle) Close() error {
 	h.closeOnce.Do(func() {
 		if h.session != nil {
 			h.session.Cancel()
@@ -95,15 +95,15 @@ func (h *CodexMCPHandle) Close() error {
 
 // StderrTail returns the last stderr lines emitted by the subprocess. Useful
 // for diagnostic messages when the session ends with an error.
-func (h *CodexMCPHandle) StderrTail(n int) []string {
+func (h *CodexAppHandle) StderrTail(n int) []string {
 	if h.transport == nil {
 		return nil
 	}
 	return h.transport.StderrLines(n)
 }
 
-// LaunchCodexMCPOptions controls how an MCP-backed codex session is launched.
-type LaunchCodexMCPOptions struct {
+// LaunchCodexAppOptions controls how an in-app codex session is launched.
+type LaunchCodexAppOptions struct {
 	// Prompt is the initial user prompt. Required.
 	Prompt string
 	// ProjectDir is the working directory for the subprocess and the codex
@@ -123,31 +123,32 @@ type LaunchCodexMCPOptions struct {
 	ClientVersion string
 }
 
-// codexTransportFactory is the function used to spawn the codex MCP transport.
+// codexTransportFactory is the function used to spawn the codex app-server transport.
 // Tests override this to inject a pipe-based transport without a real codex
 // binary.
-var codexTransportFactory = func(opts LaunchCodexMCPOptions) (codexmcp.Transport, *codexmcp.SubprocessTransport, error) {
+var codexTransportFactory = func(opts LaunchCodexAppOptions) (codexapp.Transport, *codexapp.SubprocessTransport, error) {
 	bin, err := codexCommand()
 	if err != nil {
 		return nil, nil, err
 	}
-	t, err := codexmcp.SpawnSubprocess(codexmcp.WithBinary(bin), codexmcp.WithDir(opts.ProjectDir))
+	t, err := codexapp.SpawnSubprocess(codexapp.WithBinary(bin), codexapp.WithDir(opts.ProjectDir))
 	if err != nil {
-		return nil, nil, fmt.Errorf("spawn codex mcp-server: %w", err)
+		return nil, nil, fmt.Errorf("spawn codex app-server: %w", err)
 	}
 	return t, t, nil
 }
 
-// LaunchCodexMCP spawns `codex mcp-server`, performs the MCP handshake, and
-// starts a session against the codex tool. It returns a handle the caller
-// uses to consume events and to clean up.
+// LaunchCodexApp spawns `codex app-server`, performs the handshake, opens a
+// thread and runs its first turn. It returns a handle the caller uses to
+// consume events and to clean up. `codex mcp-server`, used before, was
+// removed in codex 0.154.0 (mg-xge.2).
 //
-// LaunchCodexMCP requires `codex` on PATH, or MG_AGENT_CMD standing in for
+// LaunchCodexApp requires `codex` on PATH, or MG_AGENT_CMD standing in for
 // codex (see codexCommand). If neither is there the call returns
 // ErrCodexUnavailable so callers can fall back to the tmux path.
-func LaunchCodexMCP(ctx context.Context, opts LaunchCodexMCPOptions) (*CodexMCPHandle, error) {
+func LaunchCodexApp(ctx context.Context, opts LaunchCodexAppOptions) (*CodexAppHandle, error) {
 	if strings.TrimSpace(opts.Prompt) == "" {
-		return nil, errors.New("agent: LaunchCodexMCP requires a prompt")
+		return nil, errors.New("agent: LaunchCodexApp requires a prompt")
 	}
 
 	transport, subproc, err := codexTransportFactory(opts)
@@ -159,16 +160,16 @@ func LaunchCodexMCP(ctx context.Context, opts LaunchCodexMCPOptions) (*CodexMCPH
 	if clientVersion == "" {
 		clientVersion = "dev"
 	}
-	client, err := codexmcp.Dial(ctx, transport, codexmcp.WithClientVersion(clientVersion))
+	client, err := codexapp.Dial(ctx, transport, codexapp.WithClientVersion(clientVersion))
 	if err != nil {
 		var stderr string
 		if subproc != nil {
 			stderr = strings.Join(subproc.StderrLines(10), "\n")
 		}
 		if stderr != "" {
-			return nil, fmt.Errorf("codex mcp handshake: %w (stderr: %s)", err, stderr)
+			return nil, fmt.Errorf("codex app-server handshake: %w (stderr: %s)", err, stderr)
 		}
-		return nil, fmt.Errorf("codex mcp handshake: %w", err)
+		return nil, fmt.Errorf("codex app-server handshake: %w", err)
 	}
 
 	sandbox := opts.Sandbox
@@ -181,39 +182,40 @@ func LaunchCodexMCP(ctx context.Context, opts LaunchCodexMCPOptions) (*CodexMCPH
 	}
 
 	// Detach the session from the caller's ctx. mg's launch path defer-cancels
-	// the launch ctx once LaunchCodexMCP returns, which would kill the
-	// session before any event flows. Cancellation is via CodexMCPHandle.Close.
-	session, err := client.StartSession(context.Background(), codexmcp.SessionOptions{
+	// the launch ctx once LaunchCodexApp returns, which would kill the
+	// session before any event flows. Cancellation is via CodexAppHandle.Close.
+	session, err := client.StartSession(context.Background(), codexapp.SessionOptions{
 		Prompt:         opts.Prompt,
 		Cwd:            opts.ProjectDir,
 		Sandbox:        sandbox,
 		ApprovalPolicy: approval,
 		Model:          opts.Model,
-		Config:         sessionConfig(approval),
+		// StartSession fails closed when the server applies another reviewer.
+		ApprovalsReviewer: approvalsReviewer(approval),
 	})
 	if err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("start codex session: %w", err)
 	}
 
-	return &CodexMCPHandle{
+	return &CodexAppHandle{
 		transport: subproc,
 		client:    client,
 		session:   session,
 	}, nil
 }
 
-// sessionConfig is the config.toml override sent with a session. on-request
+// approvalsReviewer is who answers a session's approval requests. on-request
 // means a human is watching mg's approval modal, but a user's config.toml can
 // route approvals to codex's own reviewer (approvals_reviewer =
 // "guardian_subagent" or "auto_review"), which approves escalations without
 // ever asking mg: the modal, the deny-list banner and the Jev reading never
-// see them. Pin the reviewer to the user for those sessions.
-func sessionConfig(approval string) map[string]any {
+// see them (mg-xge.4). Pin the reviewer to the user for those sessions.
+func approvalsReviewer(approval string) string {
 	if approval != "on-request" {
-		return nil
+		return ""
 	}
-	return map[string]any{"approvals_reviewer": "user"}
+	return "user"
 }
 
 // ErrCodexUnavailable indicates that the codex binary is not on PATH and no

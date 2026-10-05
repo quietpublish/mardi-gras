@@ -182,7 +182,7 @@ func agentArgv(rt Runtime, bin, prompt, projectDir string, inTmux bool) []string
 }
 
 // codexCommand returns the absolute path to exec for the codex-only launches,
-// `codex resume` and the `codex mcp-server` behind M.
+// `codex resume` and the `codex app-server` behind M.
 //
 // Those take codex's own subcommands, so MG_AGENT_CMD is used only when it
 // stands in for codex, i.e. the runtime is codex. A wrapper configured for

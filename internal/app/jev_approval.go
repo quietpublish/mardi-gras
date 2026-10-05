@@ -11,7 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/matt-wright86/mardi-gras/internal/agent"
-	"github.com/matt-wright86/mardi-gras/internal/codexmcp"
+	"github.com/matt-wright86/mardi-gras/internal/codexapp"
 	"github.com/matt-wright86/mardi-gras/internal/components"
 	"github.com/matt-wright86/mardi-gras/internal/data"
 	"github.com/matt-wright86/mardi-gras/internal/jev"
@@ -118,7 +118,7 @@ func jevApprovalCmd(client jev.Evaluator, msg codexApprovalRequestMsg, projectDi
 }
 
 // approvalQuestions builds the state and the question set for a request.
-func approvalQuestions(a codexmcp.ElicitApproval, projectDir, issueTitle string) (state map[string]any, qs map[string]jev.Question) {
+func approvalQuestions(a codexapp.Approval, projectDir, issueTitle string) (state map[string]any, qs map[string]jev.Question) {
 	state = map[string]any{
 		"kind":  a.Kind,
 		"issue": map[string]any{"title": issueTitle},

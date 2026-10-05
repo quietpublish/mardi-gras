@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/matt-wright86/mardi-gras/internal/codexmcp"
+	"github.com/matt-wright86/mardi-gras/internal/codexapp"
 )
 
 // TestIntegrationLaunchCtxCancelMatchesField reproduces the v0.21.0 field
@@ -29,7 +29,7 @@ func TestIntegrationLaunchCtxCancelMatchesField(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	h, err := LaunchCodexMCP(ctx, LaunchCodexMCPOptions{
+	h, err := LaunchCodexApp(ctx, LaunchCodexAppOptions{
 		Prompt:         "Say only the single word: pong",
 		ProjectDir:     "/tmp",
 		Sandbox:        "read-only",
@@ -37,7 +37,7 @@ func TestIntegrationLaunchCtxCancelMatchesField(t *testing.T) {
 		ClientVersion:  "integration-test",
 	})
 	if err != nil {
-		t.Fatalf("LaunchCodexMCP: %v", err)
+		t.Fatalf("LaunchCodexApp: %v", err)
 	}
 	t.Cleanup(func() { _ = h.Close() })
 
@@ -56,7 +56,7 @@ loop:
 			}
 			t.Logf("event: %s thread=%s", ev.EventType(), ev.Meta.ThreadID)
 			if ev.EventType() == "agent_message" {
-				var am codexmcp.AgentMessageEvent
+				var am codexapp.AgentMessageEvent
 				if err := json.Unmarshal(ev.Msg, &am); err != nil {
 					t.Fatalf("decode agent_message: %v", err)
 				}
@@ -98,7 +98,7 @@ func TestIntegrationCodexReplyAgainstRealCodex(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	h, err := LaunchCodexMCP(ctx, LaunchCodexMCPOptions{
+	h, err := LaunchCodexApp(ctx, LaunchCodexAppOptions{
 		Prompt:         "Reply with exactly the word: one",
 		ProjectDir:     "/tmp",
 		Sandbox:        "read-only",
@@ -106,7 +106,7 @@ func TestIntegrationCodexReplyAgainstRealCodex(t *testing.T) {
 		ClientVersion:  "integration-test",
 	})
 	if err != nil {
-		t.Fatalf("LaunchCodexMCP: %v", err)
+		t.Fatalf("LaunchCodexApp: %v", err)
 	}
 	cancel() // launch-ctx detachment fix from v0.21.1
 	t.Cleanup(func() { _ = h.Close() })
@@ -157,7 +157,7 @@ func TestIntegrationCodexReplyAgainstRealCodex(t *testing.T) {
 
 // drainTurn reads events from sess until Done fires, returning the final
 // threadId and the last agent_message seen.
-func drainTurn(t *testing.T, sess *codexmcp.Session, timeout time.Duration) (threadID, lastAgentMessage string) {
+func drainTurn(t *testing.T, sess *codexapp.Session, timeout time.Duration) (threadID, lastAgentMessage string) {
 	t.Helper()
 	deadline := time.After(timeout)
 	for {
@@ -170,7 +170,7 @@ func drainTurn(t *testing.T, sess *codexmcp.Session, timeout time.Duration) (thr
 				threadID = ev.Meta.ThreadID
 			}
 			if ev.EventType() == "agent_message" {
-				var am codexmcp.AgentMessageEvent
+				var am codexapp.AgentMessageEvent
 				if err := json.Unmarshal(ev.Msg, &am); err == nil {
 					lastAgentMessage = am.Message
 				}

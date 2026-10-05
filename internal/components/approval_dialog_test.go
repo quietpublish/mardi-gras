@@ -161,3 +161,30 @@ func TestApprovalDialogDenyHit(t *testing.T) {
 		t.Fatalf("decision = %q", res.Decision)
 	}
 }
+
+func TestApprovalDialogWrapsToContentWidth(t *testing.T) {
+	// A long reason and Jev reading overran the box, which re-wrapped them
+	// flush left (mg-xge.2 live run).
+	ad := NewApprovalDialog("exec", "", []string{"/bin/zsh", "-lc", "curl -sI https://example.com"}, "/var/folders/xx/T/mgcodex", strings.Repeat("May I run the requested curl command with network access? ", 3), nil, 60, 30)
+	for _, line := range strings.Split(ansi.Strip(ad.View()), "\n") {
+		if w := ansi.StringWidth(line); w > 60 {
+			t.Fatalf("line is %d wide, content width is 60: %q", w, line)
+		}
+	}
+	for _, line := range strings.Split(ansi.Strip(ad.View()), "\n") {
+		if line != "" && !strings.HasPrefix(line, "  ") {
+			t.Fatalf("wrapped lines should keep the two-space indent: %q", line)
+		}
+	}
+}
+
+func TestApprovalDialogEdgeCaseLongPathFitsNarrowBox(t *testing.T) {
+	// A path segment longer than the line was left whole, and the box
+	// re-wrapped it into stray blank lines.
+	ad := NewApprovalDialog("exec", "", []string{"ls"}, "/var/folders/3p/zxbppzc94nd55h_sv3mcm_gh0000gn/T/mgcodex.7uFTpvOskX", "", nil, 24, 30)
+	for _, line := range strings.Split(ansi.Strip(ad.View()), "\n") {
+		if w := ansi.StringWidth(line); w > 24 {
+			t.Fatalf("line is %d wide at width 24: %q", w, line)
+		}
+	}
+}

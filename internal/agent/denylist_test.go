@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/matt-wright86/mardi-gras/internal/codexmcp"
+	"github.com/matt-wright86/mardi-gras/internal/codexapp"
 )
 
-func execReq(argv ...string) codexmcp.ElicitApproval {
-	return codexmcp.ElicitApproval{Kind: "exec", Command: argv, Cwd: "/work/mg"}
+func execReq(argv ...string) codexapp.Approval {
+	return codexapp.Approval{Kind: "exec", Command: argv, Cwd: "/work/mg"}
 }
 
 func TestClassifyApprovalAllowsOrdinaryCommands(t *testing.T) {
@@ -78,12 +78,12 @@ func indexByte(s string, c byte) int {
 }
 
 func TestClassifyApprovalPatchPaths(t *testing.T) {
-	patch := func(paths ...string) codexmcp.ElicitApproval {
+	patch := func(paths ...string) codexapp.Approval {
 		changes := make(map[string]json.RawMessage, len(paths))
 		for _, p := range paths {
 			changes[p] = json.RawMessage(`{}`)
 		}
-		return codexmcp.ElicitApproval{Kind: "patch", Changes: changes, Cwd: "/work/mg"}
+		return codexapp.Approval{Kind: "patch", Changes: changes, Cwd: "/work/mg"}
 	}
 	if hit := ClassifyApproval(patch("internal/app/app.go", "/work/mg/docs/jev.md", "internal/ui/keyboard.go"), "/work/mg"); hit.Hit() {
 		t.Fatalf("ordinary files tripped %q (%s)", hit.Rule, hit.Detail)
@@ -111,7 +111,7 @@ func TestClassifyApprovalPatchPaths(t *testing.T) {
 }
 
 func TestClassifyApprovalEdgeCaseUnknownKind(t *testing.T) {
-	if hit := ClassifyApproval(codexmcp.ElicitApproval{Kind: "", Command: []string{"sudo", "x"}}, ""); hit.Hit() {
+	if hit := ClassifyApproval(codexapp.Approval{Kind: "", Command: []string{"sudo", "x"}}, ""); hit.Hit() {
 		t.Fatal("unknown kinds are auto-denied upstream; the deny-list does not apply")
 	}
 	if hit := ClassifyApproval(execReq("rm", "-rf", "/tmp/x"), ""); hit.Hit() {

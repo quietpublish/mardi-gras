@@ -5,8 +5,10 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/matt-wright86/mardi-gras/internal/codexapp"
 	"maps"
 	"os"
 	"os/exec"
@@ -174,12 +176,12 @@ type Model struct {
 	showChanges bool
 	changes     views.Changes
 
-	// Codex MCP transcript overlay + per-issue session registry
+	// Codex transcript overlay + per-issue session registry
 	showCodex       bool
 	codexTranscript views.CodexTranscript
 	codexSessions   map[string]*codexSession
 
-	// Codex MCP follow-up reply input state. Activated by `r` while the
+	// Codex follow-up reply input state. Activated by `r` while the
 	// transcript overlay is open and the prior turn is terminal.
 	// codexReplyID captures the issue ID at input-open time so submit
 	// resolves the session by the captured ID rather than current parade
@@ -188,7 +190,7 @@ type Model struct {
 	codexReplyID    string
 	codexReplyInput textinput.Model
 
-	// Codex MCP approval modal (exec/patch). When approving is true the dialog
+	// Codex approval modal (exec/patch). When approving is true the dialog
 	// captures input; currentApproval holds the in-flight request (for its RawID
 	// and issue), and pendingApprovals queues any that arrive while one is open.
 	approving        bool
@@ -1380,7 +1382,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.codexTranscript.SetState(msg.sess.state)
 		}
 		toast, cmd := components.ShowToast(
-			fmt.Sprintf("Codex (MCP) launched for %s", msg.issueID),
+			fmt.Sprintf("Codex launched for %s", msg.issueID),
 			components.ToastSuccess, toastDuration,
 		)
 		m.toast = toast
@@ -1400,7 +1402,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		toast, cmd := components.ShowToast(
-			fmt.Sprintf("Codex MCP launch failed: %s", msg.err),
+			fmt.Sprintf("Codex launch failed: %s", msg.err),
 			components.ToastError, toastDuration,
 		)
 		m.toast = toast
@@ -1410,6 +1412,17 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		sess := m.codexSessions[msg.issueID]
 		if sess == nil {
 			return m, nil
+		}
+		if msg.ev.EventType() == "server_request_resolved" {
+			var advise tea.Cmd
+			var r codexapp.RequestResolvedEvent
+			if json.Unmarshal(msg.ev.Msg, &r) == nil {
+				advise = m.dropResolvedApproval(msg.issueID, r.RequestID)
+			}
+			if sess.handle == nil {
+				return m, advise
+			}
+			return m, tea.Batch(advise, codexNextEventCmd(msg.issueID, sess.handle.Session(), sess.handle.ServerRequests()))
 		}
 		// Only re-render when the event is display-worthy. Codex emits many
 		// noisy event types (raw_response_item, agent_message_content_delta,
@@ -1442,10 +1455,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var msgText string
 		var kind components.ToastLevel
 		if msg.result.Err != nil {
-			msgText = fmt.Sprintf("Codex MCP errored for %s", msg.issueID)
+			msgText = fmt.Sprintf("Codex errored for %s", msg.issueID)
 			kind = components.ToastError
 		} else {
-			msgText = fmt.Sprintf("Codex MCP done for %s", msg.issueID)
+			msgText = fmt.Sprintf("Codex done for %s", msg.issueID)
 			kind = components.ToastSuccess
 		}
 		toast, cmd := components.ShowToast(msgText, kind, toastDuration)
