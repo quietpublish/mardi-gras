@@ -28,6 +28,12 @@ func (d *formulaDriver) Formulas(context.Context) ([]string, error) {
 	return d.formulas, d.err
 }
 
+// Backend pins the tests to a Gas Town machine. The embedded driver is
+// whatever SelectDriver picked on the host, and on a machine with `gc`
+// installed that is Gas City, which orchestratorAvailable() treats as an
+// orchestrator regardless of gtEnv.Available.
+func (*formulaDriver) Backend() string { return gastown.BackendGasTown }
+
 var installed = []string{"mol-polecat-work", "shiny", "security-audit"}
 
 // choiceJudge answers the formula question from a fixed distribution.
