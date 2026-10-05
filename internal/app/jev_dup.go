@@ -85,6 +85,8 @@ func (m Model) createCmd(result components.CreateFormResult, action string) tea.
 		crew := result.CrewMember
 		driver := m.driver
 		return func() tea.Msg {
+			// Assign returns gt's output, not an issue ID, so this path
+			// names the issue by its title.
 			_, err := driver.Assign(context.Background(), crew, title, result.Type, result.Priority, "", true)
 			return mutateResultMsg{issueID: title, action: fmt.Sprintf("assigned to %s", crew), err: err}
 		}
@@ -92,9 +94,19 @@ func (m Model) createCmd(result components.CreateFormResult, action string) tea.
 	issueType := data.IssueType(result.Type)
 	priority := components.ParsePriority(result.Priority)
 	return func() tea.Msg {
-		_, err := createIssue(title, issueType, priority)
+		id, err := createIssue(title, issueType, priority)
+		return createdResult(id, title, action, err)
+	}
+}
+
+// createdResult reports a create by the new issue's ID, so the toast names
+// it and the parade selects it once the reload lands (mg-xow). The title
+// stands in when bd did not return an ID.
+func createdResult(id, title, action string, err error) mutateResultMsg {
+	if err != nil || id == "" {
 		return mutateResultMsg{issueID: title, action: action, err: err}
 	}
+	return mutateResultMsg{issueID: id, action: action, createdID: id}
 }
 
 // createLinkedCmd creates the issue and marks it a duplicate of target.
@@ -110,7 +122,7 @@ func (m Model) createLinkedCmd(result components.CreateFormResult, target string
 		if err := addDependencyTyped(id, target, dupDepType); err != nil {
 			return mutateResultMsg{issueID: id, action: "mark duplicate of " + target, err: err}
 		}
-		return mutateResultMsg{issueID: id, action: "created as duplicate of " + target}
+		return mutateResultMsg{issueID: id, action: "created as duplicate of " + target, createdID: id}
 	}
 }
 

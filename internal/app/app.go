@@ -700,6 +700,7 @@ type mutateResultMsg struct {
 	action    string
 	err       error
 	claimedID string // non-empty when --claim-next claimed a follow-up issue
+	createdID string // non-empty when the mutation created this issue
 }
 
 // pruneResultMsg is sent when a bd prune invocation completes.
@@ -1678,6 +1679,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.claimedID != "" {
 			m.pendingSelectID = msg.claimedID
 			m.detail.RichIssueID = ""
+		}
+		if msg.createdID != "" {
+			m.pendingSelectID = msg.createdID
 		}
 		// Force reload: reset lastFileMod for JSONL, or immediate fetch for CLI
 		m.lastFileMod = time.Time{}

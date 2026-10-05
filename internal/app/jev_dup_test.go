@@ -399,3 +399,21 @@ func TestDupDialogRoutesKeys(t *testing.T) {
 		t.Fatalf("esc = %v", cmd())
 	}
 }
+
+func TestCreateNamesAndSelectsTheNewIssue(t *testing.T) {
+	// The toast used to read "<title> → created" with no ID, and the cursor
+	// stayed on the old issue (mg-xow).
+	stubCreate(t) // createIssue returns mg-99
+	t.Setenv(jev.EnvAPIKey, "")
+	m := New(dupIssues(), data.Source{}, data.DefaultBlockingTypes)
+	m, msg := submit(t, m, newCI)
+	res, ok := msg.(mutateResultMsg)
+	if !ok || res.issueID != "mg-99" || res.createdID != "mg-99" {
+		t.Fatalf("result = %+v, want it named by the new ID", msg)
+	}
+	model, _ := m.Update(res)
+	got := model.(Model)
+	if got.pendingSelectID != "mg-99" || !strings.Contains(got.toast.Message, "mg-99") {
+		t.Fatalf("pendingSelectID %q toast %q", got.pendingSelectID, got.toast.Message)
+	}
+}
