@@ -89,4 +89,4 @@ FAKEJEV_FLAGS="-fail-every 2" make dev-jev      # trip the circuit breaker
 make contract-jev KEY=$TYPESAFE_API_KEY         # the real endpoint, once, from a dev machine
 ```
 
-The fake answers deterministically and logs the shape of every request, which is the quickest way to check what a new question set sends.
+The fake answers deterministically and logs the shape of every request, which is the quickest way to check what a new question set sends. It answers in the hosted API's own shape (checked against `jev-1.13.0`): a yes/no answer carries only its probability, so mg derives its confidence as `max(p, 1-p)`; a score's probabilities arrive keyed by level index with a legend, which mg relabels; a choice's arrive keyed by option name. Every feature sees labelled probabilities and a confidence whatever the server sent.

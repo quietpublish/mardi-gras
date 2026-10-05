@@ -65,7 +65,7 @@ dev-jev: build
 # (MG_JEV_CONTRACT_URL=http://host:port points it at a self-hosted server.)
 contract-jev:
 	@test -n "$(KEY)" || { echo "usage: make contract-jev KEY=<api key>"; exit 2; }
-	MG_JEV_CONTRACT_KEY="$(KEY)" $(GO) test -tags jevcontract -run TestJevContract -count=1 -v ./internal/jev
+	@MG_JEV_CONTRACT_KEY="$(KEY)" $(GO) test -tags jevcontract -run TestJevContract -count=1 -v ./internal/jev
 
 screenshot: build
 	@echo "Launching mg with screenshot dataset..."
