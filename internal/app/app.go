@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -366,6 +368,37 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 // Init implements tea.Model.
 // NOTE: Init is a value receiver (tea.Model interface), so pointer-method mutations
 // are lost. We call poll functions directly and pre-set gtPollInFlight in New().
+// formBoxWidth is the create and edit forms' box width: content-fit
+// rather than full width (audit #8).
+func (m Model) formBoxWidth() int { return min(m.width-8, 64) }
+
+// editIssueCmd writes the fields the edit form changed, one bd update each,
+// stopping at the first failure.
+func editIssueCmd(r components.EditFormResult) tea.Cmd {
+	return func() tea.Msg {
+		id := r.IssueID
+		steps := []struct {
+			field string
+			write func() error
+		}{
+			{"title", func() error { return data.UpdateTitle(id, r.Title) }},
+			{"type", func() error { return data.SetType(id, data.IssueType(r.Type)) }},
+			{"priority", func() error { return data.SetPriority(id, components.ParsePriority(r.Priority)) }},
+			{"status", func() error { return data.SetStatus(id, data.Status(r.Status)) }},
+			{"description", func() error { return data.UpdateDescription(id, r.Description) }},
+		}
+		for _, s := range steps {
+			if !r.Has(s.field) {
+				continue
+			}
+			if err := s.write(); err != nil {
+				return mutateResultMsg{issueID: id, action: "edit " + s.field, err: err}
+			}
+		}
+		return mutateResultMsg{issueID: id, action: "updated " + strings.Join(r.Changed, ", ")}
+	}
+}
+
 // skippedLinesMsg reports malformed lines the initial load skipped.
 type skippedLinesMsg struct{ n int }
 
@@ -517,7 +550,77 @@ func (m *Model) startQuickAction(mode, issueID, prompt, placeholder string) tea.
 	m.qaInput.Placeholder = placeholder
 	m.qaInput.SetWidth(50)
 	m.qaInput.Focus()
+	if sugs := m.promptSuggestions(mode, issueID); len(sugs) > 0 {
+		m.qaInput.ShowSuggestions = true
+		m.qaInput.SetSuggestions(sugs)
+	}
 	return textinput.Blink
+}
+
+// promptSuggestions are the completions a quick-action prompt offers: the
+// people, labels and issue IDs already in the backlog. The prompts used to
+// be bare inputs, so a label or an ID had to be typed from memory (mg-6c8).
+func (m Model) promptSuggestions(mode, issueID string) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(v string) {
+		if v = strings.TrimSpace(v); v != "" && !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	var current *data.Issue
+	for i := range m.issues {
+		if m.issues[i].ID == issueID {
+			current = &m.issues[i]
+		}
+	}
+	for _, iss := range m.issues {
+		switch mode {
+		case "assign":
+			add(iss.Assignee)
+			add(iss.Owner)
+		case "label":
+			for _, l := range iss.Labels {
+				if current == nil || !slices.Contains(current.Labels, l) {
+					add(l)
+				}
+			}
+		case "link":
+			if iss.ID != issueID {
+				add(iss.ID)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// promptBar renders a quick-action prompt with its key hints, and for link
+// the title of the issue it would link to.
+func (m Model) promptBar() string {
+	line := m.qaInput.View()
+	if m.qaMode == "link" {
+		target := m.qaInput.CurrentSuggestion()
+		if target == "" {
+			target = strings.TrimSpace(m.qaInput.Value())
+		}
+		for _, iss := range m.issues {
+			if iss.ID == target {
+				line += lipgloss.NewStyle().Foreground(ui.Dim).Render("  → " + iss.Title)
+				break
+			}
+		}
+	}
+	hint := "enter save · esc cancel"
+	if len(m.qaInput.AvailableSuggestions()) > 0 {
+		hint = "tab complete · ↓ next · " + hint
+	}
+	chip := lipgloss.NewStyle().Foreground(ui.Dim).Render(hint)
+	if gap := m.width - lipgloss.Width(line) - lipgloss.Width(chip) - 3; gap > 0 {
+		line += strings.Repeat(" ", gap) + chip
+	}
+	return line
 }
 
 // agentFinishedMsg is sent when a launched claude session exits.
@@ -825,18 +928,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if result.Cancelled {
 			return m, nil
 		}
-		id := result.IssueID
-		title := result.Title
-		priority := components.ParsePriority(result.Priority)
-		return m, func() tea.Msg {
-			if err := data.UpdateTitle(id, title); err != nil {
-				return mutateResultMsg{issueID: id, action: "edit title", err: err}
-			}
-			if err := data.SetPriority(id, priority); err != nil {
-				return mutateResultMsg{issueID: id, action: "edit priority", err: err}
-			}
-			return mutateResultMsg{issueID: id, action: "updated", err: nil}
+		if len(result.Changed) == 0 {
+			return m, nil
 		}
+		return m, editIssueCmd(result)
 	}
 
 	// Handle palette result
@@ -2278,7 +2373,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.editing = true
-		m.editForm = components.NewEditForm(m.width, m.height, issue)
+		m.editForm = components.NewEditForm(ui.OverlayInnerWidth(m.formBoxWidth()), m.height, issue)
 		return m, m.editForm.Init()
 
 	case "r": // Reply (codex transcript) OR Comment (remark) on parade
@@ -2717,7 +2812,7 @@ func (m Model) buildPaletteCommands() []components.PaletteCommand {
 		{Name: "Copy branch name", Desc: "Copy git branch to clipboard", Key: "b", Action: components.ActionCopyBranch},
 		{Name: "Create git branch", Desc: "Checkout new branch for issue", Key: "B", Action: components.ActionCreateBranch},
 		{Name: "New issue", Desc: "Create a new beads issue", Key: "N", Action: components.ActionNewIssue},
-		{Name: "Edit issue", Desc: "Edit title and priority", Key: "e", Action: components.ActionEditIssue},
+		{Name: "Edit issue", Desc: "Edit title, type, priority, status, description", Key: "e", Action: components.ActionEditIssue},
 		{Name: "Add comment", Desc: "Comment on the selected issue", Key: "r", Action: components.ActionComment},
 		{Name: "Assign issue", Desc: "Set the assignee", Key: "y", Action: components.ActionAssignIssue},
 		{Name: "Add label", Desc: "Label the selected issue", Key: "t", Action: components.ActionAddLabel},
@@ -2847,7 +2942,7 @@ func (m Model) executePaletteAction(action components.PaletteAction) (tea.Model,
 		return m.handleKey(tea.KeyPressMsg{Code: 'n', Text: "n"})
 	case components.ActionAssign:
 		m.creating = true
-		m.createForm = components.NewCreateFormWithGT(m.width, m.height)
+		m.createForm = components.NewCreateFormWithGT(ui.OverlayInnerWidth(m.formBoxWidth()), m.height)
 		return m, m.createForm.Init()
 	case components.ActionToggleGasTown:
 		if !m.orchestratorAvailable() {
@@ -3683,9 +3778,9 @@ func (m Model) newCreateForm() components.CreateForm {
 	// bead create), so the crew field is offered whenever any orchestrator is
 	// live rather than only when the gt binary is present.
 	if m.orchestratorAvailable() {
-		return components.NewCreateFormWithGT(m.width, m.height)
+		return components.NewCreateFormWithGT(ui.OverlayInnerWidth(m.formBoxWidth()), m.height)
 	}
-	return components.NewCreateForm(m.width, m.height)
+	return components.NewCreateForm(ui.OverlayInnerWidth(m.formBoxWidth()), m.height)
 }
 
 const patrolScanTTL = 60 * time.Second
@@ -3860,7 +3955,7 @@ func (m Model) View() tea.View {
 	case m.slingTargeting:
 		bottomBar = inputBarStyle.Render(m.slingTargetInput.View())
 	case m.qaMode != "":
-		bottomBar = inputBarStyle.Render(m.qaInput.View())
+		bottomBar = inputBarStyle.Render(m.promptBar())
 	case m.mailComposing:
 		bottomBar = inputBarStyle.Render(m.mailComposeInput.View())
 	case m.mailReplying:
@@ -3937,17 +4032,17 @@ func (m Model) View() tea.View {
 	if m.editing {
 		// Content-fit modal: a small form in a full-width box reads as
 		// dead space (audit #8).
-		formWidth := min(m.width-8, 64)
+		formWidth := m.formBoxWidth()
 		formTitle := ui.HelpTitle.Width(ui.OverlayInnerWidth(formWidth)).Render("[ EDIT ISSUE ]")
 		formBody := m.editForm.View()
-		formHint := ui.HelpHint.Width(ui.OverlayInnerWidth(formWidth)).Render("tab next field · enter save · esc cancel")
+		formHint := ui.HelpHint.Width(ui.OverlayInnerWidth(formWidth)).Render("tab next field · enter or ctrl+s save · esc cancel")
 		formContent := lipgloss.JoinVertical(lipgloss.Left, formTitle, "", formBody, "", formHint)
 		formBox := ui.OverlayBox(formContent, formWidth)
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, formBox))
 	}
 
 	if m.creating {
-		formWidth := min(m.width-8, 64)
+		formWidth := m.formBoxWidth()
 		formTitle := ui.HelpTitle.Width(ui.OverlayInnerWidth(formWidth)).Render("[ NEW ISSUE ]")
 		formBody := m.createForm.View()
 		formHint := ui.HelpHint.Width(ui.OverlayInnerWidth(formWidth)).Render("tab next field · enter create · esc cancel")

@@ -53,14 +53,12 @@ func TestEditFormTabCycles(t *testing.T) {
 	issue := data.Issue{ID: "mg-1", Title: "Test", Priority: data.PriorityMedium}
 	ef := NewEditForm(80, 24, &issue)
 
-	// Start at field 0 (title)
-	ef, _ = ef.Update(tea.KeyPressMsg{Code: -2, Text: "tab"})
-	if ef.activeField != 1 {
-		t.Fatalf("after tab, activeField = %d, want 1", ef.activeField)
-	}
-	ef, _ = ef.Update(tea.KeyPressMsg{Code: -2, Text: "tab"})
-	if ef.activeField != 0 {
-		t.Fatalf("after tab tab, activeField = %d, want 0 (wrap)", ef.activeField)
+	// Title → Type → Priority → Status → Description → Title (mg-nd2)
+	for _, want := range []int{editFieldType, editFieldPriority, editFieldStatus, editFieldDescription, editFieldTitle} {
+		ef, _ = ef.Update(tea.KeyPressMsg{Code: -2, Text: "tab"})
+		if ef.activeField != want {
+			t.Fatalf("activeField = %d, want %d", ef.activeField, want)
+		}
 	}
 }
 
@@ -69,8 +67,8 @@ func TestEditFormShiftTabCycles(t *testing.T) {
 	ef := NewEditForm(80, 24, &issue)
 
 	ef, _ = ef.Update(tea.KeyPressMsg{Code: -2, Text: "shift+tab"})
-	if ef.activeField != 1 {
-		t.Fatalf("after shift+tab, activeField = %d, want 1", ef.activeField)
+	if ef.activeField != editFieldDescription {
+		t.Fatalf("after shift+tab, activeField = %d, want the description (wrap)", ef.activeField)
 	}
 }
 
@@ -96,8 +94,8 @@ func TestEditFormSubmitNoChanges(t *testing.T) {
 	issue := data.Issue{ID: "mg-1", Title: "Test", Priority: data.PriorityMedium}
 	ef := NewEditForm(80, 24, &issue)
 
-	// Move to priority field (field 1), then submit
-	ef, _ = ef.Update(tea.KeyPressMsg{Code: -2, Text: "tab"})
+	// Move to priority field, then submit
+	ef.focus(editFieldPriority)
 	_, cmd := ef.Update(tea.KeyPressMsg{Code: -2, Text: "enter"})
 	if cmd == nil {
 		t.Fatal("expected cmd from enter on last field")
@@ -123,7 +121,7 @@ func TestEditFormSubmitWithChanges(t *testing.T) {
 	ef.titleInput.SetValue("New title")
 
 	// Move to priority, change it
-	ef, _ = ef.Update(tea.KeyPressMsg{Code: -2, Text: "tab"})
+	ef.focus(editFieldPriority)
 	ef, _ = ef.Update(tea.KeyPressMsg{Code: 'k', Text: "k"}) // move priority up (P3→P2)
 
 	// Submit
@@ -136,6 +134,9 @@ func TestEditFormSubmitWithChanges(t *testing.T) {
 	if result.Priority != "2" {
 		t.Fatalf("Priority = %q, want 2", result.Priority)
 	}
+	if strings.Join(result.Changed, ",") != "title,priority" {
+		t.Fatalf("Changed = %v, want only title and priority", result.Changed)
+	}
 }
 
 func TestEditFormPriorityBounds(t *testing.T) {
@@ -143,7 +144,7 @@ func TestEditFormPriorityBounds(t *testing.T) {
 	ef := NewEditForm(80, 24, &issue)
 
 	// Move to priority field
-	ef, _ = ef.Update(tea.KeyPressMsg{Code: -2, Text: "tab"})
+	ef.focus(editFieldPriority)
 
 	// Try to go above P0 (should stay at 0)
 	ef, _ = ef.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
@@ -197,5 +198,39 @@ func TestEditFormEnterEdgeCaseEmptyTitleSaysWhy(t *testing.T) {
 	ef, cmd := ef.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd != nil || !strings.Contains(ef.View(), "Title is required") {
 		t.Fatal("an empty title should not save and should say why")
+	}
+}
+
+func TestEditFormEditsTypeStatusDescription(t *testing.T) {
+	// The edit form covered only title and priority; description, type and
+	// status needed the bd CLI (mg-nd2).
+	issue := data.Issue{ID: "mg-1", Title: "T", IssueType: data.TypeTask, Status: data.StatusOpen, Priority: data.PriorityMedium, Description: "old"}
+	ef := NewEditForm(80, 24, &issue)
+	ef.focus(editFieldType)
+	ef, _ = ef.Update(tea.KeyPressMsg{Code: tea.KeyRight}) // Task → Bug
+	ef.focus(editFieldStatus)
+	ef, _ = ef.Update(tea.KeyPressMsg{Code: 'l', Text: "l"}) // Open → In progress
+	ef.focus(editFieldDescription)
+	ef.descInput.SetValue("line one")
+	ef, _ = ef.Update(tea.KeyPressMsg{Code: tea.KeyEnter}) // a newline, not a save
+	ef, _ = ef.Update(tea.KeyPressMsg{Code: 't', Text: "t"})
+	_, cmd := ef.Update(tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
+	if cmd == nil {
+		t.Fatal("ctrl+s should save from the description")
+	}
+	res := cmd().(EditFormResult)
+	if res.Type != "bug" || res.Status != "in_progress" || res.Description != "line one\nt" {
+		t.Fatalf("result = %+v", res)
+	}
+	if strings.Join(res.Changed, ",") != "type,status,description" {
+		t.Fatalf("Changed = %v", res.Changed)
+	}
+}
+
+func TestEditFormEdgeCaseCustomTypeKept(t *testing.T) {
+	issue := data.Issue{ID: "mg-1", Title: "T", IssueType: "decision", Priority: data.PriorityMedium}
+	ef := NewEditForm(80, 24, &issue)
+	if got := ef.values().Type; got != "decision" {
+		t.Fatalf("a custom type should stay selected, got %q", got)
 	}
 }

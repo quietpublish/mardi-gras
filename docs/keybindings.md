@@ -49,7 +49,7 @@ Keys marked **(orch)** need a live orchestrator — Gas Town (`gt`) or Gas City.
 | `b`           | Copy branch name to clipboard            |
 | `B`           | Create + checkout git branch             |
 | `N`           | Create new issue                         |
-| `e`           | Edit selected issue (title, priority)    |
+| `e`           | Edit selected issue (title, type, priority, status, description; `enter` or `ctrl+s` saves, `enter` in the description adds a line) |
 | `r`           | Add comment to selected issue            |
 | `y`           | Assign selected issue                    |
 | `t`           | Add label to selected issue              |
@@ -57,6 +57,8 @@ Keys marked **(orch)** need a live orchestrator — Gas Town (`gt`) or Gas City.
 | `s`           | Pick a formula and sling the issue **(orch)** |
 | `n`           | Nudge the agent working the issue **(orch)** |
 | `C`           | Create a convoy from the selection **(orch)** |
+
+The `y`, `t` and `l` prompts complete from the backlog: known assignees, labels the issue doesn't have yet, and other issue IDs. `tab` accepts the suggestion, `↓` / `ctrl+n` cycles through matches, and `l` shows the title of the issue it would link to.
 
 `3` on a single issue closes it and atomically claims the next ready bead. `n` only fires when an agent is actually active on the selected issue. `C` on an epic builds the convoy from that epic's tree; on any other issue (or a multi-selection) it builds from the selected IDs.
 

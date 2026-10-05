@@ -156,7 +156,7 @@ func allSections() []helpSection {
 		{
 			title: "EDIT",
 			bindings: []helpBinding{
-				{key: "e", desc: "Edit title and priority"},
+				{key: "e", desc: "Edit title, type, priority, status, description"},
 				{key: "r", desc: "Add comment"},
 				{key: "y", desc: "Assign"},
 				{key: "t", desc: "Add label"},
