@@ -50,6 +50,7 @@ type GasTownActionMsg struct {
 
 // GasTown renders the Gas Town control surface panel in place of the detail pane.
 type GasTown struct {
+	name        string // backend display name ("Gas Town" / "Gas City"); "" reads as Gas Town
 	width       int
 	height      int
 	scrollOff   int // vertical scroll offset (manual, not viewport)
@@ -170,6 +171,17 @@ func (g *GasTown) TickCount() int {
 // panel can say so instead of showing a loading line forever. backend is the
 // Driver.Backend() name, used only to pick the remediation hint. Pass a nil err
 // to clear (on success, or when a retry starts).
+// SetBackendName names the orchestrator in the panel's text (mg-enb).
+func (g *GasTown) SetBackendName(name string) { g.name = name }
+
+// displayName is the backend name for the panel's text.
+func (g GasTown) displayName() string {
+	if g.name == "" {
+		return "Gas Town"
+	}
+	return g.name
+}
+
 func (g *GasTown) SetStatusError(err error, backend string) {
 	g.statusErr = err
 	g.statusErrBackend = backend
@@ -182,7 +194,7 @@ func (g *GasTown) renderStatusError(contentWidth int) string {
 	title := lipgloss.NewStyle().
 		Foreground(ui.BrightGold).
 		Bold(true).
-		Render(ui.SymTown + " Gas Town status unavailable")
+		Render(ui.SymTown + " " + g.displayName() + " status unavailable")
 
 	detail := lipgloss.NewStyle().
 		Width(contentWidth).
@@ -632,7 +644,7 @@ func (g *GasTown) renderContent() string {
 			return lipgloss.NewStyle().
 				Width(contentWidth).
 				Foreground(ui.Muted).
-				Render(spin + " Loading Gas Town status…")
+				Render(spin + " Loading " + g.displayName() + " status…")
 		}
 		// A failed fetch with no data to fall back on. Without this the panel
 		// dropped back to the loading/unavailable line and sat there forever,
@@ -640,9 +652,9 @@ func (g *GasTown) renderContent() string {
 		if g.statusErr != nil {
 			return g.renderStatusError(contentWidth)
 		}
-		msg := ui.SymTown + " Gas Town not available"
+		msg := ui.SymTown + " " + g.displayName() + " not available"
 		if g.env.Available {
-			msg = ui.SymTown + " Loading Gas Town status..."
+			msg = ui.SymTown + " Loading " + g.displayName() + " status..."
 		}
 		return lipgloss.NewStyle().
 			Width(contentWidth).
@@ -652,7 +664,7 @@ func (g *GasTown) renderContent() string {
 
 	var sections []string
 
-	sections = append(sections, renderTownHeader(g.env, g.status))
+	sections = append(sections, renderTownHeader(g.displayName(), g.env, g.status))
 	sections = append(sections, g.renderAgentRoster(contentWidth))
 
 	if len(g.status.Rigs) > 0 {
@@ -695,13 +707,13 @@ func (g *GasTown) renderContent() string {
 	return strings.Join(sections, "\n")
 }
 
-func renderTownHeader(env gastown.Env, status *gastown.TownStatus) string {
+func renderTownHeader(name string, env gastown.Env, status *gastown.TownStatus) string {
 	var lines []string
 
 	title := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(ui.BrightGold).
-		Render(ui.SymTown + " GAS TOWN")
+		Render(ui.SymTown + " " + strings.ToUpper(name))
 	lines = append(lines, title)
 	lines = append(lines, "")
 

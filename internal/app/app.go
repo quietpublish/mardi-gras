@@ -69,6 +69,10 @@ type Model struct {
 	excludeTypes  map[string]bool
 	excludeLabels map[string]bool
 	filterInput   textinput.Model
+	// filterMatched of filterTotal searchable issues match the query; set
+	// by rebuildParade for the filter bar's counter.
+	filterMatched int
+	filterTotal   int
 	filtering     bool
 	showHelp      bool
 	help          components.Help
@@ -428,6 +432,14 @@ func (m Model) orchestratorAvailable() bool {
 	return m.gtEnv.Available || m.driver.Backend() == "gascity"
 }
 
+// needsOrchestrator answers an orchestrator-only key on a Beads-only
+// machine. It used to do nothing at all, which reads as broken (mg-j87).
+func (m Model) needsOrchestrator(key string) (tea.Model, tea.Cmd) {
+	toast, cmd := components.ShowToast(key+" needs an orchestrator (Gas Town or Gas City)", components.ToastInfo, toastDuration)
+	m.toast = toast
+	return m, cmd
+}
+
 // gasTownLoading reports whether the Gas Town panel is open and still waiting on
 // a status fetch — the window during which the loading spinner runs.
 //
@@ -696,6 +708,7 @@ type mutateResultMsg struct {
 	action    string
 	err       error
 	claimedID string // non-empty when --claim-next claimed a follow-up issue
+	createdID string // non-empty when the mutation created this issue
 }
 
 // pruneResultMsg is sent when a bd prune invocation completes.
@@ -738,6 +751,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	nm, ok := next.(Model)
 	if ok && nm.oscGuard != nil {
 		nm.oscGuard.SetTextEntry(nm.inTextEntry())
+	}
+	if ok {
+		// Orchestrator-only UI follows what this machine can do (mg-j87).
+		orch := nm.orchestratorAvailable()
+		name := gastown.BackendName(nm.driver.Backend())
+		nm.help.Orchestrated = orch
+		nm.help.OrchestratorName = name
+		nm.gasTown.SetBackendName(name)
+		nm.detail.HideFormulas = !orch
+		next = nm
 	}
 	if !ok || !nm.captureWanted || nm.captureInFlight {
 		return next, cmd
@@ -980,6 +1003,15 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Forward all messages to quick-action input when active
+	// Key presses reach the filter through handleFilteringKey; a paste is
+	// its own message and used to be dropped (mg-svx).
+	if paste, ok := msg.(tea.PasteMsg); ok && m.filtering {
+		var cmd tea.Cmd
+		m.filterInput, cmd = m.filterInput.Update(paste)
+		m.rebuildParade()
+		return m, cmd
+	}
+
 	if m.qaMode != "" {
 		if km, ok := msg.(tea.KeyPressMsg); ok {
 			switch km.String() {
@@ -1666,6 +1698,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pendingSelectID = msg.claimedID
 			m.detail.RichIssueID = ""
 		}
+		if msg.createdID != "" {
+			m.pendingSelectID = msg.createdID
+		}
 		// Force reload: reset lastFileMod for JSONL, or immediate fetch for CLI
 		m.lastFileMod = time.Time{}
 		cmds := []tea.Cmd{toastCmd, m.refreshAfterMutation(msg.issueID)}
@@ -1901,6 +1936,13 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "esc":
+		// An applied filter clears first: it is the most recent narrowing,
+		// and esc used to leave it stuck on screen (mg-9ik).
+		if m.filterInput.Value() != "" {
+			m.filterInput.SetValue("")
+			m.rebuildParade()
+			return m, nil
+		}
 		if m.focusMode {
 			m.focusMode = false
 			m.rebuildParade()
@@ -1926,7 +1968,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "ctrl+g":
 		if !m.orchestratorAvailable() {
-			return m, nil
+			return m.needsOrchestrator("ctrl+g")
 		}
 		m.showGasTown = !m.showGasTown
 		if m.showGasTown {
@@ -1941,7 +1983,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "p":
 		if !m.orchestratorAvailable() {
-			return m, nil
+			return m.needsOrchestrator("p")
 		}
 		m.showProblems = !m.showProblems
 		if m.showProblems {
@@ -2132,7 +2174,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "s":
 		if !m.orchestratorAvailable() {
-			return m, nil
+			return m.needsOrchestrator("s")
 		}
 		// Multi-select: collect IDs for formula picking
 		if selected := m.parade.SelectedIssues(); len(selected) > 0 {
@@ -2163,8 +2205,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "n":
+		if !m.orchestratorAvailable() {
+			return m.needsOrchestrator("n")
+		}
 		issue := m.parade.SelectedIssue
-		if issue == nil || !m.orchestratorAvailable() {
+		if issue == nil {
 			return m, nil
 		}
 		agentName, active := m.activeAgents[issue.ID]
@@ -2234,7 +2279,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "C":
 		if !m.orchestratorAvailable() {
-			return m, nil
+			return m.needsOrchestrator("C")
 		}
 		var ids []string
 		var epicID string
@@ -2658,7 +2703,7 @@ func (m Model) buildPaletteCommands() []components.PaletteCommand {
 
 	if m.orchestratorAvailable() {
 		cmds = append(cmds,
-			components.PaletteCommand{Name: "Toggle Gas Town", Desc: "Show/hide Gas Town panel", Key: "^g", Action: components.ActionToggleGasTown},
+			components.PaletteCommand{Name: "Toggle " + gastown.BackendName(m.driver.Backend()), Desc: "Show/hide the " + gastown.BackendName(m.driver.Backend()) + " panel", Key: "^g", Action: components.ActionToggleGasTown},
 			components.PaletteCommand{Name: "Sling with formula", Desc: "Pick formula and sling to polecat", Key: "s", Action: components.ActionSlingFormula},
 			components.PaletteCommand{Name: "Nudge agent", Desc: "Nudge agent with message", Key: "n", Action: components.ActionNudgeAgent},
 			components.PaletteCommand{Name: "Create & assign to crew", Desc: "Create issue and hook to crew member", Key: "", Action: components.ActionAssign},
@@ -2773,7 +2818,11 @@ func (m Model) executePaletteAction(action components.PaletteAction) (tea.Model,
 		return m.cascadeCloseIssue()
 	case components.ActionCycleLayout:
 		m.layoutPreset = (m.layoutPreset + 1) % layoutPresetCount
-		labels := [...]string{"Default", "Gas Town", "Wide"}
+		// The Gas Town layout is the orchestrator panel; skip it without one.
+		if m.layoutPreset == LayoutGasTown && !m.orchestratorAvailable() {
+			m.layoutPreset = (m.layoutPreset + 1) % layoutPresetCount
+		}
+		labels := [...]string{"Default", gastown.BackendName(m.driver.Backend()), "Wide"}
 		// Auto-toggle gastown panel for the GasTown preset
 		switch m.layoutPreset {
 		case LayoutGasTown:
@@ -3211,6 +3260,18 @@ func (m *Model) detailFetchBatch() []tea.Cmd {
 }
 
 // layout recalculates dimensions for all sub-components.
+// paradeMinWidth keeps room for ~30 characters of title beside the ID,
+// status glyph and priority.
+const paradeMinWidth = 48
+
+// paradeWidth is the parade's share of a terminal width: two fifths, but at
+// least paradeMinWidth and at most three fifths. At 80 columns two fifths
+// left titles ~9 characters while the detail pane kept more than half
+// (mg-o6v); 120 columns and wider are unchanged.
+func paradeWidth(width int) int {
+	return max(width*2/5, min(width*3/5, paradeMinWidth))
+}
+
 func (m *Model) layout() {
 	headerH := 2
 	footerH := 2
@@ -3225,10 +3286,7 @@ func (m *Model) layout() {
 		paradeW = m.width
 		detailW = 0
 	default:
-		paradeW = m.width * 2 / 5
-		if paradeW < 30 {
-			paradeW = 30
-		}
+		paradeW = paradeWidth(m.width)
 		detailW = m.width - paradeW
 	}
 
@@ -3294,7 +3352,7 @@ func (m *Model) rebuildParade() {
 	paradeW := m.parade.Width
 	bodyH := m.parade.Height
 	if paradeW == 0 {
-		paradeW = m.width * 2 / 5
+		paradeW = paradeWidth(m.width)
 	}
 	if bodyH == 0 {
 		bodyH = m.height - 4
@@ -3302,6 +3360,8 @@ func (m *Model) rebuildParade() {
 
 	filteredIssues, highlights := data.FilterIssuesWithHighlights(m.issues, m.filterInput.Value())
 	filteredIssues = data.ExcludeByLabel(data.ExcludeByType(filteredIssues, m.excludeTypes), m.excludeLabels)
+	m.filterMatched = len(filteredIssues)
+	m.filterTotal = len(data.ExcludeByLabel(data.ExcludeByType(m.issues, m.excludeTypes), m.excludeLabels))
 	var ranks map[string]float64 // the judge's urgency per ranked issue, focus mode only
 	if m.focusMode {
 		verdicts := m.focusVerdicts()
@@ -3747,7 +3807,12 @@ func (m Model) View() tea.View {
 		// Right-aligned match count so a narrowing query gives feedback
 		// (audit #12).
 		line := m.filterInput.View()
-		count := components.FooterModeChip(fmt.Sprintf("%d/%d match", m.parade.VisibleIssues(), len(m.parade.AllIssues)))
+		// matched of searchable, not visible rows of matched (mg-9ik).
+		label := fmt.Sprintf("%d of %d", m.filterMatched, m.filterTotal)
+		if !m.filtering {
+			label += " · esc clear"
+		}
+		count := components.FooterModeChip(label)
 		gap := m.width - lipgloss.Width(line) - lipgloss.Width(count) - 3
 		if gap > 0 {
 			line += strings.Repeat(" ", gap) + count
@@ -3755,6 +3820,7 @@ func (m Model) View() tea.View {
 		bottomBar = inputBarStyle.Render(line)
 	default:
 		footer := components.NewFooter(m.width, m.activPane == PaneDetail, m.orchestratorAvailable())
+		footer.NameOrchestrator(gastown.BackendName(m.driver.Backend()))
 		footer.Focus = m.focusMode
 		footer.FocusJev = m.focusMode && len(m.parade.Ranks) > 0
 		footer.SourcePath = m.watchPath

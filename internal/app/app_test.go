@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -365,5 +366,68 @@ func TestHelpOpensAfterLeavingFilteringMode(t *testing.T) {
 	got = model.(Model)
 	if got.showHelp {
 		t.Fatal("expected help overlay to close on esc")
+	}
+}
+
+// filterModel is a ready model over two issues with the filter open.
+func filterModel(t *testing.T) Model {
+	t.Helper()
+	issues := []data.Issue{testIssue("alpha-1", data.StatusOpen), testIssue("beta-1", data.StatusOpen)}
+	issues[0].Title = "Deploy authentication service"
+	issues[1].Title = "Fix CI pipeline timeout"
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
+	m.startedAt = time.Now().Add(-time.Second) // bypass startup guard
+	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	model, _ = model.(Model).Update(tea.KeyPressMsg{Code: '/', Text: "/"})
+	return model.(Model)
+}
+
+func TestFilteringModePasteReachesInput(t *testing.T) {
+	// A paste is its own message, not a key press, and used to be dropped
+	// in the filter bar while it worked in forms and prompts (mg-svx).
+	got := filterModel(t)
+	model, _ := got.Update(tea.PasteMsg{Content: "auth"})
+	got = model.(Model)
+	if got.filterInput.Value() != "auth" || got.filterMatched != 1 {
+		t.Fatalf("value %q matched %d, want the pasted query applied", got.filterInput.Value(), got.filterMatched)
+	}
+}
+
+func TestFilterCounterAndEscClearAfterApply(t *testing.T) {
+	// The counter said "visible/matched" (10/11) when 11 of 21 matched, and
+	// once applied with enter, esc no longer cleared the filter (mg-9ik).
+	got := filterModel(t)
+	for _, r := range "auth" {
+		model, _ := got.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+		got = model.(Model)
+	}
+	model, _ := got.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	got = model.(Model)
+	if got.filtering || got.filterInput.Value() != "auth" {
+		t.Fatalf("enter should apply the filter: filtering %v value %q", got.filtering, got.filterInput.Value())
+	}
+	if view := got.View().Content; !strings.Contains(view, "1 of 2 · esc clear") {
+		t.Fatal("applied filter should show '1 of 2 · esc clear'")
+	}
+	model, _ = got.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	got = model.(Model)
+	if got.filterInput.Value() != "" || got.filterMatched != 2 {
+		t.Fatalf("esc should clear the applied filter: value %q matched %d", got.filterInput.Value(), got.filterMatched)
+	}
+}
+
+func TestParadeWidthNarrowTerminals(t *testing.T) {
+	// At 80 columns the parade got 32 and titles ~9 characters (mg-o6v).
+	for _, tc := range []struct{ width, want int }{
+		{60, 36}, {80, 48}, {100, 48}, {120, 48}, {160, 64}, {220, 88},
+	} {
+		if got := paradeWidth(tc.width); got != tc.want {
+			t.Errorf("paradeWidth(%d) = %d, want %d", tc.width, got, tc.want)
+		}
+	}
+	for w := 40; w < 300; w++ {
+		if paradeWidth(w+1) < paradeWidth(w) {
+			t.Fatalf("parade shrinks as the terminal grows at %d", w)
+		}
 	}
 }

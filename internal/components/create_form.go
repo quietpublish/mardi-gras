@@ -49,10 +49,11 @@ var priorityOptions = []selectOption{
 type CreateForm struct {
 	titleInput  textinput.Model
 	crewInput   textinput.Model
-	typeIdx     int // selected index in typeOptions
-	prioIdx     int // selected index in priorityOptions
-	activeField int // 0=title, 1=type, 2=priority, 3=crew (when gtAvailable)
-	fieldCount  int // 3 without GT, 4 with GT
+	typeIdx     int    // selected index in typeOptions
+	prioIdx     int    // selected index in priorityOptions
+	activeField int    // 0=title, 1=type, 2=priority, 3=crew (when gtAvailable)
+	fieldCount  int    // 3 without GT, 4 with GT
+	err         string // shown under the title after a rejected submit
 	width       int
 	height      int
 }
@@ -105,13 +106,16 @@ func (cf CreateForm) Init() tea.Cmd {
 func (cf CreateForm) Update(msg tea.Msg) (CreateForm, tea.Cmd) {
 	km, ok := msg.(tea.KeyPressMsg)
 	if !ok {
-		// Forward non-key messages to text input
+		// Non-key messages (a paste, the cursor blink) go to the focused
+		// text input; a paste used to land in the title even from Crew.
 		var cmd tea.Cmd
-		cf.titleInput, cmd = cf.titleInput.Update(msg)
+		if cf.activeField == 3 {
+			cf.crewInput, cmd = cf.crewInput.Update(msg)
+		} else {
+			cf.titleInput, cmd = cf.titleInput.Update(msg)
+		}
 		return cf, cmd
 	}
-
-	lastField := cf.fieldCount - 1
 
 	switch km.String() {
 	case "esc":
@@ -130,25 +134,24 @@ func (cf CreateForm) Update(msg tea.Msg) (CreateForm, tea.Cmd) {
 		return cf, nil
 
 	case "enter":
-		if cf.activeField == lastField {
-			// Submit on last field
-			title := cf.titleInput.Value()
-			if title == "" {
-				return cf, nil
-			}
-			return cf, func() tea.Msg {
-				return CreateFormResult{
-					Title:      title,
-					Type:       typeOptions[cf.typeIdx].Value,
-					Priority:   priorityOptions[cf.prioIdx].Value,
-					CrewMember: cf.crewInput.Value(),
-				}
+		// Enter creates from any field, as the hint says; tab moves between
+		// fields. It used to advance field by field and do nothing on an
+		// empty title (mg-vtc).
+		title := strings.TrimSpace(cf.titleInput.Value())
+		if title == "" {
+			cf.err = "Title is required"
+			cf.activeField = 0
+			cf.focusActiveInput()
+			return cf, nil
+		}
+		return cf, func() tea.Msg {
+			return CreateFormResult{
+				Title:      title,
+				Type:       typeOptions[cf.typeIdx].Value,
+				Priority:   priorityOptions[cf.prioIdx].Value,
+				CrewMember: cf.crewInput.Value(),
 			}
 		}
-		// On other fields, advance
-		cf.activeField++
-		cf.focusActiveInput()
-		return cf, nil
 
 	case "j", "down":
 		if cf.activeField == 1 {
@@ -183,6 +186,9 @@ func (cf CreateForm) Update(msg tea.Msg) (CreateForm, tea.Cmd) {
 	if cf.activeField == 0 {
 		var cmd tea.Cmd
 		cf.titleInput, cmd = cf.titleInput.Update(msg)
+		if strings.TrimSpace(cf.titleInput.Value()) != "" {
+			cf.err = ""
+		}
 		return cf, cmd
 	}
 	if cf.activeField == 3 {
@@ -223,6 +229,9 @@ func (cf CreateForm) View() string {
 	}
 	lines = append(lines, label)
 	lines = append(lines, "  "+cf.titleInput.View())
+	if cf.err != "" {
+		lines = append(lines, "  "+lipgloss.NewStyle().Foreground(ui.StatusStalled).Render(cf.err))
+	}
 	lines = append(lines, "")
 
 	// Type field

@@ -219,3 +219,13 @@ func TestFooterViewJevChipEdgeCaseNoSource(t *testing.T) {
 		t.Fatalf("with no source info the chip stands alone, got: %s", out)
 	}
 }
+
+func TestFooterNameOrchestrator(t *testing.T) {
+	f := NewFooter(200, false, true)
+	f.NameOrchestrator("Gas City")
+	for _, b := range f.Bindings {
+		if b.Key == "^g" && b.Desc != "gas city" {
+			t.Fatalf("^g desc = %q, want \"gas city\" (mg-enb)", b.Desc)
+		}
+	}
+}

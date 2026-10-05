@@ -17,6 +17,15 @@ const (
 	BackendGasCity = "gascity"
 )
 
+// BackendName is a backend's display name, for UI text that names the
+// orchestrator in use: "Gas City" for the Gas City driver, else "Gas Town".
+func BackendName(backend string) string {
+	if backend == BackendGasCity {
+		return "Gas City"
+	}
+	return "Gas Town"
+}
+
 // Feature identifies an optional capability a Driver may or may not provide.
 // The UI consults Driver.Supports to decide whether to render a panel/section.
 type Feature int

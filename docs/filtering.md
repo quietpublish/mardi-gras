@@ -32,20 +32,21 @@ Press `m` in the detail pane to mark the active molecule step as done.
 
 Press `/` and the bottom bar becomes a query input.
 
-- `enter`: keep the query applied and return to list navigation.
-- `esc`: clear the query and exit filter mode.
-- Structured tokens use `AND` semantics — every one of them must match.
-- The right of the bar shows a live `N/M match` count as the query narrows.
+- `enter`: keep the query applied and return to list navigation. The bar stays, with an `esc clear` hint.
+- `esc`: clear the query (while typing, or once applied) and exit filter mode.
+- Pasting into the bar works like typing.
+- Every token, structured or free text, must match (`AND`).
+- The right of the bar shows how many issues match out of how many could, e.g. `11 of 21`.
 
 Supported query forms:
 
-- Free text: `deploy auth` — a fuzzy, case-insensitive **subsequence** match over ID + title + description + assignee + owner + notes + labels, joined into one haystack per issue. Results are ranked by match quality.
+- Free text: `deploy auth` — each word must appear, case-insensitively, somewhere in the ID, title, description, assignee, owner, notes or labels. Matches keep the parade's priority order, and the matched words are highlighted in titles. Only when no issue contains the query does mg fall back to a fuzzy match over ID and title, so typos and abbreviations (`authentcation`, `lgn tkn`) still find something.
 - Type token: `type:bug`, `type:feature`, `type:task`, `type:chore`, `type:epic`, `type:spike`, `type:story`, `type:milestone`
 - Label token: `label:gt:agent` (case-insensitive, exact match on one of the issue's labels)
 - Priority shorthand: `p0` to `p4`
 - Priority token: `priority:0` to `priority:4`, or `priority:critical|high|medium|low|backlog`
 
-Anything that isn't one of those prefixes (or a `p0`–`p4` shorthand) is free text. Free-text words are **not** ANDed independently — they are joined back into a single fuzzy pattern, so word order matters: `deploy auth` and `auth deploy` are different queries.
+Anything that isn't one of those prefixes (or a `p0`–`p4` shorthand) is free text. Word order does not matter: `deploy auth` and `auth deploy` find the same issues.
 
 Examples:
 
@@ -53,7 +54,7 @@ Examples:
 type:feature p1 deploy
 priority:high auth
 label:gt:agent p0
-type:feature p0 auth deploy     ← P0 features fuzzy-matching "auth deploy", in that order
+type:feature p0 auth deploy     ← P0 features mentioning both "auth" and "deploy"
 vv-006
 ```
 

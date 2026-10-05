@@ -1,6 +1,7 @@
 package data
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/sahilm/fuzzy"
@@ -80,10 +81,9 @@ func FilterIssues(issues []Issue, query string) []Issue {
 		candidates = filtered
 	}
 
-	// Second pass: fuzzy match on combined free tokens
+	// Second pass: free text (see matchFreeText)
 	if len(freeTokens) > 0 {
-		freeQuery := strings.Join(freeTokens, " ")
-		candidates = fuzzyFilter(candidates, freeQuery)
+		candidates, _ = matchFreeText(candidates, freeTokens)
 	}
 
 	return candidates
@@ -191,24 +191,103 @@ func (s issueSearchSource) Len() int {
 	return len(s.issues)
 }
 
-// fuzzyFilter applies fuzzy matching on issue ID + Title.
-func fuzzyFilter(issues []Issue, query string) []Issue {
-	if len(issues) == 0 {
-		return nil
+// matchFreeText keeps the issues in which every token appears, as a
+// case-insensitive substring, somewhere in the ID, title, description,
+// people, notes or labels. Results keep their input order, which is
+// priority order from SortIssues, so parade sections stay sorted. highlights
+// maps an issue ID to the rune indices of the tokens found in its title.
+//
+// A subsequence match over all of that text matched nearly everything
+// ("auth" hit "Evaluate new caching layer"; mg-9ik), so fuzzy matching now
+// runs only when no issue contains the query, and only over ID and title:
+// it forgives typos and abbreviations ("lgn tkn") without matching noise.
+func matchFreeText(issues []Issue, tokens []string) (result []Issue, highlights map[string][]int) {
+	if len(issues) == 0 || len(tokens) == 0 {
+		return issues, nil
 	}
-
 	src := issueSearchSource{issues: issues}
-	matches := fuzzy.FindFrom(query, src)
-
-	result := make([]Issue, 0, len(matches))
-	for _, match := range matches {
-		result = append(result, issues[match.Index])
+	highlights = make(map[string][]int)
+	for i, issue := range issues {
+		text := strings.ToLower(src.String(i))
+		all := true
+		for _, tok := range tokens {
+			if !strings.Contains(text, tok) {
+				all = false
+				break
+			}
+		}
+		if !all {
+			continue
+		}
+		result = append(result, issue)
+		if idx := titleTokenIndices(issue.Title, tokens); len(idx) > 0 {
+			highlights[issue.ID] = idx
+		}
 	}
-	return result
+	if len(result) > 0 {
+		return result, highlights
+	}
+	return fuzzyTitleMatch(issues, strings.Join(tokens, " "))
 }
 
-// FilterIssuesWithHighlights returns filtered issues plus a map of issue ID → matched
-// character indices in the "ID + Title" search string. Used for rendering highlights.
+// titleTokenIndices returns the rune indices covered by each token's
+// occurrences in title, for highlighting.
+func titleTokenIndices(title string, tokens []string) []int {
+	lower := []rune(strings.ToLower(title))
+	n := len([]rune(title))
+	seen := make(map[int]bool)
+	var idx []int
+	for _, tok := range tokens {
+		t := []rune(tok)
+		for start := 0; start+len(t) <= len(lower); start++ {
+			if string(lower[start:start+len(t)]) != tok {
+				continue
+			}
+			for k := start; k < start+len(t) && k < n; k++ {
+				if !seen[k] {
+					seen[k] = true
+					idx = append(idx, k)
+				}
+			}
+		}
+	}
+	sort.Ints(idx)
+	return idx
+}
+
+// titleSearchSource is "ID Title" only: the fuzzy fallback's haystack.
+type titleSearchSource []Issue
+
+func (s titleSearchSource) String(i int) string { return s[i].ID + " " + s[i].Title }
+func (s titleSearchSource) Len() int            { return len(s) }
+
+// fuzzyTitleMatch is the typo fallback: a subsequence match over ID and
+// title, returned in input order with title highlights.
+func fuzzyTitleMatch(issues []Issue, query string) (result []Issue, highlights map[string][]int) {
+	matches := fuzzy.FindFrom(query, titleSearchSource(issues))
+	sort.Slice(matches, func(i, j int) bool { return matches[i].Index < matches[j].Index })
+	result = make([]Issue, 0, len(matches))
+	highlights = make(map[string][]int)
+	for _, match := range matches {
+		issue := issues[match.Index]
+		result = append(result, issue)
+		prefix := len([]rune(issue.ID)) + 1 // "ID "
+		titleLen := len([]rune(issue.Title))
+		var idx []int
+		for _, i := range match.MatchedIndexes {
+			if t := i - prefix; t >= 0 && t < titleLen {
+				idx = append(idx, t)
+			}
+		}
+		if len(idx) > 0 {
+			highlights[issue.ID] = idx
+		}
+	}
+	return result, highlights
+}
+
+// FilterIssuesWithHighlights returns filtered issues plus a map of issue ID →
+// matched rune indices in the title. Used for rendering highlights.
 func FilterIssuesWithHighlights(issues []Issue, query string) (result []Issue, matchMap map[string][]int) {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -243,33 +322,8 @@ func FilterIssuesWithHighlights(issues []Issue, query string) (result []Issue, m
 		return candidates, nil
 	}
 
-	freeQuery := strings.Join(freeTokens, " ")
 	if len(candidates) == 0 {
 		return nil, nil
 	}
-
-	src := issueSearchSource{issues: candidates}
-	matches := fuzzy.FindFrom(freeQuery, src)
-
-	result = make([]Issue, 0, len(matches))
-	matchMap = make(map[string][]int)
-	for _, match := range matches {
-		issue := candidates[match.Index]
-		result = append(result, issue)
-		if len(match.MatchedIndexes) > 0 {
-			// Convert from "ID Title" string indices to title-only indices
-			idPrefixLen := len(issue.ID) + 1 // "ID " prefix
-			var titleIndices []int
-			for _, idx := range match.MatchedIndexes {
-				titleIdx := idx - idPrefixLen
-				if titleIdx >= 0 && titleIdx < len([]rune(issue.Title)) {
-					titleIndices = append(titleIndices, titleIdx)
-				}
-			}
-			if len(titleIndices) > 0 {
-				matchMap[issue.ID] = titleIndices
-			}
-		}
-	}
-	return result, matchMap
+	return matchFreeText(candidates, freeTokens)
 }

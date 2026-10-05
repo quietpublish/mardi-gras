@@ -101,21 +101,20 @@ func TestCreateFormShiftTabCyclesBackward(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Enter on field 0 or 1 advances to next field
+// Enter on the title field creates; it used to advance a field (mg-vtc)
 // ---------------------------------------------------------------------------
 
-func TestCreateFormEnterAdvancesField(t *testing.T) {
+func TestCreateFormEnterOnTitleSubmits(t *testing.T) {
 	cf := newTestForm()
-	// activeField == 0 (title)
-	cf, _ = cf.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if cf.activeField != 1 {
-		t.Fatalf("expected activeField 1 after enter on title, got %d", cf.activeField)
+	for _, r := range "Quick one" {
+		cf, _ = cf.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
-
-	// activeField == 1 (type)
-	cf, _ = cf.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if cf.activeField != 2 {
-		t.Fatalf("expected activeField 2 after enter on type, got %d", cf.activeField)
+	_, cmd := cf.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("enter on the title field should create, as the hint says")
+	}
+	if res, ok := cmd().(CreateFormResult); !ok || res.Title != "Quick one" || res.Type != "task" || res.Priority != "2" {
+		t.Fatalf("result = %+v, want the title with default type and priority", res)
 	}
 }
 
@@ -163,7 +162,7 @@ func TestCreateFormEnterSubmits(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Enter on field 2 with empty title does NOT submit
+// Enter with an empty title does NOT submit, and says why
 // ---------------------------------------------------------------------------
 
 func TestCreateFormEnterEmptyTitleNoSubmit(t *testing.T) {
@@ -176,9 +175,19 @@ func TestCreateFormEnterEmptyTitleNoSubmit(t *testing.T) {
 		t.Fatalf("expected activeField 2, got %d", cf.activeField)
 	}
 
-	_, cmd := cf.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	cf, cmd := cf.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd != nil {
 		t.Fatal("expected nil cmd when submitting with empty title")
+	}
+	// It used to fail silently (mg-vtc): say why and go back to the title.
+	if cf.activeField != 0 || !strings.Contains(cf.View(), "Title is required") {
+		t.Fatalf("activeField %d; want focus on the title and a 'Title is required' message", cf.activeField)
+	}
+	for _, r := range "x" {
+		cf, _ = cf.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	if strings.Contains(cf.View(), "Title is required") {
+		t.Fatal("the message should clear once a title is typed")
 	}
 }
 

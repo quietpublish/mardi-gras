@@ -2,7 +2,7 @@
 
 Press `?` from anywhere to open the full help overlay. Inside it, `h` / `l` (or `←` / `→`) page through the sections and `esc`, `q`, or `?` closes it.
 
-Keys marked **(orch)** need a live orchestrator — Gas Town (`gt`) or Gas City. Without one they are inert no-ops rather than errors. A few are narrower still and say so.
+Keys marked **(orch)** need a live orchestrator — Gas Town (`gt`) or Gas City. Without one they show a short note saying so, and help leaves them out. A few are narrower still and say so.
 
 ## Global
 
@@ -11,13 +11,13 @@ Keys marked **(orch)** need a live orchestrator — Gas Town (`gt`) or Gas City.
 | `q`          | Quit application           |
 | `ctrl+c`     | Quit from anywhere, including forms, dialogs and input bars |
 | `tab`        | Switch active pane         |
-| `esc`        | Exit focus mode if on, otherwise return to the parade pane |
+| `esc`        | Clear an applied filter, else exit focus mode, else return to the parade pane |
 | `?`          | Toggle help overlay        |
 | `: / Ctrl+K` | Open command palette      |
 | `/`          | Enter filter mode          |
 | `f`          | Toggle focus mode (my work + top priority) |
 | `c`          | Toggle closed issues       |
-| `ctrl+g`     | Toggle Gas Town panel **(orch)** |
+| `ctrl+g`     | Toggle the Gas Town / Gas City panel **(orch)** |
 | `p`          | Toggle problems view **(orch)** |
 | `D`          | Toggle doctor diagnostics overlay |
 | `E`          | Toggle recent changes (bd events journal) |

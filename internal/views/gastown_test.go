@@ -1576,3 +1576,16 @@ func TestGasTownLoadingStillShownWhileFetching(t *testing.T) {
 		t.Errorf("expected the loading line while a fetch is in flight:\n%s", view)
 	}
 }
+
+func TestGasTownHeaderNamesBackend(t *testing.T) {
+	// The Gas City backend's panel was headed "GAS TOWN" (mg-enb).
+	g := NewGasTown(100, 30)
+	g.SetStatus(&gastown.TownStatus{}, gastown.Env{Available: true})
+	if !strings.Contains(g.View(), "GAS TOWN") {
+		t.Fatal("default header should read GAS TOWN")
+	}
+	g.SetBackendName("Gas City")
+	if v := g.View(); !strings.Contains(v, "GAS CITY") || strings.Contains(v, "GAS TOWN") {
+		t.Fatal("Gas City backend should be headed GAS CITY")
+	}
+}
