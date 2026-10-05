@@ -1,7 +1,9 @@
 package gastown
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -90,13 +92,23 @@ var runCombinedWithTimeout = func(timeout time.Duration, name string, args ...st
 	return cmd.CombinedOutput()
 }
 
-// execWithTimeout executes a command with a context timeout, discarding output.
+// execWithTimeout executes a command with a context timeout, discarding
+// stdout. On failure the error carries the first line of stderr, so a toast
+// says why gt refused instead of only "exit status 1".
 var execWithTimeout = func(timeout time.Duration, name string, args ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = bdChildEnv(name, args)
-	return cmd.Run()
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if reason := sanitizeOutput(stderr.Bytes()); reason != "" {
+			return fmt.Errorf("%w (%s)", err, reason)
+		}
+		return err
+	}
+	return nil
 }
 
 // bdChildEnv pins BD_JSON_ENVELOPE=0 for `bd` subprocesses so a user's shell
