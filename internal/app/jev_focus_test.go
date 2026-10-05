@@ -186,3 +186,20 @@ func TestExpectedLevel(t *testing.T) {
 		t.Fatalf("a point score should pass through, got %v", got)
 	}
 }
+
+func TestFocusRanksSkipInProgress(t *testing.T) {
+	// The › badge showed on your own in-progress work, which focus mode does
+	// not sort by urgency (mg-xge.1).
+	m := New([]data.Issue{testIssue("mine", data.StatusInProgress), testIssue("ready", data.StatusOpen)}, data.Source{}, data.DefaultBlockingTypes)
+	m.focusMode = true
+	ranks := m.focusRanks(map[string]data.FocusVerdict{
+		"mine":  {Urgency: 0, Confidence: 0.9},
+		"ready": {Urgency: 3, Confidence: 0.9},
+	})
+	if _, ok := ranks["mine"]; ok {
+		t.Fatal("in-progress work must not get a rank badge")
+	}
+	if ranks["ready"] != 3 {
+		t.Fatalf("ranks = %v, want the ready issue ranked", ranks)
+	}
+}

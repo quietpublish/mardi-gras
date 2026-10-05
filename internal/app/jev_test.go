@@ -208,13 +208,15 @@ func TestJevScheduleAsksOpenIssuesOnce(t *testing.T) {
 func TestJevScheduleEdgeCaseReasksOnlyChangedIssues(t *testing.T) {
 	fake := &fakeJudge{}
 	issues := []data.Issue{testIssue("a", data.StatusOpen), testIssue("b", data.StatusOpen)}
+	issues[1].Assignee = "alice"
 	m := newJevModel(fake, issues)
 	m = sweep(t, m, m.scheduleJev())
 
-	// A label is something the snapshot carries; an assignee is not.
+	// A label is something the snapshot carries; who exactly has an issue
+	// is not, only whether it is you, someone else or nobody (mg-xge.1).
 	changed := []data.Issue{testIssue("a", data.StatusOpen), testIssue("b", data.StatusOpen)}
 	changed[0].Labels = []string{"security"}
-	changed[1].Assignee = "someone"
+	changed[1].Assignee = "bob" // still "someone else"
 	m.issues = changed
 	m = sweep(t, m, m.scheduleJev())
 
@@ -224,6 +226,30 @@ func TestJevScheduleEdgeCaseReasksOnlyChangedIssues(t *testing.T) {
 	snaps := fake.calls[1].issuesIn(t)
 	if len(snaps) != 1 || snaps[0].ID != "a" {
 		t.Fatalf("second sweep asked about %+v, want only a", snaps)
+	}
+	for _, c := range fake.calls {
+		for _, s := range c.issuesIn(t) {
+			if s.Claimed != "" && s.Claimed != "you" && s.Claimed != "someone else" {
+				t.Fatalf("claimed = %q leaks a name", s.Claimed)
+			}
+		}
+	}
+}
+
+func TestJevSnapshotClaimedTellsYouFromOthers(t *testing.T) {
+	// Every in-progress issue read as someone else's, so the judge rated
+	// your own work Park (mg-xge.1).
+	if got := data.ClaimedBy("Matt Wright", "matt wright"); got != "you" {
+		t.Fatalf("own issue = %q, want you", got)
+	}
+	if got := data.ClaimedBy("alice", "matt"); got != "someone else" {
+		t.Fatalf("other's issue = %q, want someone else", got)
+	}
+	if got := data.ClaimedBy("", "matt"); got != "" {
+		t.Fatalf("unassigned = %q, want empty", got)
+	}
+	if got := data.ClaimedBy("alice", ""); got != "someone else" {
+		t.Fatalf("unknown viewer = %q, want someone else", got)
 	}
 }
 
