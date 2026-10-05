@@ -3,7 +3,9 @@ package data
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"sort"
 )
@@ -14,6 +16,12 @@ import (
 func LoadIssues(path string) ([]Issue, int, error) {
 	f, err := os.Open(path)
 	if err != nil {
+		// Callers name the path; os.Open's error names it again, which
+		// printed it twice (mg-u8u). Keep only the cause.
+		var pe *fs.PathError
+		if errors.As(err, &pe) {
+			err = pe.Err
+		}
 		return nil, 0, fmt.Errorf("open issues file: %w", err)
 	}
 	defer f.Close()
