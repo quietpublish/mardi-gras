@@ -3879,9 +3879,9 @@ func (m Model) View() tea.View {
 		// Content-fit modal: a small form in a full-width box reads as
 		// dead space (audit #8).
 		formWidth := min(m.width-8, 64)
-		formTitle := ui.HelpTitle.Width(formWidth - 4).Render("[ EDIT ISSUE ]")
+		formTitle := ui.HelpTitle.Width(ui.OverlayInnerWidth(formWidth)).Render("[ EDIT ISSUE ]")
 		formBody := m.editForm.View()
-		formHint := ui.HelpHint.Width(formWidth - 4).Render("tab next field · enter save · esc cancel")
+		formHint := ui.HelpHint.Width(ui.OverlayInnerWidth(formWidth)).Render("tab next field · enter save · esc cancel")
 		formContent := lipgloss.JoinVertical(lipgloss.Left, formTitle, "", formBody, "", formHint)
 		formBox := ui.OverlayBox(formContent, formWidth)
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, formBox))
@@ -3889,9 +3889,9 @@ func (m Model) View() tea.View {
 
 	if m.creating {
 		formWidth := min(m.width-8, 64)
-		formTitle := ui.HelpTitle.Width(formWidth - 4).Render("[ NEW ISSUE ]")
+		formTitle := ui.HelpTitle.Width(ui.OverlayInnerWidth(formWidth)).Render("[ NEW ISSUE ]")
 		formBody := m.createForm.View()
-		formHint := ui.HelpHint.Width(formWidth - 4).Render("tab next field · enter create · esc cancel")
+		formHint := ui.HelpHint.Width(ui.OverlayInnerWidth(formWidth)).Render("tab next field · enter create · esc cancel")
 		formContent := lipgloss.JoinVertical(lipgloss.Left, formTitle, "", formBody, "", formHint)
 		formBox := ui.OverlayBox(formContent, formWidth)
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, formBox))
@@ -3910,7 +3910,7 @@ func (m Model) View() tea.View {
 		// OverlayBox's width includes its border and padding, so the content
 		// gets ddWidth-6. The hint is split by hand: as one line it overflows
 		// even that and the box re-wraps it, stranding "esc" and "cancel".
-		ddInner := ddWidth - 6
+		ddInner := ui.OverlayInnerWidth(ddWidth)
 		ddTitle := ui.HelpTitle.Width(ddInner).Render("[ POSSIBLE DUPLICATE ]")
 		ddBody := m.dupDialog.View()
 		ddHint := ui.HelpHint.Width(ddInner).Render("enter go to it · c create anyway\nl create + mark duplicate · esc cancel")
@@ -3921,9 +3921,9 @@ func (m Model) View() tea.View {
 
 	if m.recovering {
 		rdWidth := min(m.width-8, 64)
-		rdTitle := ui.HelpTitle.Width(rdWidth - 4).Render("[ RIG RECOVERY ]")
+		rdTitle := ui.HelpTitle.Width(ui.OverlayInnerWidth(rdWidth)).Render("[ RIG RECOVERY ]")
 		rdBody := m.recoveryDialog.View()
-		rdHint := ui.HelpHint.Width(rdWidth - 4).Render("enter to confirm  esc to cancel")
+		rdHint := ui.HelpHint.Width(ui.OverlayInnerWidth(rdWidth)).Render("enter to confirm  esc to cancel")
 		rdContent := lipgloss.JoinVertical(lipgloss.Left, rdTitle, "", rdBody, "", rdHint)
 		rdBox := ui.OverlayBox(rdContent, rdWidth)
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, rdBox))

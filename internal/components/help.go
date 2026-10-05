@@ -348,7 +348,7 @@ func (h Help) View() string {
 		strings.Join(footerParts, "\n"),
 	)
 
-	box := ui.OverlayBox(content, contentWidth+4)
+	box := ui.OverlayBox(content, contentWidth+6) // OverlayInnerWidth(contentWidth+6) == contentWidth
 
 	return lipgloss.Place(h.Width, h.Height, lipgloss.Center, lipgloss.Center, box)
 }

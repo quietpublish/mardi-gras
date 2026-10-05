@@ -112,3 +112,15 @@ func TestStateBadgeUnknownFallsBackToIdle(t *testing.T) {
 		t.Errorf("unknown state should fall back to SymIdle, got %q", got)
 	}
 }
+
+func TestOverlayInnerWidthDoesNotRewrap(t *testing.T) {
+	// Content rendered at the box width minus 4 was re-wrapped by the box,
+	// stranding a "──" under the palette divider (mg-zmz).
+	for _, w := range []int{40, 66, 72} {
+		line := strings.Repeat("─", OverlayInnerWidth(w))
+		box := OverlayBox(line, w)
+		if got := strings.Count(box, "\n") + 1; got != 1+4 {
+			t.Fatalf("box width %d: %d lines, want 5 (one content line + border and padding)", w, got)
+		}
+	}
+}
