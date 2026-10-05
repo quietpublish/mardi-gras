@@ -2050,7 +2050,13 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return agentLaunchedMsg{issueID: issueID, windowName: winName}
 			}
 		}
-		c := agent.Command(prompt, m.projectDir)
+		c, err := agent.Command(prompt, m.projectDir)
+		if err != nil {
+			issueID := issue.ID
+			return m, func() tea.Msg {
+				return agentLaunchErrorMsg{issueID: issueID, err: err}
+			}
+		}
 		return m, tea.ExecProcess(c, func(err error) tea.Msg {
 			return agentFinishedMsg{err: err}
 		})

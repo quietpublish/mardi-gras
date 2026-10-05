@@ -18,9 +18,29 @@ MG_AGENT_RUNTIME=cursor mg        # same shape via env var
 MG_AGENT_RUNTIME=claude mg        # force claude even if you have other tools installed
 ```
 
-Accepted values are `claude`, `cursor` (or `cursor-agent`), and `codex`. The override is honored only if the matching binary is on PATH — if you request a runtime that isn't installed, mg falls back to the default detection order rather than failing silently. Unknown values are ignored.
+Accepted values are `claude`, `cursor` (or `cursor-agent`), and `codex`. The override is honored only if the matching binary is on PATH (or a [wrapper](#launching-through-a-wrapper) is configured) — if you request a runtime that isn't installed, mg falls back to the default detection order rather than failing silently. Unknown values are ignored.
 
 The override applies only to mg's local launch path. When an orchestrator is available, the `a` key dispatches through it (`gt sling`, or the Gas City sling endpoint) and the runtime is chosen by the formula (see [Gas Town docs](https://github.com/gastownhall/gastown)). Gas Town v1.1.0+ has first-class codex support via `gt sling --agent codex`, and mg propagates that automatically — see [Gas Town routing for Codex](#gas-town-routing-for-codex) below.
+
+## Launching through a wrapper
+
+`MG_AGENT_CMD` (or `--agent-cmd`) names an executable to launch *instead of* the runtime's binary. mg still appends the runtime's own flags, so the wrapper receives exactly the argv the binary would have and only has to forward it:
+
+```bash
+mg --agent-cmd ~/.local/bin/agent-launcher        # for this session
+MG_AGENT_CMD=/usr/local/bin/agent-sandbox mg      # same shape via env var
+```
+
+Use it when the agent must not be exec'd directly — a launcher that routes the model through a gateway, enters a sandbox, or brokers credentials. A shell alias can't do this, because mg execs the binary itself rather than going through a shell.
+
+What to know before relying on it:
+
+- **It is a single executable, not a command line.** The value is one path or one name on PATH; it is not split on spaces, so `MG_AGENT_CMD="sandbox --net=none claude"` looks for an executable literally called that. Put any arguments of your own in a small wrapper script that ends in `exec real-thing --your-flags "$@"`.
+- **The wrapper counts as an installed agent.** A wrapper is often the only way the agent is reachable (the real binary sits inside a sandbox or behind a gateway), so mg treats a configured wrapper as an available runtime even when no runtime binary is on PATH. `--agent` / `MG_AGENT_RUNTIME` then decides which flag set the wrapper is given, and wins over PATH detection; with neither set and nothing on PATH, mg assumes Claude's flags.
+- **Pair it with `--agent`** when the wrapper stands in for one specific runtime: the wrapper replaces *that* runtime's binary and is given its flags (`claude --teammate-mode tmux <prompt>`, `codex --sandbox workspace-write … <prompt>`). With `--agent` unset, the wrapper replaces whatever runtime detection picked.
+- **It is resolved once, at startup, to an absolute path.** mg looks the value up with `exec.LookPath`, absolutizes it, and launches that path every time. This matters inside tmux: mg hands the command to `tmux split-window`, and the tmux *server* resolves it against the server's own PATH rather than mg's, so a bare name could run a different binary than the one you configured.
+- **mg fails closed.** If the wrapper cannot be resolved to an executable file, mg refuses to start and says why on stderr. It never launches the runtime's binary in its place: the wrapper may be the only thing keeping the agent off your credentials or the network, so silently skipping it is not a safe fallback.
+- **Every Codex path goes through it — when the wrapper is for Codex.** With `--agent codex`, the `a` launch, [resume](#resuming-a-prior-codex-session) and the [in-app transcript](#in-app-transcript-m) (`codex mcp-server`) all exec the wrapper. With a wrapper configured for another runtime, resume and `M` refuse to run rather than reach past the wrapper to a bare `codex`.
 
 ## Codex specifics
 
@@ -36,7 +56,7 @@ A few practical gotchas:
 
 ### In-app transcript (`M`)
 
-`M` on a selected issue opens a live Codex transcript in place of the detail pane. Unlike `a`, this path does not use tmux at all — mg spawns `codex mcp-server`, performs the MCP handshake, and streams the session's events (agent messages, exec commands, tool calls, patches, errors) straight into the panel. It needs `codex` on `PATH`; without it the launch reports the runtime as unavailable.
+`M` on a selected issue opens a live Codex transcript in place of the detail pane. Unlike `a`, this path does not use tmux at all — mg spawns `codex mcp-server`, performs the MCP handshake, and streams the session's events (agent messages, exec commands, tool calls, patches, errors) straight into the panel. It needs `codex` on `PATH` (or `MG_AGENT_CMD` with `--agent codex`, in which case the wrapper is spawned as the MCP server); without it the launch reports the runtime as unavailable.
 
 Because a human is watching, `M` launches with approval policy `on-request` (the tmux and orchestrator paths use `never`), so exec and apply-patch approvals surface as a modal inside mg — `j`/`k` to choose, `enter` to confirm. A static deny-list flags clearly destructive requests in that modal (banner, cursor on Deny, no session-wide approval offered), and with [Jev](jev.md) enabled a risk reading fills in under the command. Both are advice: the decision is always yours. Press `r` with the transcript open to send a follow-up prompt into the running session, and `M` again to close it.
 
