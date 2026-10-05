@@ -736,6 +736,9 @@ type headerShimmerMsg struct{}
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, cmd := m.update(msg)
 	nm, ok := next.(Model)
+	if ok && nm.oscGuard != nil {
+		nm.oscGuard.SetTextEntry(nm.inTextEntry())
+	}
 	if !ok || !nm.captureWanted || nm.captureInFlight {
 		return next, cmd
 	}

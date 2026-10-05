@@ -2,6 +2,7 @@ package app
 
 import (
 	"strings"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -28,6 +29,11 @@ type OSCGuard struct {
 	suppressUntil     time.Time
 	seqBuf            [16]byte
 	seqLen            int
+
+	// textEntry is set by the app while a text field has focus; see
+	// SetTextEntry. Atomic because the filter and Update are separate
+	// call sites.
+	textEntry atomic.Bool
 
 	// now is the guard's clock; nil means time.Now. Its heuristics work on
 	// gaps of 5-50ms, too fine to test with real sleeps on a busy machine.
@@ -155,6 +161,17 @@ func (g *OSCGuard) filterMsg(msg tea.Msg) tea.Msg {
 		return msg
 	}
 
+	// In a text field a dropped key silently loses what the user typed,
+	// while a leaked fragment only shows up as text they can see and
+	// delete. Fast typing, dictation and unbracketed paste all look like a
+	// burst, so the timing layers stand down there; the content patterns
+	// still catch reply fragments (mg-4ko).
+	if g.textEntry.Load() {
+		charGap := now.Sub(g.lastPrintableTime)
+		g.lastPrintableTime = now
+		return g.matchContent(msg, kp, now, charGap)
+	}
+
 	// Layer 2: timing-based suppression window. During the window
 	// drop all printable keys including shift/alt-modified ones.
 	if now.Before(g.suppressUntil) {
@@ -191,8 +208,11 @@ func (g *OSCGuard) filterMsg(msg tea.Msg) tea.Msg {
 		return nil
 	}
 
-	// Layer 3: content-aware pattern detection.
-	//
+	return g.matchContent(msg, kp, now, charGap)
+}
+
+// matchContent is layer 3: content-aware pattern detection.
+func (g *OSCGuard) matchContent(msg tea.Msg, kp tea.KeyPressMsg, now time.Time, charGap time.Duration) tea.Msg {
 	// Track recent printable chars that passed through timing checks.
 	// If the accumulated string matches a known control-sequence
 	// fragment, suppress the triggering character and open a window.
@@ -225,8 +245,14 @@ func (g *OSCGuard) filterMsg(msg tea.Msg) tea.Msg {
 		return nil
 	}
 
-	dbg("  GUARD-PASS printable: %q (charGap=%v navGap=%v acc=%q)", kp.String(), charGap, navGap, acc)
+	dbg("  GUARD-PASS printable: %q (charGap=%v acc=%q)", kp.String(), charGap, acc)
 	return msg
+}
+
+// SetTextEntry tells the guard whether a text field has focus. The app
+// sets it after every Update.
+func (g *OSCGuard) SetTextEntry(on bool) {
+	g.textEntry.Store(on)
 }
 
 // SuspiciousSince reports whether the guard observed suppressed or parsed

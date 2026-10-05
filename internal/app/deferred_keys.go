@@ -68,8 +68,17 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg, allowDeferredBuffer bool) (te
 	return m.handleKey(msg)
 }
 
+// inTextEntry reports whether keystrokes are going into a text field rather
+// than acting as shortcuts. There a dropped key loses what the user typed,
+// so the deferred buffer and the guard's timing layers stand down (mg-4ko).
+func (m Model) inTextEntry() bool {
+	return m.filtering || m.creating || m.editing || m.qaMode != "" ||
+		m.nudging || m.slingTargeting || m.convoyCreating ||
+		m.mailReplying || m.mailComposing || m.codexReplying || m.showPalette
+}
+
 func (m Model) shouldDeferKey(msg tea.KeyPressMsg) bool {
-	if m.oscGuard == nil {
+	if m.oscGuard == nil || m.inTextEntry() {
 		return false
 	}
 	if msg.Mod&tea.ModCtrl != 0 {

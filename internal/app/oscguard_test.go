@@ -6,6 +6,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
+
+	"github.com/matt-wright86/mardi-gras/internal/components"
 )
 
 func TestOSCGuardAllowsNormalKeys(t *testing.T) {
@@ -487,4 +489,73 @@ func newTestFilter() (filter func(tea.Model, tea.Msg) tea.Msg, sleep func(time.D
 	clk := &fakeClock{t: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
 	g := &OSCGuard{now: clk.now}
 	return g.Filter(), clk.advance
+}
+
+// typeBurst feeds text through the guard 2ms per character, as dictation,
+// a keyboard macro or an unbracketed paste delivers it, and returns what
+// passed.
+func typeBurst(g *OSCGuard, clk *fakeClock, text string) string {
+	var passed []rune
+	for _, r := range text {
+		kp := tea.KeyPressMsg{Code: r, Text: string(r)}
+		if r >= 'A' && r <= 'Z' {
+			kp = tea.KeyPressMsg{Code: r + ('a' - 'A'), Text: string(r), Mod: tea.ModShift}
+		}
+		if g.filterMsg(kp) != nil {
+			passed = append(passed, r)
+		}
+		clk.advance(2 * time.Millisecond)
+	}
+	return string(passed)
+}
+
+func TestOSCGuardTextEntryPassesBurst(t *testing.T) {
+	// A fast burst into a text field used to keep only its first
+	// character: GUARD-NAV dropped "u" after shift+B, then the window ate
+	// the rest (mg-4ko).
+	clk := &fakeClock{t: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
+	g := &OSCGuard{now: clk.now}
+	g.SetTextEntry(true)
+	if got := typeBurst(g, clk, "Burst typed title"); got != "Burst typed title" {
+		t.Fatalf("passed %q, want the whole burst", got)
+	}
+}
+
+func TestOSCGuardTextEntryEdgeCaseStillCatchesReplyFragment(t *testing.T) {
+	// The content layer still applies in a text field: a torn OSC 11
+	// reply must not be typed in whole.
+	clk := &fakeClock{t: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
+	g := &OSCGuard{now: clk.now}
+	g.SetTextEntry(true)
+	if got := typeBurst(g, clk, "]11;rgb:1e1e/1e1e/1e1e"); got == "]11;rgb:1e1e/1e1e/1e1e" {
+		t.Fatal("a reply fragment passed whole through a text field")
+	}
+}
+
+func TestOSCGuardEdgeCaseBurstStillDroppedOutsideTextEntry(t *testing.T) {
+	// Outside a text field a burst is still treated as reply traffic, so
+	// leaked bytes cannot fire parade shortcuts.
+	clk := &fakeClock{t: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
+	g := &OSCGuard{now: clk.now}
+	if got := typeBurst(g, clk, "Burst"); got == "Burst" {
+		t.Fatalf("passed %q outside text entry, want the burst suppressed", got)
+	}
+}
+
+func TestUpdateSyncsTextEntryToGuard(t *testing.T) {
+	m := setupModel(t)
+	m.oscGuard = NewOSCGuard()
+	// With a guard, printable shortcuts go through the deferred buffer:
+	// deliver the held key the way the runtime would.
+	model, cmd := m.Update(tea.KeyPressMsg{Code: 'N', Text: "N", Mod: tea.ModShift})
+	if deferred, ok := cmd().(deferredKeyMsg); ok {
+		model, _ = model.(Model).Update(deferred)
+	}
+	if !model.(Model).creating || !m.oscGuard.textEntry.Load() {
+		t.Fatal("opening the create form should put the guard in text-entry mode")
+	}
+	model, _ = model.(Model).Update(components.CreateFormResult{Cancelled: true})
+	if model.(Model).creating || m.oscGuard.textEntry.Load() {
+		t.Fatal("leaving the form should take the guard out of text-entry mode")
+	}
 }
