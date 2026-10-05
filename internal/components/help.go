@@ -74,6 +74,7 @@ func allSections() []helpSection {
 				{key: ": / Ctrl+K", desc: "Open command palette"},
 				{key: "p", desc: "Toggle problems view (gt)"},
 				{key: "E", desc: "Toggle recent changes (bd events journal)"},
+				{key: "D", desc: "Toggle doctor diagnostics (bd doctor)"},
 			},
 		},
 		{
@@ -87,15 +88,15 @@ func allSections() []helpSection {
 				{key: "f", desc: "Toggle focus mode (my work + top priority)"},
 				{key: "a", desc: "Launch agent (tmux: split pane)"},
 				{key: "A", desc: "Kill active agent on issue"},
-				{key: "M", desc: "Toggle codex (MCP) live transcript"},
+				{key: "M", desc: "Codex transcript (enter starts, K stops a session)"},
 			},
 		},
 		{
 			title: "QUICK ACTIONS",
 			bindings: []helpBinding{
-				{key: "1", desc: "Set status: in_progress"},
+				{key: "1", desc: "Claim: assign to you + in_progress"},
 				{key: "2", desc: "Set status: open"},
-				{key: "3", desc: "Close issue"},
+				{key: "3", desc: "Close, then claim the next ready issue"},
 				{key: "!", desc: "Set priority: P1 (high)"},
 				{key: "@", desc: "Set priority: P2 (medium)"},
 				{key: "#", desc: "Set priority: P3 (low)"},
@@ -106,12 +107,22 @@ func allSections() []helpSection {
 			},
 		},
 		{
+			title: "EDIT",
+			bindings: []helpBinding{
+				{key: "e", desc: "Edit title and priority"},
+				{key: "r", desc: "Add comment"},
+				{key: "y", desc: "Assign"},
+				{key: "t", desc: "Add label"},
+				{key: "l", desc: "Add dependency (this issue depends on…)"},
+			},
+		},
+		{
 			title: "MULTI-SELECT",
 			bindings: []helpBinding{
 				{key: "space / x", desc: "Toggle select on cursor issue"},
 				{key: "Shift+J/K", desc: "Select and move down/up"},
 				{key: "X", desc: "Clear all selections"},
-				{key: "1/2/3", desc: "Bulk set status on selected"},
+				{key: "1/2/3", desc: "Bulk set status on selected (no claiming)"},
 				{key: "a", desc: "Sling all selected issues"},
 				{key: "s", desc: "Pick formula and sling all selected"},
 			},

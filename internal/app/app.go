@@ -736,6 +736,9 @@ type headerShimmerMsg struct{}
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, cmd := m.update(msg)
 	nm, ok := next.(Model)
+	if ok && nm.oscGuard != nil {
+		nm.oscGuard.SetTextEntry(nm.inTextEntry())
+	}
 	if !ok || !nm.captureWanted || nm.captureInFlight {
 		return next, cmd
 	}
@@ -869,6 +872,13 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.createForm, cmd = m.createForm.Update(msg)
 		return m, cmd
+	}
+
+	// The dialog's own result must be handled before the forward below,
+	// which would otherwise hand it back to the dialog and leave the modal
+	// unclosable.
+	if result, ok := msg.(components.ApprovalDialogResult); ok && m.approving {
+		return m.handleApprovalDialogResult(result)
 	}
 
 	// Forward all messages to the codex approval dialog when active
@@ -1209,6 +1219,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case codexLaunchedMsg:
+		msg.sess.pumping = true
 		m.codexSessions[msg.issueID] = msg.sess
 		if m.isCodexShownFor(msg.issueID) {
 			m.codexTranscript.SetState(msg.sess.state)
@@ -1221,6 +1232,18 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmd, codexNextEventCmd(msg.issueID, msg.sess.handle.Session(), msg.sess.handle.ServerRequests()))
 
 	case codexLaunchErrorMsg:
+		// Mark the launch placeholder errored so the transcript stops
+		// claiming "running" for a session that never started (mg-ney).
+		if sess := m.codexSessions[msg.issueID]; sess != nil && sess.launching {
+			sess.launching = false
+			now := time.Now()
+			sess.state.Status = "errored"
+			sess.state.EndAt = now
+			sess.state.AppendEntry(views.CodexTranscriptEntry{At: now, Kind: "error", Title: "launch failed: " + msg.err.Error(), Error: true})
+			if m.isCodexShownFor(msg.issueID) {
+				m.codexTranscript.SetState(sess.state)
+			}
+		}
 		toast, cmd := components.ShowToast(
 			fmt.Sprintf("Codex MCP launch failed: %s", msg.err),
 			components.ToastError, toastDuration,
@@ -1251,6 +1274,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if sess == nil {
 			return m, nil
 		}
+		sess.pumping = false
+		if sess.closed {
+			// K already marked it canceled and toasted; this is the
+			// drained pump, which now makes a restart safe.
+			return m, nil
+		}
 		finalizeCodexSession(sess, msg.result)
 		if m.isCodexShownFor(msg.issueID) {
 			m.codexTranscript.SetState(sess.state)
@@ -1276,6 +1305,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if sess == nil || sess.handle == nil {
 			return m, nil
 		}
+		sess.pumping = true
 		return m, codexNextEventCmd(msg.issueID, msg.sess, sess.handle.ServerRequests())
 
 	case codexReplyErrorMsg:
@@ -1834,6 +1864,17 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// The codex transcript starts and stops sessions explicitly; M only
+	// shows it (mg-ney).
+	if m.showCodex {
+		switch str {
+		case "enter":
+			return m.startCodexSession()
+		case "K":
+			return m.stopCodexSession()
+		}
+	}
+
 	switch str {
 	case "q":
 		logAction("quit")
@@ -2348,12 +2389,15 @@ func (m Model) quickAction(status data.Status, label string) (tea.Model, tea.Cmd
 	issueID := issue.ID
 	return m, func() tea.Msg {
 		var err error
+		action := label
 		if status == data.StatusInProgress {
+			// A claim also takes the assignee; say so (mg-83g).
 			err = data.ClaimIssue(issueID)
+			action = "claimed · " + label
 		} else {
 			err = data.SetStatus(issueID, status)
 		}
-		return mutateResultMsg{issueID: issueID, action: label, err: err}
+		return mutateResultMsg{issueID: issueID, action: action, err: err}
 	}
 }
 
@@ -2571,9 +2615,9 @@ func createBranchCmd(ctx context.Context, projectDir, branch string) *exec.Cmd {
 // buildPaletteCommands returns the context-aware list of palette commands.
 func (m Model) buildPaletteCommands() []components.PaletteCommand {
 	cmds := []components.PaletteCommand{
-		{Name: "Set status: in_progress", Desc: "Mark issue as rolling", Key: "1", Action: components.ActionSetInProgress},
+		{Name: "Claim issue", Desc: "Assign to you and mark in_progress (bd update --claim)", Key: "1", Action: components.ActionSetInProgress},
 		{Name: "Set status: open", Desc: "Mark issue as lined up", Key: "2", Action: components.ActionSetOpen},
-		{Name: "Close issue", Desc: "Mark issue as closed", Key: "3", Action: components.ActionCloseIssue},
+		{Name: "Close + claim next", Desc: "Close, then claim the top ready issue (bd close --claim-next)", Key: "3", Action: components.ActionCloseIssue},
 		{Name: "Set priority: P1 high", Desc: "Urgent work", Key: "!", Action: components.ActionSetPriorityHigh},
 		{Name: "Set priority: P2 medium", Desc: "Normal priority", Key: "@", Action: components.ActionSetPriorityMedium},
 		{Name: "Set priority: P3 low", Desc: "Can wait", Key: "#", Action: components.ActionSetPriorityLow},
@@ -2581,9 +2625,16 @@ func (m Model) buildPaletteCommands() []components.PaletteCommand {
 		{Name: "Copy branch name", Desc: "Copy git branch to clipboard", Key: "b", Action: components.ActionCopyBranch},
 		{Name: "Create git branch", Desc: "Checkout new branch for issue", Key: "B", Action: components.ActionCreateBranch},
 		{Name: "New issue", Desc: "Create a new beads issue", Key: "N", Action: components.ActionNewIssue},
+		{Name: "Edit issue", Desc: "Edit title and priority", Key: "e", Action: components.ActionEditIssue},
+		{Name: "Add comment", Desc: "Comment on the selected issue", Key: "r", Action: components.ActionComment},
+		{Name: "Assign issue", Desc: "Set the assignee", Key: "y", Action: components.ActionAssignIssue},
+		{Name: "Add label", Desc: "Label the selected issue", Key: "t", Action: components.ActionAddLabel},
+		{Name: "Add dependency", Desc: "This issue depends on another", Key: "l", Action: components.ActionAddDependency},
 		{Name: "Add note", Desc: "Add a note to the selected issue", Key: "", Action: components.ActionAddNote},
 		{Name: "Toggle focus mode", Desc: "Show only my work + top priority", Key: "f", Action: components.ActionToggleFocus},
 		{Name: "Toggle closed issues", Desc: "Show/hide past the stand", Key: "c", Action: components.ActionToggleClosed},
+		{Name: "Doctor diagnostics", Desc: "Run bd doctor", Key: "D", Action: components.ActionToggleDoctor},
+		{Name: "Recent changes", Desc: "bd events journal", Key: "E", Action: components.ActionToggleChanges},
 		{Name: "Filter", Desc: "Fuzzy filter the parade list", Key: "/", Action: components.ActionFilter},
 		{Name: "Help", Desc: "Show keybinding help", Key: "?", Action: components.ActionHelp},
 		{Name: "Quit", Desc: "Exit Mardi Gras", Key: "q", Action: components.ActionQuit},
@@ -2678,6 +2729,22 @@ func (m Model) executePaletteAction(action components.PaletteAction) (tea.Model,
 		m.filtering = true
 		m.filterInput.Focus()
 		return m, textinput.Blink
+	// Editing and overlay commands replay their key, so the palette and the
+	// keyboard cannot drift apart (mg-hl4).
+	case components.ActionEditIssue:
+		return m.handleKey(tea.KeyPressMsg{Code: 'e', Text: "e"})
+	case components.ActionComment:
+		return m.handleKey(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	case components.ActionAssignIssue:
+		return m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	case components.ActionAddLabel:
+		return m.handleKey(tea.KeyPressMsg{Code: 't', Text: "t"})
+	case components.ActionAddDependency:
+		return m.handleKey(tea.KeyPressMsg{Code: 'l', Text: "l"})
+	case components.ActionToggleDoctor:
+		return m.handleKey(tea.KeyPressMsg{Code: 'D', Text: "D"})
+	case components.ActionToggleChanges:
+		return m.handleKey(tea.KeyPressMsg{Code: 'E', Text: "E"})
 	case components.ActionLaunchAgent:
 		return m.handleKey(tea.KeyPressMsg{Code: 'a', Text: "a"})
 	case components.ActionKillAgent:
@@ -3767,9 +3834,13 @@ func (m Model) View() tea.View {
 
 	if m.dupDialogOpen {
 		ddWidth := min(m.width-8, 72)
-		ddTitle := ui.HelpTitle.Width(ddWidth - 4).Render("[ POSSIBLE DUPLICATE ]")
+		// OverlayBox's width includes its border and padding, so the content
+		// gets ddWidth-6. The hint is split by hand: as one line it overflows
+		// even that and the box re-wraps it, stranding "esc" and "cancel".
+		ddInner := ddWidth - 6
+		ddTitle := ui.HelpTitle.Width(ddInner).Render("[ POSSIBLE DUPLICATE ]")
 		ddBody := m.dupDialog.View()
-		ddHint := ui.HelpHint.Width(ddWidth - 4).Render("enter go to it · c create anyway · l create + mark duplicate · esc cancel")
+		ddHint := ui.HelpHint.Width(ddInner).Render("enter go to it · c create anyway\nl create + mark duplicate · esc cancel")
 		ddContent := lipgloss.JoinVertical(lipgloss.Left, ddTitle, "", ddBody, "", ddHint)
 		ddBox := ui.OverlayBox(ddContent, ddWidth)
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, ddBox))

@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sort"
 	"time"
 
@@ -20,6 +22,14 @@ import (
 type codexSession struct {
 	handle *agent.CodexMCPHandle
 	state  *views.CodexTranscriptState
+	// launching is set while codex mcp-server is starting (handle is nil);
+	// pumping while an event command is outstanding; closed once K stopped
+	// the session. A new session for the same issue may start only when the
+	// old one is closed or errored and no event can still arrive for it:
+	// messages carry only the issue ID.
+	launching bool
+	pumping   bool
+	closed    bool
 }
 
 // Codex MCP message types. They are scoped to the codex feature so app.go's
@@ -317,8 +327,8 @@ func codexReplyGateReason(sess *codexSession) string {
 	if sess.state.Status == "running" {
 		return "Codex turn still running."
 	}
-	if sess.handle == nil {
-		return "Session handle is closed — press M to relaunch."
+	if sess.handle == nil || sess.closed {
+		return "Session stopped — press enter to start a new one."
 	}
 	return ""
 }
@@ -389,9 +399,10 @@ func (m *Model) Cleanup() {
 	m.stopServe()
 }
 
-// toggleCodexTranscript is the M-key handler. It opens the codex transcript
-// for the selected issue; if no session exists it spawns one, then routes
-// subsequent events through the transcript view.
+// toggleCodexTranscript is the M-key handler. It shows or hides the codex
+// transcript for the selected issue. It never starts a session: that is
+// enter inside the transcript (mg-ney), so one keystroke cannot set an agent
+// working on the repo.
 func (m Model) toggleCodexTranscript() (tea.Model, tea.Cmd) {
 	if m.showCodex {
 		m.showCodex = false
@@ -414,17 +425,97 @@ func (m Model) toggleCodexTranscript() (tea.Model, tea.Cmd) {
 		m.codexTranscript.SetState(sess.state)
 		return m, nil
 	}
+	m.codexTranscript.SetState(nil)
+	m.codexTranscript.SetIdle(issue.ID, codexUnavailableReason())
+	return m, nil
+}
 
-	// No session yet — spawn one.
+// codexUnavailableReason says why a codex session cannot start, or "" if it
+// can. ErrCodexUnavailable reads as an internal error, so it gets a plain
+// sentence; a misconfigured MG_AGENT_CMD keeps its own message.
+func codexUnavailableReason() string {
+	err := agent.CodexLaunchable()
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, agent.ErrCodexUnavailable):
+		return "codex is not on PATH"
+	default:
+		return err.Error()
+	}
+}
+
+// codexRestartable reports whether a new session may replace sess.
+func codexRestartable(sess *codexSession) bool {
+	if sess == nil {
+		return true
+	}
+	if sess.launching || sess.pumping {
+		return false
+	}
+	return sess.closed || sess.state == nil || sess.state.Status == "errored"
+}
+
+// startCodexSession is enter in the transcript: it launches codex
+// mcp-server on the selected issue.
+func (m Model) startCodexSession() (tea.Model, tea.Cmd) {
+	issue := m.parade.SelectedIssue
+	if issue == nil {
+		return m, nil
+	}
+	old := m.codexSessions[issue.ID]
+	if !codexRestartable(old) {
+		return m, nil
+	}
+	if reason := codexUnavailableReason(); reason != "" {
+		toast, cmd := components.ShowToast("Cannot start codex: "+reason, components.ToastError, toastDuration)
+		m.toast = toast
+		return m, cmd
+	}
+	if old != nil && old.handle != nil {
+		_ = old.handle.Close()
+	}
+
 	deps := issue.EvaluateDependencies(m.detail.IssueMap, m.blockingTypes)
 	prompt := agent.BuildPrompt(*issue, deps, m.detail.IssueMap)
-	m.codexTranscript.SetState(&views.CodexTranscriptState{
-		IssueID: issue.ID,
-		Status:  "running",
-		StartAt: time.Now(),
-	})
-	// M-key launches are human-present: use on-request so codex surfaces exec
-	// and apply-patch approvals through mg's modal instead of auto-approving.
+	placeholder := &codexSession{
+		state: &views.CodexTranscriptState{
+			IssueID: issue.ID,
+			Status:  "running",
+			StartAt: time.Now(),
+		},
+		launching: true,
+	}
+	m.codexSessions[issue.ID] = placeholder
+	m.codexTranscript.SetState(placeholder.state)
+	// Human-present launches use on-request so codex surfaces exec and
+	// apply-patch approvals through mg's modal instead of auto-approving.
 	// Polecat/gt-sling and tmux launches keep "never" (no human at the terminal).
 	return m, codexLaunchCmd(issue.ID, prompt, m.projectDir, "", "on-request")
+}
+
+// stopCodexSession is K in the transcript: it shuts down the selected
+// issue's codex mcp-server.
+func (m Model) stopCodexSession() (tea.Model, tea.Cmd) {
+	issue := m.parade.SelectedIssue
+	if issue == nil {
+		return m, nil
+	}
+	sess := m.codexSessions[issue.ID]
+	if sess == nil || sess.handle == nil || sess.closed {
+		return m, nil
+	}
+	_ = sess.handle.Close()
+	sess.closed = true
+	now := time.Now()
+	sess.state.Status = "canceled"
+	sess.state.EndAt = now
+	sess.state.AppendEntry(views.CodexTranscriptEntry{At: now, Kind: "info", Title: "session stopped"})
+	m.dismissCodexReply()
+	if m.isCodexShownFor(issue.ID) {
+		m.codexTranscript.SetState(sess.state)
+	}
+	toast, cmd := components.ShowToast(fmt.Sprintf("Codex session for %s stopped", issue.ID), components.ToastInfo, toastDuration)
+	m.toast = toast
+	return m, cmd
 }

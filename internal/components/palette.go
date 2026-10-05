@@ -46,6 +46,13 @@ const (
 	ActionPruneClosed
 	ActionClaimNextReady
 	ActionCodexResume
+	ActionEditIssue
+	ActionComment
+	ActionAssignIssue
+	ActionAddLabel
+	ActionAddDependency
+	ActionToggleDoctor
+	ActionToggleChanges
 )
 
 // PaletteCommand is a single entry in the command palette.

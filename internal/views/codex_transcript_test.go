@@ -101,8 +101,20 @@ func TestViewWithoutStateShowsPlaceholder(t *testing.T) {
 	if !strings.Contains(out, "CODEX (MCP)") {
 		t.Fatalf("missing title: %q", out)
 	}
-	if !strings.Contains(out, "No active codex MCP session") {
+	if !strings.Contains(out, "No Codex session") {
 		t.Fatalf("missing placeholder: %q", out)
+	}
+}
+
+func TestViewWithoutStateOffersStartOnlyWithCodex(t *testing.T) {
+	v := NewCodexTranscript(80, 24)
+	v.SetIdle("mg-1", "")
+	if out := v.View(); !strings.Contains(out, "mg-1") || !strings.Contains(out, "enter start session") {
+		t.Fatalf("with codex: want the issue and a start hint: %q", out)
+	}
+	v.SetIdle("mg-1", "codex is not on PATH")
+	if out := v.View(); strings.Contains(out, "enter start") || !strings.Contains(out, "Cannot start one: codex is not on PATH") {
+		t.Fatalf("without codex: want no start hint: %q", out)
 	}
 }
 

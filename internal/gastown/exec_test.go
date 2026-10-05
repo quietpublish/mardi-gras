@@ -109,3 +109,23 @@ func TestBdChildEnvDisablesMetricsForCommentRead(t *testing.T) {
 		t.Errorf("comment write: want the user's own setting kept, got %v", write)
 	}
 }
+
+func TestExecWithTimeoutCarriesStderr(t *testing.T) {
+	err := execWithTimeout(5*time.Second, "sh", "-c", "echo progress; echo 'gt: polecat obsidian is busy' >&2; exit 1")
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if got := err.Error(); !strings.Contains(got, "exit status 1") || !strings.Contains(got, "polecat obsidian is busy") {
+		t.Fatalf("error = %q, want the exit status and gt's reason", got)
+	}
+	if strings.Contains(err.Error(), "progress") {
+		t.Fatalf("stdout leaked into the error: %q", err)
+	}
+}
+
+func TestExecWithTimeoutEdgeCaseSilentFailure(t *testing.T) {
+	err := execWithTimeout(5*time.Second, "sh", "-c", "exit 3")
+	if err == nil || err.Error() != "exit status 3" {
+		t.Fatalf("error = %v, want plain exit status when stderr is empty", err)
+	}
+}

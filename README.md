@@ -99,7 +99,7 @@ The detail pane renders an issue's description, design notes, and acceptance cri
 
 Writes go through the `bd` CLI, so anything mg changes is exactly what an agent would see.
 
-- `1` `2` `3` set status; `!` `@` `#` `$` set priority.
+- `1` claims the issue (assigns it to you, in progress), `2` sets it open, `3` closes it; `!` `@` `#` `$` set priority.
 - `N` creates an issue, `e` edits it, `r` adds a comment, `y` assigns it, `t` labels it, `l` links a dependency.
 - `b` copies a branch name for the issue; `B` creates and checks out that branch.
 - `space` builds a multi-selection; the status and priority keys then apply to all of it.
@@ -112,7 +112,7 @@ Writes go through the `bd` CLI, so anything mg changes is exactly what an agent 
 
 Inside tmux, the agent opens in a split pane beside the parade and mg remembers which pane belongs to which issue, so `a` again takes you back to it instead of starting a second one. `A` stops it.
 
-`M` opens a live Codex transcript in place of the detail pane. mg speaks Codex's MCP protocol directly, streams messages, commands, and patches as they happen, and surfaces exec and patch approvals as a modal you answer without leaving the parade. `r` sends a follow-up prompt into the running session.
+`M` opens the Codex transcript in place of the detail pane; `enter` starts a session on the selected issue and `K` stops it. mg speaks Codex's MCP protocol directly, streams messages, commands, and patches as they happen, and surfaces exec and patch approvals as a modal you answer without leaving the parade. `r` sends a follow-up prompt into the running session. This needs `codex mcp-server`, which Codex removed in 0.154.0: use an earlier Codex, for example through `--agent-cmd` with a pinned version.
 
 See the [agent integration guide](docs/agents.md) for runtime detection, tmux dispatch, and Codex specifics.
 

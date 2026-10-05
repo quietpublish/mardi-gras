@@ -113,8 +113,8 @@ type LaunchCodexMCPOptions struct {
 	// match the tmux-launched path in agent.Command.
 	Sandbox string
 	// ApprovalPolicy overrides codex's approval policy. Defaults to "never"
-	// because mg can't currently route exec_approval_request events to a
-	// user-visible prompt.
+	// for unattended launches; "on-request" routes approvals to mg's modal
+	// and pins approvals_reviewer to the user.
 	ApprovalPolicy string
 	// Model optionally overrides the codex model.
 	Model string
@@ -189,6 +189,7 @@ func LaunchCodexMCP(ctx context.Context, opts LaunchCodexMCPOptions) (*CodexMCPH
 		Sandbox:        sandbox,
 		ApprovalPolicy: approval,
 		Model:          opts.Model,
+		Config:         sessionConfig(approval),
 	})
 	if err != nil {
 		_ = client.Close()
@@ -202,6 +203,27 @@ func LaunchCodexMCP(ctx context.Context, opts LaunchCodexMCPOptions) (*CodexMCPH
 	}, nil
 }
 
+// sessionConfig is the config.toml override sent with a session. on-request
+// means a human is watching mg's approval modal, but a user's config.toml can
+// route approvals to codex's own reviewer (approvals_reviewer =
+// "guardian_subagent" or "auto_review"), which approves escalations without
+// ever asking mg: the modal, the deny-list banner and the Jev reading never
+// see them. Pin the reviewer to the user for those sessions.
+func sessionConfig(approval string) map[string]any {
+	if approval != "on-request" {
+		return nil
+	}
+	return map[string]any{"approvals_reviewer": "user"}
+}
+
 // ErrCodexUnavailable indicates that the codex binary is not on PATH and no
 // MG_AGENT_CMD wrapper stands in for it.
 var ErrCodexUnavailable = errors.New("agent: codex binary not on PATH")
+
+// CodexLaunchable reports why a codex session cannot start, or nil if it
+// can: the same resolution the launch uses (codex on PATH, or MG_AGENT_CMD
+// standing in for codex), so the UI never offers a start that would fail.
+func CodexLaunchable() error {
+	_, err := codexCommand()
+	return err
+}

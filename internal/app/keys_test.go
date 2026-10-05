@@ -1,6 +1,8 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -410,6 +412,26 @@ func TestQuickActionNilIssueNoop(t *testing.T) {
 	_, cmd := got.quickAction(data.StatusInProgress, "in_progress")
 	if cmd != nil {
 		t.Fatal("expected nil cmd from quickAction with no issues")
+	}
+}
+
+func TestQuickActionInProgressSaysClaimed(t *testing.T) {
+	// `1` runs bd update --claim, which also takes the assignee; the toast
+	// must say so rather than report a bare status change (mg-83g).
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "bd"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+	got := setupModel(t)
+
+	_, cmd := got.quickAction(data.StatusInProgress, "in_progress")
+	if cmd == nil {
+		t.Fatal("expected a claim command")
+	}
+	msg, ok := cmd().(mutateResultMsg)
+	if !ok || msg.err != nil || msg.action != "claimed · in_progress" {
+		t.Fatalf("result = %+v, want action %q", msg, "claimed · in_progress")
 	}
 }
 

@@ -224,3 +224,14 @@ func waitDone(t *testing.T, sess *Session) SessionResult {
 		return SessionResult{}
 	}
 }
+
+func TestBuildCodexArgsConfig(t *testing.T) {
+	args := buildCodexArgs(SessionOptions{Prompt: "p", Config: map[string]any{"approvals_reviewer": "user"}})
+	cfg, ok := args["config"].(map[string]any)
+	if !ok || cfg["approvals_reviewer"] != "user" {
+		t.Fatalf("config arg = %v", args["config"])
+	}
+	if _, ok := buildCodexArgs(SessionOptions{Prompt: "p"})["config"]; ok {
+		t.Fatal("an empty Config should be omitted")
+	}
+}

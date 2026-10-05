@@ -61,6 +61,10 @@ type CodexTranscript struct {
 	width  int
 	height int
 	state  *CodexTranscriptState
+	// With no state: the selected issue, and why codex cannot start (empty
+	// when it can), for the "how to start one" placeholder.
+	idleIssue        string
+	codexUnavailable string
 }
 
 // NewCodexTranscript constructs a transcript view with the given dimensions.
@@ -78,6 +82,13 @@ func (c *CodexTranscript) SetSize(w, h int) {
 // an empty "no active session" placeholder.
 func (c *CodexTranscript) SetState(s *CodexTranscriptState) { c.state = s }
 
+// SetIdle describes the placeholder shown when the selected issue has no
+// session: which issue, and why codex cannot start ("" when it can).
+func (c *CodexTranscript) SetIdle(issueID, unavailable string) {
+	c.idleIssue = issueID
+	c.codexUnavailable = unavailable
+}
+
 // Update is a no-op for now; the transcript view is read-only. Future work
 // will add scrolling, copy, and a kill keybind.
 func (c CodexTranscript) Update(_ tea.Msg) (CodexTranscript, tea.Cmd) { return c, nil }
@@ -92,10 +103,17 @@ func (c CodexTranscript) body() string {
 	header := lipgloss.NewStyle().Bold(true).Foreground(ui.BrightGold).Render("CODEX (MCP)")
 
 	if c.state == nil {
-		hint := lipgloss.NewStyle().Foreground(ui.Dim).Render(
-			"No active codex MCP session for the selected issue.\nPress M to launch one.",
-		)
-		return header + "\n\n" + hint
+		dim := lipgloss.NewStyle().Foreground(ui.Dim)
+		target := "the selected issue"
+		if c.idleIssue != "" {
+			target = c.idleIssue
+		}
+		if c.codexUnavailable != "" {
+			return header + "\n\n" + dim.Render("No Codex session for "+target+".\nCannot start one: "+c.codexUnavailable+".") +
+				"\n\n" + dim.Render("  M close  esc back")
+		}
+		return header + "\n\n" + dim.Render("No Codex session for "+target+".\nStarting one runs codex mcp-server on this issue in the\nproject directory; it asks here before running commands.") +
+			"\n\n" + dim.Render("  enter start session  M close  esc back")
 	}
 
 	meta := c.metaLine()
@@ -114,10 +132,22 @@ func (c CodexTranscript) body() string {
 		out = append(out, rendered...)
 	}
 
-	hint := lipgloss.NewStyle().Foreground(ui.Dim).Render("  r reply  M close  K kill session  esc back")
+	hint := lipgloss.NewStyle().Foreground(ui.Dim).Render(c.hint())
 	out = append(out, "", hint)
 
 	return strings.Join(out, "\n")
+}
+
+// hint lists the keys that act on the session in its current state.
+func (c CodexTranscript) hint() string {
+	switch c.state.Status {
+	case "errored", "canceled":
+		return "  enter new session  M close  esc back"
+	case "done":
+		return "  r reply  K stop session  M close  esc back"
+	default:
+		return "  K stop session  M close  esc back"
+	}
 }
 
 func (c CodexTranscript) metaLine() string {
