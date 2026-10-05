@@ -3767,9 +3767,13 @@ func (m Model) View() tea.View {
 
 	if m.dupDialogOpen {
 		ddWidth := min(m.width-8, 72)
-		ddTitle := ui.HelpTitle.Width(ddWidth - 4).Render("[ POSSIBLE DUPLICATE ]")
+		// OverlayBox's width includes its border and padding, so the content
+		// gets ddWidth-6. The hint is split by hand: as one line it overflows
+		// even that and the box re-wraps it, stranding "esc" and "cancel".
+		ddInner := ddWidth - 6
+		ddTitle := ui.HelpTitle.Width(ddInner).Render("[ POSSIBLE DUPLICATE ]")
 		ddBody := m.dupDialog.View()
-		ddHint := ui.HelpHint.Width(ddWidth - 4).Render("enter go to it · c create anyway · l create + mark duplicate · esc cancel")
+		ddHint := ui.HelpHint.Width(ddInner).Render("enter go to it · c create anyway\nl create + mark duplicate · esc cancel")
 		ddContent := lipgloss.JoinVertical(lipgloss.Left, ddTitle, "", ddBody, "", ddHint)
 		ddBox := ui.OverlayBox(ddContent, ddWidth)
 		return altView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, ddBox))

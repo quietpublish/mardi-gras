@@ -223,8 +223,16 @@ func TestHandleDupCheckStrongMatchOpensDialog(t *testing.T) {
 	if sel := m.dupDialog.Selected(); sel.ID != "mg-2" || sel.Prob != 0.95 {
 		t.Fatalf("selected = %+v", sel)
 	}
-	if !strings.Contains(m.View().Content, "POSSIBLE DUPLICATE") {
+	view := m.View().Content
+	if !strings.Contains(view, "POSSIBLE DUPLICATE") {
 		t.Fatal("the dialog should render")
+	}
+	// Each key and its action stay on one line; the hint used to wrap twice
+	// and strand "esc" and "cancel" on lines of their own.
+	for _, want := range []string{"enter go to it · c create anyway", "l create + mark duplicate · esc cancel"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("hint line %q is not intact", want)
+		}
 	}
 }
 
