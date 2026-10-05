@@ -25,6 +25,7 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -42,13 +43,18 @@ type request struct {
 	Questions map[string]question `json:"questions"`
 }
 
+// answer mirrors the hosted API's shape as observed against jev-1.13.0: a
+// noul carries only its probability (no confidence, no distribution), a
+// score's probabilities are keyed by level index with a legend, and a
+// choice's are keyed by option name. mg's client normalizes all three.
 type answer struct {
 	Type          string             `json:"type"`
 	Noul          float64            `json:"noul"`
 	Choice        string             `json:"choice"`
 	Score         float64            `json:"score"`
+	Legend        map[string]string  `json:"legend,omitempty"`
 	Probabilities map[string]float64 `json:"probabilities,omitempty"`
-	Confidence    float64            `json:"confidence"`
+	Confidence    float64            `json:"confidence,omitempty"`
 }
 
 type response struct {
@@ -175,7 +181,7 @@ func answerFor(key string, q question) answer {
 	_, _ = h.Write([]byte(q.Instructions))
 	seed := h.Sum32()
 	unit := func(salt uint32) float64 { return float64((seed^salt)%1000) / 1000 }
-	a := answer{Type: q.Type, Confidence: 0.6 + 0.35*unit(7)}
+	a := answer{Type: q.Type}
 
 	switch q.Type {
 	case "noul":
@@ -187,18 +193,23 @@ func answerFor(key string, q question) answer {
 		}
 		a.Probabilities = spread(names, seed)
 		a.Choice = argmax(a.Probabilities)
+		a.Confidence = a.Probabilities[a.Choice]
 	case "score":
 		var levels []string
 		_ = json.Unmarshal(q.Criteria, &levels)
 		if len(levels) == 0 {
 			break
 		}
-		a.Probabilities = spread(levels, seed)
-		var expected float64
+		byLabel := spread(levels, seed)
+		a.Probabilities = make(map[string]float64, len(levels))
+		a.Legend = make(map[string]string, len(levels))
 		for i, l := range levels {
-			expected += float64(i) * a.Probabilities[l]
+			k := strconv.Itoa(i)
+			a.Probabilities[k] = byLabel[l]
+			a.Legend[k] = l
+			a.Score += float64(i) * byLabel[l]
+			a.Confidence = max(a.Confidence, byLabel[l])
 		}
-		a.Score = expected
 	}
 	return a
 }

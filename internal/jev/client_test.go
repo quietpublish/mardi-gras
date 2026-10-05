@@ -91,6 +91,54 @@ func TestEvaluate(t *testing.T) {
 	}
 }
 
+// The hosted API keys score probabilities by index with a legend, and sends
+// a noul with no confidence (seen against jev-1.13.0). Callers see labels
+// and a confidence regardless.
+func TestEvaluateEdgeCaseNormalizesHostedWireShape(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		_, _ = io.WriteString(w, `{"model":"jev-1.13.0","answers":{
+			"user_facing":{"type":"noul","noul":0.03},
+			"urgency":{"type":"score","score":2.96,"legend":{"0":"Park","1":"Can wait","2":"Do next","3":"Do now"},"probabilities":{"0":0,"1":0,"2":0.04,"3":0.96},"confidence":0.96},
+			"risk":{"type":"score","score":0.5,"probabilities":{"0":0.5,"1":0.5}},
+			"area":{"type":"choice","choice":"auth","probabilities":{"auth":1,"billing":0},"confidence":1},
+			"zero":{"type":"noul","noul":0.4,"confidence":0}
+		},"usage":{"input_tokens":459,"output_tokens":71}}`)
+	}))
+	defer srv.Close()
+
+	res, err := newTestClient(t, srv).Evaluate(context.Background(), map[string]any{}, map[string]Question{
+		"user_facing": NewNoul("Does this affect users?"),
+		"urgency":     NewScore("How urgent?", "Park", "Can wait", "Do next", "Do now"),
+		"risk":        NewScore("How risky?", "Low", "High"),
+		"area":        NewChoice("Which area?", Option{Name: "auth"}, Option{Name: "billing"}),
+		"zero":        NewNoul("Reported zero?"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := res.Answers["user_facing"]; a.Confidence < 0.969 || a.Confidence > 0.971 {
+		t.Errorf("noul without confidence: want max(p,1-p)=0.97, got %+v", a)
+	}
+	if a := res.Answers["zero"]; a.Confidence != 0 {
+		t.Errorf("a reported zero confidence is kept, got %+v", a)
+	}
+	u := res.Answers["urgency"]
+	if u.Probabilities["Do now"] != 0.96 || u.Probabilities["Do next"] != 0.04 || len(u.Probabilities) != 4 {
+		t.Errorf("legend not applied: %+v", u.Probabilities)
+	}
+	if _, bad := u.Probabilities["3"]; bad || u.Confidence != 0.96 || u.Score != 2.96 {
+		t.Errorf("urgency = %+v", u)
+	}
+	r := res.Answers["risk"]
+	if r.Probabilities["Low"] != 0.5 || r.Probabilities["High"] != 0.5 || r.Confidence != 0.5 {
+		t.Errorf("index keys without a legend take the question's levels and confidence the top probability: %+v", r)
+	}
+	if a := res.Answers["area"]; a.Choice != "auth" || a.Confidence != 1 || a.Probabilities["auth"] != 1 {
+		t.Errorf("labelled answers pass through: %+v", a)
+	}
+}
+
 func TestEvaluateEdgeCaseNoQuestions(t *testing.T) {
 	var calls int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

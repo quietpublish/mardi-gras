@@ -161,7 +161,11 @@ func (c *Client) Evaluate(ctx context.Context, state any, questions map[string]Q
 	if resp.Answers == nil {
 		return nil, errors.New("jev: unexpected response: no answers")
 	}
-	return &Result{Model: resp.Model, Answers: resp.Answers, Usage: resp.Usage}, nil
+	answers := make(map[string]Answer, len(resp.Answers))
+	for name, w := range resp.Answers {
+		answers[name] = w.normalize(questions[name])
+	}
+	return &Result{Model: resp.Model, Answers: answers, Usage: resp.Usage}, nil
 }
 
 // Ask is Evaluate with one question.
