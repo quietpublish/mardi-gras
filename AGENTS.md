@@ -9,7 +9,7 @@
 - `internal/data`: Issue loading (`bd list --json`, JSONL fallback), grouping, dependency/status logic, filtering, focus mode, mutations (`bd` CLI), cross-rig deps, source health.
 - `internal/gastown`: Orchestrator integration behind a `Driver` seam — `GTDriver` (`gt` CLI) and `GCDriver` (Gas City Supervisor HTTP API), picked by `SelectDriver()`. Covers environment detection, `gt status` parsing, sling/nudge/handoff/decommission, assignment, convoy CRUD, mail inbox/reply/compose, molecule DAG, costs, vitals (server health + backups), activity feed, velocity, scorecards, predictions, formula recommendations, problem detection (stalled/stuck/backoff/zombie/dead_rig), patrol scan integration, rig recovery. `gcclient/` is generated — regenerate with `make gc-client`, never hand-edit.
 - `internal/agent`: Agent prompt builder and runtime detection (`claude`, `cursor-agent`, `codex`), tmux pane launch/discover/kill.
-- `internal/codexmcp`: JSON-RPC client for `codex mcp-server` (transport, session, protocol types) behind the live Codex transcript and approval routing.
+- `internal/codexapp`: JSON-RPC client for `codex app-server` (transport, session, protocol types) behind the live Codex transcript and approval routing.
 - `internal/tmux`: tmux status line widget (`mg --status` mode).
 - `internal/ui`: Theme palette (with Gas Town role/state colors), Lipgloss styles, Unicode symbols (including DAG connectors), gradients, sparklines.
 - `testdata/sample.jsonl`: fixture for tests and local demo runs.

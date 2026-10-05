@@ -39,7 +39,7 @@ The following are in scope for this project:
 - Path traversal in file resolution or redirect following (including `.beads/redirect` and `city.toml` ancestor walks)
 - Dependency vulnerabilities in Go modules
 - ANSI escape sequence injection via agent output capture, and OSC sequences reaching the terminal from issue or agent content
-- Unsafe handling of responses from a Gas City Supervisor HTTP endpoint, or of JSON-RPC traffic from `codex mcp-server`
+- Unsafe handling of responses from a Gas City Supervisor HTTP endpoint, or of JSON-RPC traffic from `codex app-server`
 
 The following are out of scope:
 
