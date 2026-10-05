@@ -1,6 +1,8 @@
 package data
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -323,5 +325,52 @@ func TestIsStructuredToken(t *testing.T) {
 				t.Errorf("isStructuredToken(%q) = %v, want %v", tt.token, got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestFilterIssuesWithHighlightsSubstring(t *testing.T) {
+	// A subsequence match over title + description matched almost anything:
+	// "auth" hit "Evaluate new caching layer" and "Update API documentation"
+	// (mg-9ik). Words must now appear as written.
+	issues := []Issue{
+		{ID: "mg-001", Title: "Deploy authentication service", Priority: PriorityCritical},
+		{ID: "mg-017", Title: "Evaluate new caching layer", Description: "Try a read-through cache in front of the API", Priority: PriorityLow},
+		{ID: "mg-004", Title: "Update API documentation", Priority: PriorityLow},
+		{ID: "mg-014", Title: "Track auth service metrics", Priority: PriorityMedium},
+	}
+	got, hl := FilterIssuesWithHighlights(issues, "auth")
+	var ids []string
+	for _, iss := range got {
+		ids = append(ids, iss.ID)
+	}
+	if strings.Join(ids, ",") != "mg-001,mg-014" {
+		t.Fatalf("auth matched %v, want [mg-001 mg-014] in input order", ids)
+	}
+	if want := []int{6, 7, 8, 9}; fmt.Sprint(hl["mg-014"]) != fmt.Sprint(want) {
+		t.Fatalf("highlights for mg-014 = %v, want %v", hl["mg-014"], want)
+	}
+}
+
+func TestFilterIssuesWithHighlightsEdgeCaseTypoFallback(t *testing.T) {
+	// Nothing contains "authentcation", so the ID + title fuzzy fallback
+	// forgives the missing letter, still in input order.
+	issues := []Issue{
+		{ID: "mg-002", Title: "Fix CI pipeline timeout"},
+		{ID: "mg-001", Title: "Deploy authentication service"},
+	}
+	got, _ := FilterIssuesWithHighlights(issues, "authentcation")
+	if len(got) != 1 || got[0].ID != "mg-001" {
+		t.Fatalf("typo fallback = %v, want [mg-001]", got)
+	}
+}
+
+func TestFilterIssuesWithHighlightsEdgeCaseAllWordsRequired(t *testing.T) {
+	issues := []Issue{
+		{ID: "a", Title: "Auth service metrics"},
+		{ID: "b", Title: "Auth login page"},
+	}
+	got, _ := FilterIssuesWithHighlights(issues, "auth metrics")
+	if len(got) != 1 || got[0].ID != "a" {
+		t.Fatalf("got %v, want only the issue containing both words", got)
 	}
 }

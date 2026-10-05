@@ -69,6 +69,10 @@ type Model struct {
 	excludeTypes  map[string]bool
 	excludeLabels map[string]bool
 	filterInput   textinput.Model
+	// filterMatched of filterTotal searchable issues match the query; set
+	// by rebuildParade for the filter bar's counter.
+	filterMatched int
+	filterTotal   int
 	filtering     bool
 	showHelp      bool
 	help          components.Help
@@ -980,6 +984,15 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Forward all messages to quick-action input when active
+	// Key presses reach the filter through handleFilteringKey; a paste is
+	// its own message and used to be dropped (mg-svx).
+	if paste, ok := msg.(tea.PasteMsg); ok && m.filtering {
+		var cmd tea.Cmd
+		m.filterInput, cmd = m.filterInput.Update(paste)
+		m.rebuildParade()
+		return m, cmd
+	}
+
 	if m.qaMode != "" {
 		if km, ok := msg.(tea.KeyPressMsg); ok {
 			switch km.String() {
@@ -1901,6 +1914,13 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "esc":
+		// An applied filter clears first: it is the most recent narrowing,
+		// and esc used to leave it stuck on screen (mg-9ik).
+		if m.filterInput.Value() != "" {
+			m.filterInput.SetValue("")
+			m.rebuildParade()
+			return m, nil
+		}
 		if m.focusMode {
 			m.focusMode = false
 			m.rebuildParade()
@@ -3302,6 +3322,8 @@ func (m *Model) rebuildParade() {
 
 	filteredIssues, highlights := data.FilterIssuesWithHighlights(m.issues, m.filterInput.Value())
 	filteredIssues = data.ExcludeByLabel(data.ExcludeByType(filteredIssues, m.excludeTypes), m.excludeLabels)
+	m.filterMatched = len(filteredIssues)
+	m.filterTotal = len(data.ExcludeByLabel(data.ExcludeByType(m.issues, m.excludeTypes), m.excludeLabels))
 	var ranks map[string]float64 // the judge's urgency per ranked issue, focus mode only
 	if m.focusMode {
 		verdicts := m.focusVerdicts()
@@ -3747,7 +3769,12 @@ func (m Model) View() tea.View {
 		// Right-aligned match count so a narrowing query gives feedback
 		// (audit #12).
 		line := m.filterInput.View()
-		count := components.FooterModeChip(fmt.Sprintf("%d/%d match", m.parade.VisibleIssues(), len(m.parade.AllIssues)))
+		// matched of searchable, not visible rows of matched (mg-9ik).
+		label := fmt.Sprintf("%d of %d", m.filterMatched, m.filterTotal)
+		if !m.filtering {
+			label += " · esc clear"
+		}
+		count := components.FooterModeChip(label)
 		gap := m.width - lipgloss.Width(line) - lipgloss.Width(count) - 3
 		if gap > 0 {
 			line += strings.Repeat(" ", gap) + count
