@@ -117,6 +117,7 @@ func main() {
 
 	// Load issues
 	var issues []data.Issue
+	var skipped int // malformed lines the JSONL load skipped
 	switch source.Mode {
 	case SourceCLI:
 		issues, err = data.FetchIssuesCLI(source.ProjectDir)
@@ -130,7 +131,6 @@ func main() {
 			os.Exit(1)
 		}
 	default:
-		var skipped int
 		issues, skipped, err = data.LoadIssues(source.Path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error loading issues from %s: %v\n", source.Path, err)
@@ -165,7 +165,7 @@ func main() {
 	}
 	applyTheme(*themeFlag)
 	guard := app.NewOSCGuard()
-	model := app.NewWithGuard(issues, source, blockingTypes, guard, *noAnimations, filters)
+	model := app.NewWithGuard(issues, source, blockingTypes, guard, *noAnimations, filters).WithSkippedLines(skipped)
 	p := tea.NewProgram(model, tea.WithFilter(guard.Filter()))
 	finalModel, err := p.Run()
 	if final, ok := finalModel.(app.Model); ok {

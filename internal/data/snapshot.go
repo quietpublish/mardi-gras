@@ -82,7 +82,7 @@ func SnapshotForJudge(iss Issue, eval DepEval, scope SnapshotScope, now time.Tim
 		Type:         string(iss.IssueType),
 		Status:       string(iss.Status),
 		Priority:     int(iss.Priority),
-		AgeDays:      wholeDays(now.Sub(iss.CreatedAt)),
+		AgeDays:      ageDays(iss.CreatedAt, now),
 		Blocking:     len(eval.BlockingIDs),
 		MissingDeps:  len(eval.MissingIDs),
 		CommentCount: iss.CommentCount,
@@ -91,7 +91,7 @@ func SnapshotForJudge(iss Issue, eval DepEval, scope SnapshotScope, now time.Tim
 	if updated.IsZero() {
 		updated = iss.CreatedAt
 	}
-	s.SinceUpdateDays = wholeDays(now.Sub(updated))
+	s.SinceUpdateDays = ageDays(updated, now)
 	if iss.DueAt != nil {
 		d := signedDays(iss.DueAt.Sub(now))
 		s.DueInDays = &d
@@ -121,6 +121,15 @@ func ClaimedBy(assignee, me string) string {
 	default:
 		return "someone else"
 	}
+}
+
+// ageDays is whole days since t, or 0 when t is unknown: a missing
+// timestamp is the zero time, ~739,000 days ago (mg-bmb).
+func ageDays(t, now time.Time) int {
+	if t.IsZero() {
+		return 0
+	}
+	return wholeDays(now.Sub(t))
 }
 
 // Hash identifies the snapshot's content: two snapshots with the same hash

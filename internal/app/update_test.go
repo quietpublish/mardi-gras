@@ -638,3 +638,13 @@ func TestTownStatusSuccessClearsError(t *testing.T) {
 		t.Error("expected the status to be stored")
 	}
 }
+
+func TestStartupSkippedLinesToast(t *testing.T) {
+	// The initial load's skipped-line warning went to stderr, which the
+	// TUI covers at once (mg-bmb).
+	m := New([]data.Issue{testIssue("a", data.StatusOpen)}, data.Source{}, data.DefaultBlockingTypes).WithSkippedLines(2)
+	model, _ := m.Update(skippedLinesMsg{n: 2})
+	if msg := model.(Model).toast.Message; msg != "Skipped 2 malformed line(s)" {
+		t.Fatalf("toast = %q", msg)
+	}
+}

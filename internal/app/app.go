@@ -74,21 +74,24 @@ type Model struct {
 	// by rebuildParade for the filter bar's counter.
 	filterMatched int
 	filterTotal   int
-	filtering     bool
-	showHelp      bool
-	help          components.Help
-	ready         bool
-	spinner       spinner.Model // branded loading spinner (shown until ready)
-	agentAvail    bool
-	agentRuntime  agent.Runtime
-	projectDir    string
-	inTmux        bool
-	activeAgents  map[string]string   // issueID -> tmux window name
-	gtEnv         gastown.Env         // Gas Town environment, read once at startup
-	driver        gastown.Driver      // Orchestrator seam; GTDriver today (gt CLI)
-	townStatus    *gastown.TownStatus // Latest gt status, nil when unavailable
-	gasTown       views.GasTown       // Gas Town control surface panel
-	showGasTown   bool                // Whether the Gas Town panel replaces detail
+	// startupSkipped is the malformed-line count from the initial load,
+	// toasted once the TUI is up (see WithSkippedLines).
+	startupSkipped int
+	filtering      bool
+	showHelp       bool
+	help           components.Help
+	ready          bool
+	spinner        spinner.Model // branded loading spinner (shown until ready)
+	agentAvail     bool
+	agentRuntime   agent.Runtime
+	projectDir     string
+	inTmux         bool
+	activeAgents   map[string]string   // issueID -> tmux window name
+	gtEnv          gastown.Env         // Gas Town environment, read once at startup
+	driver         gastown.Driver      // Orchestrator seam; GTDriver today (gt CLI)
+	townStatus     *gastown.TownStatus // Latest gt status, nil when unavailable
+	gasTown        views.GasTown       // Gas Town control surface panel
+	showGasTown    bool                // Whether the Gas Town panel replaces detail
 
 	// Toast notification
 	toast components.Toast
@@ -363,6 +366,17 @@ func NewWithGuard(issues []data.Issue, source data.Source, blockingTypes map[str
 // Init implements tea.Model.
 // NOTE: Init is a value receiver (tea.Model interface), so pointer-method mutations
 // are lost. We call poll functions directly and pre-set gtPollInFlight in New().
+// skippedLinesMsg reports malformed lines the initial load skipped.
+type skippedLinesMsg struct{ n int }
+
+// WithSkippedLines records malformed lines the initial load skipped. main
+// also prints them to stderr, but the TUI covers that at once, so the
+// TUI says it too, as a reload already does (mg-bmb).
+func (m Model) WithSkippedLines(n int) Model {
+	m.startupSkipped = n
+	return m
+}
+
 func (m Model) Init() tea.Cmd {
 	var agentPoll tea.Cmd
 	if m.orchestratorAvailable() {
@@ -388,6 +402,9 @@ func (m Model) Init() tea.Cmd {
 	}
 	if m.jev.enabled() {
 		cmds = append(cmds, m.jevProbe())
+	}
+	if n := m.startupSkipped; n > 0 {
+		cmds = append(cmds, func() tea.Msg { return skippedLinesMsg{n: n} })
 	}
 	return tea.Batch(cmds...)
 }
@@ -1218,6 +1235,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		return m.handleKeyPress(msg, !skipDeferredKeyBuffer)
+
+	case skippedLinesMsg:
+		toast, cmd := components.ShowToast(fmt.Sprintf("Skipped %d malformed line(s)", msg.n), components.ToastWarn, toastDuration)
+		m.toast = toast
+		return m, cmd
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
