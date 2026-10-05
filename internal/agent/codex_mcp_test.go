@@ -541,3 +541,14 @@ func TestCloseIsIdempotent(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionConfigPinsReviewerWhenHumanPresent(t *testing.T) {
+	// A config.toml with approvals_reviewer = "guardian_subagent" had codex
+	// approve a network escalation itself; mg's modal never saw it.
+	if got := sessionConfig("on-request"); got["approvals_reviewer"] != "user" {
+		t.Fatalf("on-request config = %v, want approvals_reviewer=user", got)
+	}
+	if got := sessionConfig("never"); got != nil {
+		t.Fatalf("unattended config = %v, want no override", got)
+	}
+}

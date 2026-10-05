@@ -11,8 +11,8 @@ import (
 
 // SessionOptions controls how StartSession invokes `tools/call codex`.
 //
-// Only Prompt is required. Cwd, Sandbox, ApprovalPolicy, and Model are passed
-// through to the codex tool when set. Anything left at its zero value is
+// Only Prompt is required. Cwd, Sandbox, ApprovalPolicy, Model and Config are
+// passed through to the codex tool when set. Anything left at its zero value is
 // omitted from the arguments object so the server uses its defaults.
 type SessionOptions struct {
 	Prompt         string
@@ -20,6 +20,9 @@ type SessionOptions struct {
 	Sandbox        string // "read-only" | "workspace-write" | "danger-full-access"
 	ApprovalPolicy string // "untrusted" | "on-failure" | "on-request" | "never"
 	Model          string
+	// Config overrides individual settings from CODEX_HOME/config.toml for
+	// this session (the codex tool's "config" argument).
+	Config map[string]any
 }
 
 // Session represents one in-flight codex tool call. It holds a reference to
@@ -295,6 +298,9 @@ func buildCodexArgs(opts SessionOptions) map[string]any {
 	}
 	if opts.Model != "" {
 		args["model"] = opts.Model
+	}
+	if len(opts.Config) > 0 {
+		args["config"] = opts.Config
 	}
 	return args
 }
