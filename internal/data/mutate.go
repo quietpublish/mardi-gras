@@ -2,6 +2,7 @@ package data
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -51,6 +52,11 @@ func CloseIssue(issueID string) error {
 
 // CloseAndClaimNext runs `bd close --claim-next --json <id>` and returns the
 // next claimed issue ID, if any.
+// ErrClaimUnreadable means bd closed the issue (it exited 0) but its
+// --claim-next output could not be read, so which issue it claimed, if any,
+// is unknown. It is a partial success, not a failed close (mg-299).
+var ErrClaimUnreadable = errors.New("closed, but which issue bd claimed next could not be read")
+
 func CloseAndClaimNext(issueID string) (string, error) {
 	if err := ValidateIssueID(issueID); err != nil {
 		return "", err
@@ -64,7 +70,7 @@ func CloseAndClaimNext(issueID string) (string, error) {
 		Claimed *Issue `json:"claimed"`
 	}
 	if err := json.Unmarshal(out, &result); err != nil {
-		return "", fmt.Errorf("bd close --claim-next parse: %w", err)
+		return "", fmt.Errorf("%w: %w", ErrClaimUnreadable, err)
 	}
 	if result.Claimed == nil {
 		return "", nil

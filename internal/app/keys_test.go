@@ -731,3 +731,14 @@ func TestKeyASingleAndMultiAgreeWithoutRuntime(t *testing.T) {
 			singleCmd == nil, multiCmd == nil)
 	}
 }
+
+func TestMutateResultWarnIsNotFailure(t *testing.T) {
+	// A close whose claim-next output could not be read toasted "Failed:
+	// closed …" (mg-299). It is a success with a caveat.
+	got := setupModel(t)
+	model, _ := got.Update(mutateResultMsg{issueID: "open-1", action: "closed", warn: "couldn't read which issue was claimed next"})
+	msg := model.(Model).toast.Message
+	if strings.HasPrefix(msg, "Failed") || !strings.Contains(msg, "open-1 → closed (couldn't read") {
+		t.Fatalf("toast = %q", msg)
+	}
+}

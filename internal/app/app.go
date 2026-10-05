@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -709,6 +710,7 @@ type mutateResultMsg struct {
 	err       error
 	claimedID string // non-empty when --claim-next claimed a follow-up issue
 	createdID string // non-empty when the mutation created this issue
+	warn      string // the mutation succeeded, but with this caveat
 }
 
 // pruneResultMsg is sent when a bd prune invocation completes.
@@ -1685,10 +1687,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.toast = toast
 			return m, cmd
 		}
-		toast, toastCmd := components.ShowToast(
-			fmt.Sprintf("%s \u2192 %s", msg.issueID, msg.action),
-			components.ToastSuccess, toastDuration,
-		)
+		text, level := fmt.Sprintf("%s \u2192 %s", msg.issueID, msg.action), components.ToastSuccess
+		if msg.warn != "" {
+			text, level = text+" ("+msg.warn+")", components.ToastWarn
+		}
+		toast, toastCmd := components.ShowToast(text, level, toastDuration)
 		m.toast = toast
 		if msg.action == "noted" {
 			m.detail.RichIssueID = ""
@@ -2484,6 +2487,11 @@ func (m Model) closeSelectedIssue() (tea.Model, tea.Cmd) {
 	issueID := issue.ID
 	return m, func() tea.Msg {
 		claimedID, err := data.CloseAndClaimNext(issueID)
+		if errors.Is(err, data.ErrClaimUnreadable) {
+			// The close went through; only the claim is unknown. It used to
+			// toast "Failed: closed mg-007 — … parse" (mg-299).
+			return mutateResultMsg{issueID: issueID, action: "closed", warn: "couldn't read which issue was claimed next"}
+		}
 		action := "closed"
 		if claimedID != "" {
 			action = fmt.Sprintf("closed → claimed %s", claimedID)
