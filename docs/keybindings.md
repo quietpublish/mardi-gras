@@ -21,7 +21,7 @@ Keys marked **(orch)** need a live orchestrator — Gas Town (`gt`) or Gas City.
 | `p`          | Toggle problems view **(orch)** |
 | `D`          | Toggle doctor diagnostics overlay |
 | `E`          | Toggle recent changes (bd events journal) |
-| `M`          | Show/hide the Codex (MCP) transcript; it never starts a session by itself |
+| `M`          | Show/hide the Codex transcript; it never starts a session by itself |
 
 `ctrl+g`, `p`, `D`, `E` and `M` are mutually exclusive — opening one closes the others.
 
@@ -144,13 +144,13 @@ The newest changes the bd events journal recorded, newest first: what happened, 
 
 ## Codex Transcript (`M`)
 
-`M` only shows the transcript for the selected issue. With no session it says so and offers to start one; starting is a separate keypress because it sets `codex mcp-server` working on the issue in the project directory.
+`M` only shows the transcript for the selected issue. With no session it says so and offers to start one; starting is a separate keypress because it sets `codex app-server` working on the issue in the project directory.
 
 | Key          | Action                          |
 | ------------ | ------------------------------- |
 | `M`          | Close the transcript            |
 | `enter`      | Start a session (no session yet, or the last one stopped or errored) |
-| `K`          | Stop the session (shuts down its `codex mcp-server`) |
+| `K`          | Stop the session (shuts down its `codex app-server`) |
 | `r`          | Reply to the live Codex session |
 | `esc`        | Dismiss the reply input         |
 

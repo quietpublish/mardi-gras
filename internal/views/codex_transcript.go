@@ -9,11 +9,11 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/matt-wright86/mardi-gras/internal/codexmcp"
+	"github.com/matt-wright86/mardi-gras/internal/codexapp"
 	"github.com/matt-wright86/mardi-gras/internal/ui"
 )
 
-// CodexTranscriptEntry is one rendered row of the live codex MCP transcript.
+// CodexTranscriptEntry is one rendered row of the live codex transcript.
 // Entries are appended as codex/event notifications arrive and rendered in
 // arrival order.
 type CodexTranscriptEntry struct {
@@ -100,7 +100,7 @@ func (c CodexTranscript) View() string {
 }
 
 func (c CodexTranscript) body() string {
-	header := lipgloss.NewStyle().Bold(true).Foreground(ui.BrightGold).Render("CODEX (MCP)")
+	header := lipgloss.NewStyle().Bold(true).Foreground(ui.BrightGold).Render("CODEX")
 
 	if c.state == nil {
 		dim := lipgloss.NewStyle().Foreground(ui.Dim)
@@ -112,7 +112,7 @@ func (c CodexTranscript) body() string {
 			return header + "\n\n" + dim.Render("No Codex session for "+target+".\nCannot start one: "+c.codexUnavailable+".") +
 				"\n\n" + dim.Render("  M close  esc back")
 		}
-		return header + "\n\n" + dim.Render("No Codex session for "+target+".\nStarting one runs codex mcp-server on this issue in the\nproject directory; it asks here before running commands.") +
+		return header + "\n\n" + dim.Render("No Codex session for "+target+".\nStarting one runs codex app-server on this issue in the\nproject directory; it asks here before running commands.") +
 			"\n\n" + dim.Render("  enter start session  M close  esc back")
 	}
 
@@ -274,11 +274,11 @@ func iconFor(kind string, isError bool) (string, color.Color) {
 // Returns true if the event was actually appended (i.e. it was one of the
 // display-relevant kinds). Unrecognized events are dropped — they remain
 // available via the raw stream for future expansion.
-func (s *CodexTranscriptState) AppendEvent(ev codexmcp.CodexEvent) bool {
+func (s *CodexTranscriptState) AppendEvent(ev codexapp.CodexEvent) bool {
 	now := time.Now()
 	switch ev.EventType() {
 	case "session_configured":
-		var sc codexmcp.SessionConfiguredEvent
+		var sc codexapp.SessionConfiguredEvent
 		_ = json.Unmarshal(ev.Msg, &sc)
 		if s.ThreadID == "" {
 			s.ThreadID = sc.ThreadID
@@ -292,7 +292,7 @@ func (s *CodexTranscriptState) AppendEvent(ev codexmcp.CodexEvent) bool {
 		})
 		return true
 	case "task_started":
-		var ts codexmcp.TaskStartedEvent
+		var ts codexapp.TaskStartedEvent
 		_ = json.Unmarshal(ev.Msg, &ts)
 		s.AppendEntry(CodexTranscriptEntry{
 			At:    now,
@@ -301,7 +301,7 @@ func (s *CodexTranscriptState) AppendEvent(ev codexmcp.CodexEvent) bool {
 		})
 		return true
 	case "task_complete":
-		var tc codexmcp.TaskCompleteEvent
+		var tc codexapp.TaskCompleteEvent
 		_ = json.Unmarshal(ev.Msg, &tc)
 		s.AppendEntry(CodexTranscriptEntry{
 			At:    now,
@@ -310,7 +310,7 @@ func (s *CodexTranscriptState) AppendEvent(ev codexmcp.CodexEvent) bool {
 		})
 		return true
 	case "agent_message":
-		var am codexmcp.AgentMessageEvent
+		var am codexapp.AgentMessageEvent
 		_ = json.Unmarshal(ev.Msg, &am)
 		s.AppendEntry(CodexTranscriptEntry{
 			At:    now,
@@ -320,7 +320,7 @@ func (s *CodexTranscriptState) AppendEvent(ev codexmcp.CodexEvent) bool {
 		})
 		return true
 	case "user_message":
-		var um codexmcp.UserMessageEvent
+		var um codexapp.UserMessageEvent
 		_ = json.Unmarshal(ev.Msg, &um)
 		s.AppendEntry(CodexTranscriptEntry{
 			At:    now,
@@ -329,7 +329,7 @@ func (s *CodexTranscriptState) AppendEvent(ev codexmcp.CodexEvent) bool {
 		})
 		return true
 	case "exec_command_begin":
-		var ec codexmcp.ExecCommandBeginEvent
+		var ec codexapp.ExecCommandBeginEvent
 		_ = json.Unmarshal(ev.Msg, &ec)
 		s.AppendEntry(CodexTranscriptEntry{
 			At:    now,
@@ -338,17 +338,35 @@ func (s *CodexTranscriptState) AppendEvent(ev codexmcp.CodexEvent) bool {
 		})
 		return true
 	case "exec_command_end":
-		var ec codexmcp.ExecCommandEndEvent
+		var ec codexapp.ExecCommandEndEvent
 		_ = json.Unmarshal(ev.Msg, &ec)
+		// A declined or failed command has no exit code.
+		title, failed := ec.Status, ec.Status != "completed"
+		if ec.ExitCode != nil {
+			title, failed = fmt.Sprintf("exit %d", *ec.ExitCode), *ec.ExitCode != 0
+		}
+		if title == "" {
+			title = "done"
+		}
 		s.AppendEntry(CodexTranscriptEntry{
 			At:    now,
 			Kind:  "exec",
-			Title: fmt.Sprintf("exit %d", ec.ExitCode),
-			Error: ec.ExitCode != 0,
+			Title: title,
+			Error: failed,
+		})
+		return true
+	case "patch":
+		var pe codexapp.PatchEvent
+		_ = json.Unmarshal(ev.Msg, &pe)
+		s.AppendEntry(CodexTranscriptEntry{
+			At:    now,
+			Kind:  "patch",
+			Title: fmt.Sprintf("%s: %s", pe.Status, strings.Join(pe.Paths, ", ")),
+			Error: pe.Status == "failed" || pe.Status == "declined",
 		})
 		return true
 	case "mcp_tool_call_begin":
-		var mc codexmcp.MCPToolCallBeginEvent
+		var mc codexapp.MCPToolCallBeginEvent
 		_ = json.Unmarshal(ev.Msg, &mc)
 		s.AppendEntry(CodexTranscriptEntry{
 			At:    now,
@@ -357,7 +375,7 @@ func (s *CodexTranscriptState) AppendEvent(ev codexmcp.CodexEvent) bool {
 		})
 		return true
 	case "mcp_tool_call_end":
-		var mc codexmcp.MCPToolCallEndEvent
+		var mc codexapp.MCPToolCallEndEvent
 		_ = json.Unmarshal(ev.Msg, &mc)
 		title := "tool done"
 		if mc.IsError {
@@ -371,7 +389,7 @@ func (s *CodexTranscriptState) AppendEvent(ev codexmcp.CodexEvent) bool {
 		})
 		return true
 	case "error":
-		var er codexmcp.ErrorEvent
+		var er codexapp.ErrorEvent
 		_ = json.Unmarshal(ev.Msg, &er)
 		s.AppendEntry(CodexTranscriptEntry{
 			At:    now,

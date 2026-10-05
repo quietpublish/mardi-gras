@@ -2,6 +2,7 @@ package components
 
 import (
 	"fmt"
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -189,7 +190,7 @@ func (ad ApprovalDialog) View() string {
 	if ad.kind == "patch" {
 		heading = "CODEX WANTS TO APPLY A PATCH"
 	}
-	lines = append(lines, titleStyle.Render(fmt.Sprintf("  %s %s", ui.SymGate, heading)))
+	lines = append(lines, ad.indented(titleStyle.Render(ui.SymGate+" "+heading))...)
 	lines = append(lines, "")
 
 	// Body
@@ -200,14 +201,14 @@ func (ad ApprovalDialog) View() string {
 			lines = append(lines, fmt.Sprintf("    %s", dimStyle.Render(f)))
 		}
 	default:
-		lines = append(lines, normalStyle.Render(fmt.Sprintf("  %s", strings.Join(ad.command, " "))))
+		lines = append(lines, ad.indented(normalStyle.Render(strings.Join(ad.command, " ")))...)
 		if ad.cwd != "" {
-			lines = append(lines, dimStyle.Render(fmt.Sprintf("  cwd: %s", ad.cwd)))
+			lines = append(lines, ad.indented(dimStyle.Render("cwd: "+ad.cwd))...)
 		}
 	}
 	if ad.reason != "" {
 		lines = append(lines, "")
-		lines = append(lines, dimStyle.Render(fmt.Sprintf("  reason: %s", ad.reason)))
+		lines = append(lines, ad.indented(dimStyle.Render("reason: "+ad.reason))...)
 	}
 
 	// Advisory lines: the deny-list banner, then the judge's reading.
@@ -215,11 +216,11 @@ func (ad ApprovalDialog) View() string {
 		lines = append(lines, "")
 		lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ui.StatusStalled).Render(
 			fmt.Sprintf("  %s DENY-LIST: %s", ui.SymStalled, ad.denyRule)))
-		lines = append(lines, dimStyle.Render(fmt.Sprintf("  %s", truncate(ad.denyWhat, ad.width-8))))
+		lines = append(lines, dimStyle.Render(fmt.Sprintf("  %s", truncate(ad.denyWhat, ad.width-2))))
 	}
 	if ad.pending || ad.verdict != nil {
 		lines = append(lines, "")
-		lines = append(lines, "  "+renderApprovalVerdict(ad.pending, ad.verdict))
+		lines = append(lines, ad.indented(renderApprovalVerdict(ad.pending, ad.verdict))...)
 	}
 	lines = append(lines, "")
 
@@ -231,12 +232,26 @@ func (ad ApprovalDialog) View() string {
 			cursor = selectedStyle.Render("  > ")
 			labelStyle = selectedStyle
 		}
-		lines = append(lines, fmt.Sprintf("%s%s", cursor, labelStyle.Render(d.Label)))
+		lines = append(lines, fmt.Sprintf("%s%s", cursor, labelStyle.Render(ansi.Truncate(d.Label, max(ad.width-4, 8), "…"))))
 	}
 	lines = append(lines, "")
-	lines = append(lines, dimStyle.Render("  ↑/↓ select   enter confirm   esc deny"))
+	lines = append(lines, ad.indented(dimStyle.Render("↑/↓ select   enter confirm   esc deny"))...)
 
 	return strings.Join(lines, "\n")
+}
+
+// indented word-wraps s to the dialog's content width under a two-space
+// indent. Long reasons and readings used to overrun the box, which wrapped
+// them flush left ("conf" / "63%").
+func (ad ApprovalDialog) indented(s string) []string {
+	// Wrap also hard-breaks a word longer than the line (a long path), which
+	// Wordwrap left whole for the box to re-wrap.
+	wrapped := ansi.Wrap(s, max(ad.width-2, 20), " /·")
+	out := strings.Split(wrapped, "\n")
+	for i, l := range out {
+		out[i] = "  " + l
+	}
+	return out
 }
 
 // renderApprovalVerdict is the one-line judge reading: "jev ⟳ evaluating…",

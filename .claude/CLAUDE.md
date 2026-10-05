@@ -33,7 +33,7 @@ Always run `make test` after changes. Run `make lint` before committing.
 | `internal/data` | Issue loading (`bd list --json` via SourceCLI, JSONL fallback), issue types, filtering, focus mode, file watcher, mutations (`bd` CLI), cross-rig deps, HOP types, source health |
 | `internal/gastown` | Orchestrator integration behind a `Driver` seam (see below): `GTDriver` (gt CLI) + `GCDriver` (Gas City HTTP API). Core files have no internal deps; analytics files import `internal/data`. `gcclient/` is the generated Gas City client |
 | `internal/agent` | Agent runtime detection and launch (`claude`, `cursor-agent`, `codex`), tmux split-pane dispatch |
-| `internal/codexmcp` | JSON-RPC client for `codex mcp-server` — transport, session, protocol types. Powers the live Codex transcript and approval routing |
+| `internal/codexapp` | JSON-RPC client for `codex app-server` — transport, thread/turn sessions, protocol types. Powers the live Codex transcript and approval routing |
 | `internal/jev` | Stdlib-only client for TypeSafe's System One ("Jev") judge: typed questions, calibrated answers, env config, circuit breaker. Imported by `app` only (see below) |
 | `internal/tmux` | `mg --status` widget for tmux status bar |
 

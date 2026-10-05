@@ -47,7 +47,7 @@ internal/
     gastown.go            Orchestrator control surface (agents, convoys, mail, costs)
     problems.go           Problems view overlay (stalled agents, backoff, zombies)
     doctor.go             bd doctor diagnostics overlay
-    codex_transcript.go   Live Codex (MCP) event transcript panel
+    codex_transcript.go   Live Codex event transcript panel
 
   components/
     header.go             Title bar with parade counts and progress bar
@@ -66,7 +66,7 @@ internal/
     launch.go             Runtime detection (claude/cursor-agent/codex), prompt builder, CLI invocation
     tmux.go               tmux pane integration (launch, discover, capture, focus, kill)
     codex.go              Codex session-file discovery and `codex resume --last`
-    codex_mcp.go          Codex MCP subprocess handle (spawn, events, reply, close)
+    codex_app.go          Codex app-server subprocess handle (spawn, thread/turn, reply, close)
     denylist.go           Static deny-list for agent approval requests (destructive, out-of-project, kills agents)
 
   gastown/
@@ -104,11 +104,11 @@ internal/
     config.go             MG_JEV_* env, FromEnv(), SetCmdTimeout scaling
     health.go             Circuit breaker (healthy → degraded → open → half-open; disabled on 401/403/404)
 
-  codexmcp/
-    proto.go              JSON-RPC + codex/event wire types
-    transport.go          stdio transport over the `codex mcp-server` subprocess
-    client.go             Handshake, request/response, notification fan-out
-    session.go            One Codex session: events, replies, server requests
+  codexapp/
+    proto.go              JSON-RPC envelopes, transcript event shapes, approvals, shell-word splitting
+    transport.go          stdio transport over the `codex app-server` subprocess
+    client.go             Handshake, request/response, server requests, notification → event translation
+    session.go            Threads and turns: one Session per turn, interrupt, reviewer check
 
   tmux/
     status.go             tmux status line widget formatter (--status mode)
@@ -135,15 +135,15 @@ app.Model
   --> components (Header, Footer, Help, Palette, Toast, forms, dialogs)
   --> data     (types, watcher, filter, grouping, mutations)
   --> gastown  (Driver, detection, status, sling, convoy, mail, costs, ...)
-  --> agent    (runtime detection, launch/tracking, Codex MCP handle)
-  --> codexmcp (Codex event + session types)
+  --> agent    (runtime detection, launch/tracking, Codex app-server handle)
+  --> codexapp (Codex event + session types)
   --> jev      (the Jev client, cache and circuit; app is its only importer)
   --> ui       (theme, styles, symbols)
 
 views
   --> data     (Issue, DepEval types)
   --> gastown  (TownStatus, AgentRuntime, ConvoyDetail, MailMessage, ...)
-  --> codexmcp (Codex event types for the transcript panel)
+  --> codexapp (Codex event types for the transcript panel)
   --> ui       (styles, symbols)
 
 components
@@ -153,7 +153,7 @@ components
 
 agent
   --> data     (Issue/DepEval for the prompt builder)
-  --> codexmcp (MCP client for the in-app Codex session)
+  --> codexapp (app-server client for the in-app Codex session)
 
 gastown (core: status, sling, convoy, mail, molecule, problems, recovery, detect)
   --> gcclient (generated Gas City client, used by gc_driver.go)
@@ -161,7 +161,7 @@ gastown (core: status, sling, convoy, mail, molecule, problems, recovery, detect
 gastown (analytics: velocity, predict, scorecard, recommend)
   --> data     (Issue types for metrics computation)
 
-codexmcp
+codexapp
   --> (stdlib only, no internal deps)
 
 jev
@@ -174,7 +174,7 @@ ui
   --> (lipgloss + glamour only, no internal deps)
 ```
 
-No package imports `app` — it is the root. `data`, `ui`, `codexmcp` and `jev` have no internal dependencies. `jev` is imported by `app` alone: `data` builds the redacted `IssueSnapshot` that is sent, and views receive verdicts as plain values, so no other package knows the judge exists. Core `gastown` files (status, sling, convoy, mail, molecule, problems, recovery, detect) still import nothing from `internal/data`; only the analytics files (velocity, predict, scorecard, recommend) do, for issue types. The generated `gcclient` is the one internal import the core `gastown` package carries, and it is confined to `gc_driver.go`.
+No package imports `app` — it is the root. `data`, `ui`, `codexapp` and `jev` have no internal dependencies. `jev` is imported by `app` alone: `data` builds the redacted `IssueSnapshot` that is sent, and views receive verdicts as plain values, so no other package knows the judge exists. Core `gastown` files (status, sling, convoy, mail, molecule, problems, recovery, detect) still import nothing from `internal/data`; only the analytics files (velocity, predict, scorecard, recommend) do, for issue types. The generated `gcclient` is the one internal import the core `gastown` package carries, and it is confined to `gc_driver.go`.
 
 ## BubbleTea Model Structure
 
@@ -194,7 +194,7 @@ type Model struct {
     gasTown       views.GasTown      // orchestrator control surface
     problems      views.Problems     // problems overlay
     doctor        views.Doctor       // bd doctor diagnostics overlay
-    codexTranscript views.CodexTranscript // live Codex (MCP) transcript
+    codexTranscript views.CodexTranscript // live Codex transcript
     header        components.Header  // top bar
     toast         components.Toast   // notification system
     palette       components.Palette // command palette
@@ -322,7 +322,7 @@ type Model struct {
 | `components.ToastDismissMsg` | Clear toast notification |
 | `changeIndicatorExpiredMsg` | Clear the change indicator badges that have reached their 30s lifetime |
 | `pruneResultMsg` / `claimNextReadyMsg` | Show toast; claim also selects the claimed issue |
-| **Codex (MCP)** | |
+| **Codex (app-server)** | |
 | `codexLaunchedMsg` / `codexLaunchErrorMsg` | Attach or fail the in-app Codex session |
 | `codexEventMsg` | Append one Codex event to the transcript |
 | `codexApprovalRequestMsg` / `codexApprovalResolvedMsg` | Raise and resolve the approval modal |
@@ -369,7 +369,7 @@ The `LayoutWide` preset drops the right panel and gives the parade the full widt
 
 **`views.Doctor`** — Scrollable `bd doctor --agent --json` overlay (`D`), listing error and warning diagnostics with their suggested fix commands. `R` re-runs the check.
 
-**`views.CodexTranscript`** — Renders one in-app Codex (MCP) session as a running transcript: agent messages, exec commands, tool calls, searches, patches and errors, each with an icon, plus a meta line and a terminal status (done / errored / canceled) with duration and token usage.
+**`views.CodexTranscript`** — Renders one in-app Codex session as a running transcript: agent messages, exec commands, tool calls, searches, patches and errors, each with an icon, plus a meta line and a terminal status (done / errored / canceled) with duration and token usage.
 
 **`components.Header`** — Parade group counts, progress bar, active agent count, Gas Town role badge, problem warning indicator, and the decorative bead string.
 
@@ -666,7 +666,7 @@ Pressing `a` on a selected issue launches an agent with a context-rich prompt (t
 
 `agent.DetectRuntime()` picks the runtime at startup: `MG_AGENT_RUNTIME` / `--agent` wins if the named binary is on PATH (or a wrapper is configured), otherwise the order is `claude` → `cursor-agent` → `codex`, and a wrapper with nothing on PATH means `claude`. Each gets its own launch flags, built in one place by `agentArgv()` (`claude --teammate-mode tmux`, `cursor-agent -f -p`, `codex --sandbox workspace-write -a on-request -C <dir>`, plus `--no-alt-screen` in tmux). `MG_AGENT_CMD` / `--agent-cmd` replaces the binary those flags are given, so a session can be routed through a wrapper. It is a single executable, resolved once at startup to an absolute path (`agent.ResolveAgentCommand`, called from `cmd/mg`), because the tmux dispatch path hands the command to the tmux *server*, which resolves it against the server's own PATH; mg refuses to start if it is not executable. `agentCommand()` and `codexCommand()` fail closed — an error, never a fallback to the bare binary — and Codex resume and the `M` MCP transport go through `codexCommand()`, which uses the wrapper only when it stands in for codex and refuses otherwise. When Codex is the runtime, mg propagates `--agent codex` into `gt sling`. The app polls for agent state: tmux panes (when in tmux) or orchestrator status (when available). Status badges appear in the header, parade list, and detail view, and the detail pane tails the agent's pane via `agent.CapturePane(id, 15)`.
 
-`M` (show the transcript) then `enter` (start) is a separate dispatch path entirely: it runs a Codex session **inside** mg over MCP (`internal/codexmcp` + `agent.LaunchCodexMCP`), streaming events into `views.CodexTranscript` and routing exec/apply-patch approvals to a modal. It uses approval policy `on-request` because a human is watching; the tmux and orchestrator paths use `never`.
+`M` (show the transcript) then `enter` (start) is a separate dispatch path entirely: it runs a Codex session **inside** mg over `codex app-server` (`internal/codexapp` + `agent.LaunchCodexApp`; codex 0.115+, since `mcp-server` was removed in 0.154), streaming events into `views.CodexTranscript` and routing command and file-change approvals to a modal. The approvals reviewer is pinned to the user and verified, so a config.toml reviewer cannot approve on its own. It uses approval policy `on-request` because a human is watching; the tmux and orchestrator paths use `never`.
 
 Additional agent operations from the Gas Town panel:
 - `n` — nudge agent with a message

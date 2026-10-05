@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/matt-wright86/mardi-gras/internal/codexmcp"
+	"github.com/matt-wright86/mardi-gras/internal/codexapp"
 )
 
 // A DenyHit names a static rule an agent's approval request tripped. These
@@ -24,7 +24,7 @@ func (h DenyHit) Hit() bool { return h.Rule != "" }
 
 // ClassifyApproval checks an exec or patch approval against the deny-list.
 // projectDir, when known, bounds where files may be touched.
-func ClassifyApproval(a codexmcp.ElicitApproval, projectDir string) DenyHit {
+func ClassifyApproval(a codexapp.Approval, projectDir string) DenyHit {
 	switch a.Kind {
 	case "exec":
 		payload, segments := shellSegments(a.Command)

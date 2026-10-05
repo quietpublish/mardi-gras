@@ -90,7 +90,7 @@ internal/
   agent/              Agent runtime detection (Claude Code, Cursor, Codex) and tmux dispatch
   gastown/            Orchestrator integration behind the Driver seam (Gas Town CLI + Gas City HTTP)
     gcclient/         GENERATED Gas City API client — see `make gc-client`
-  codexmcp/           JSON-RPC client for `codex mcp-server` (transport, session, protocol)
+  codexapp/           JSON-RPC client for `codex app-server` (transport, thread/turn sessions, protocol)
   tmux/               tmux status line widget (--status mode)
   ui/                 Theme colors, lipgloss styles, Unicode symbols, gradients, sparklines
 

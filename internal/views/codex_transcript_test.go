@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/matt-wright86/mardi-gras/internal/codexmcp"
+	"github.com/matt-wright86/mardi-gras/internal/codexapp"
 )
 
-func mkEvent(msgType string, payload any) codexmcp.CodexEvent {
+func mkEvent(msgType string, payload any) codexapp.CodexEvent {
 	body := map[string]any{"type": msgType}
 	if payload != nil {
 		b, _ := json.Marshal(payload)
@@ -18,7 +18,7 @@ func mkEvent(msgType string, payload any) codexmcp.CodexEvent {
 		maps.Copy(body, m)
 	}
 	raw, _ := json.Marshal(body)
-	return codexmcp.CodexEvent{Msg: raw}
+	return codexapp.CodexEvent{Msg: raw}
 }
 
 func TestAppendEventAgentMessageSplitsBody(t *testing.T) {
@@ -98,7 +98,7 @@ func TestAppendEventUnknownTypeIsDropped(t *testing.T) {
 func TestViewWithoutStateShowsPlaceholder(t *testing.T) {
 	v := NewCodexTranscript(80, 24)
 	out := v.View()
-	if !strings.Contains(out, "CODEX (MCP)") {
+	if !strings.Contains(out, "CODEX") {
 		t.Fatalf("missing title: %q", out)
 	}
 	if !strings.Contains(out, "No Codex session") {

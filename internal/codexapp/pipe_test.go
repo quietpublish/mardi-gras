@@ -1,4 +1,4 @@
-package codexmcp
+package codexapp
 
 import (
 	"io"

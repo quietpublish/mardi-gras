@@ -112,7 +112,7 @@ Writes go through the `bd` CLI, so anything mg changes is exactly what an agent 
 
 Inside tmux, the agent opens in a split pane beside the parade and mg remembers which pane belongs to which issue, so `a` again takes you back to it instead of starting a second one. `A` stops it.
 
-`M` opens the Codex transcript in place of the detail pane; `enter` starts a session on the selected issue and `K` stops it. mg speaks Codex's MCP protocol directly, streams messages, commands, and patches as they happen, and surfaces exec and patch approvals as a modal you answer without leaving the parade. `r` sends a follow-up prompt into the running session. This needs `codex mcp-server`, which Codex removed in 0.154.0: use an earlier Codex, for example through `--agent-cmd` with a pinned version.
+`M` opens the Codex transcript in place of the detail pane; `enter` starts a session on the selected issue and `K` stops it. mg speaks Codex's app-server protocol directly (codex 0.115 or newer), streams messages, commands, and patches as they happen, and surfaces exec and patch approvals as a modal you answer without leaving the parade. `r` sends a follow-up prompt into the running session.
 
 See the [agent integration guide](docs/agents.md) for runtime detection, tmux dispatch, and Codex specifics.
 

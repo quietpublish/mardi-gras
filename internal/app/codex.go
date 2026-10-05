@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -10,19 +11,19 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"github.com/matt-wright86/mardi-gras/internal/agent"
-	"github.com/matt-wright86/mardi-gras/internal/codexmcp"
+	"github.com/matt-wright86/mardi-gras/internal/codexapp"
 	"github.com/matt-wright86/mardi-gras/internal/components"
 	"github.com/matt-wright86/mardi-gras/internal/ui"
 	"github.com/matt-wright86/mardi-gras/internal/views"
 )
 
-// codexSession is one in-flight (or terminated) codex MCP session attached
+// codexSession is one in-flight (or terminated) codex session attached
 // to a specific issue. State holds the transcript surface; handle owns the
 // subprocess.
 type codexSession struct {
-	handle *agent.CodexMCPHandle
+	handle *agent.CodexAppHandle
 	state  *views.CodexTranscriptState
-	// launching is set while codex mcp-server is starting (handle is nil);
+	// launching is set while codex app-server is starting (handle is nil);
 	// pumping while an event command is outstanding; closed once K stopped
 	// the session. A new session for the same issue may start only when the
 	// old one is closed or errored and no event can still arrive for it:
@@ -32,17 +33,17 @@ type codexSession struct {
 	closed    bool
 }
 
-// Codex MCP message types. They are scoped to the codex feature so app.go's
+// Codex message types. They are scoped to the codex feature so app.go's
 // existing message dispatch stays uncluttered.
 
-// codexLaunchedMsg lands when LaunchCodexMCP has returned successfully and
+// codexLaunchedMsg lands when LaunchCodexApp has returned successfully and
 // the session is ready to stream events.
 type codexLaunchedMsg struct {
 	issueID string
 	sess    *codexSession
 }
 
-// codexLaunchErrorMsg lands when LaunchCodexMCP fails.
+// codexLaunchErrorMsg lands when LaunchCodexApp fails.
 type codexLaunchErrorMsg struct {
 	issueID string
 	err     error
@@ -52,18 +53,18 @@ type codexLaunchErrorMsg struct {
 // The handler appends to state and re-issues codexNextEventCmd.
 type codexEventMsg struct {
 	issueID string
-	ev      codexmcp.CodexEvent
+	ev      codexapp.CodexEvent
 }
 
 // codexDoneMsg carries the terminal SessionResult.
 type codexDoneMsg struct {
 	issueID string
-	result  codexmcp.SessionResult
+	result  codexapp.SessionResult
 }
 
 type codexReplyDispatchedMsg struct {
 	issueID string
-	sess    *codexmcp.Session
+	sess    *codexapp.Session
 }
 
 // codexApprovalRequestMsg lands when codex sends a server-initiated approval
@@ -71,8 +72,8 @@ type codexReplyDispatchedMsg struct {
 // exec/patch approval, in which case the handler auto-denies.
 type codexApprovalRequestMsg struct {
 	issueID  string
-	req      codexmcp.ServerRequest
-	approval codexmcp.ElicitApproval
+	req      codexapp.ServerRequest
+	approval codexapp.Approval
 	ok       bool
 }
 
@@ -96,7 +97,7 @@ type codexReplyErrorMsg struct {
 // closes events). Go picks pseudo-randomly; if the closed-events branch wins,
 // we must still surface the terminal result instead of returning a sentinel
 // the handler would have to interpret.
-func codexNextEventCmd(issueID string, sess *codexmcp.Session, serverReqCh <-chan codexmcp.ServerRequest) tea.Cmd {
+func codexNextEventCmd(issueID string, sess *codexapp.Session, serverReqCh <-chan codexapp.ServerRequest) tea.Cmd {
 	return func() tea.Msg {
 		select {
 		case ev, ok := <-sess.Events():
@@ -112,24 +113,59 @@ func codexNextEventCmd(issueID string, sess *codexmcp.Session, serverReqCh <-cha
 				res := <-sess.Done()
 				return codexDoneMsg{issueID: issueID, result: res}
 			}
-			approval, valid := codexmcp.ParseElicitApproval(req.Params)
-			return codexApprovalRequestMsg{issueID: issueID, req: req, approval: approval, ok: valid}
+			// The client parsed the approval and answers every other kind
+			// of server request itself.
+			return codexApprovalRequestMsg{issueID: issueID, req: req, approval: req.Approval, ok: req.Approval.Kind != ""}
 		case res := <-sess.Done():
 			return codexDoneMsg{issueID: issueID, result: res}
 		}
 	}
 }
 
-// codexApprovalDecisionResult builds the JSON-RPC result object for an
-// elicitation/create approval reply. Decision is a codex ReviewDecision value
-// (e.g. "approved", "approved_for_session", "denied", "abort").
+// codexApprovalDecisionResult builds the result for an approval reply. The
+// dialog speaks mg's decision values; app-server's are accept,
+// acceptForSession, decline (deny, the turn goes on) and cancel (deny and
+// interrupt the turn). Anything unknown declines.
 func codexApprovalDecisionResult(decision string) map[string]any {
-	return map[string]any{"decision": decision}
+	wire := "decline"
+	switch decision {
+	case "approved":
+		wire = "accept"
+	case "approved_for_session":
+		wire = "acceptForSession"
+	case "abort":
+		wire = "cancel"
+	}
+	return map[string]any{"decision": wire}
+}
+
+// dropResolvedApproval closes the modal, or removes the queued request, for
+// an approval the server no longer waits on: answered elsewhere, or its turn
+// was interrupted; answering it after that would be refused. It returns the
+// Jev advice for the next queued approval when one opens.
+func (m *Model) dropResolvedApproval(issueID string, rawID json.RawMessage) tea.Cmd {
+	if m.approving && m.currentApproval.issueID == issueID && codexapp.SameRequestID(m.currentApproval.req.RawID, rawID) {
+		if len(m.pendingApprovals) > 0 {
+			next := m.pendingApprovals[0]
+			m.pendingApprovals = m.pendingApprovals[1:]
+			return m.openApprovalDialog(next)
+		}
+		m.approving = false
+		m.currentApproval = codexApprovalRequestMsg{}
+		return nil
+	}
+	for i, p := range m.pendingApprovals {
+		if p.issueID == issueID && codexapp.SameRequestID(p.req.RawID, rawID) {
+			m.pendingApprovals = append(m.pendingApprovals[:i], m.pendingApprovals[i+1:]...)
+			break
+		}
+	}
+	return nil
 }
 
 // codexRespondCmd writes an approval decision back to codex on the request's
 // RawID, in a goroutine, surfacing the outcome as codexApprovalResolvedMsg.
-func codexRespondCmd(issueID string, handle *agent.CodexMCPHandle, req codexmcp.ServerRequest, decision string) tea.Cmd {
+func codexRespondCmd(issueID string, handle *agent.CodexAppHandle, req codexapp.ServerRequest, decision string) tea.Cmd {
 	return func() tea.Msg {
 		err := handle.Respond(req.RawID, codexApprovalDecisionResult(decision))
 		return codexApprovalResolvedMsg{issueID: issueID, err: err}
@@ -212,7 +248,8 @@ func (m *Model) openApprovalDialog(msg codexApprovalRequestMsg) tea.Cmd {
 	m.approving = true
 	m.currentApproval = msg
 	m.approvalDialog = components.NewApprovalDialog(
-		a.Kind, a.Message, a.Command, a.Cwd, a.Reason, files, m.width, m.height,
+		// The dialog lays out to the box's content width (app.go boxes it at m.width-8).
+		a.Kind, a.Message, a.Command, a.Cwd, a.Reason, files, ui.OverlayInnerWidth(m.width-8), m.height,
 	)
 	return m.adviseApproval(msg)
 }
@@ -220,7 +257,7 @@ func (m *Model) openApprovalDialog(msg codexApprovalRequestMsg) tea.Cmd {
 // codexReplyCmd invokes Handle.Reply in a goroutine and returns the
 // resulting tea.Msg (either codexReplyDispatchedMsg with the new session
 // or codexReplyErrorMsg).
-func codexReplyCmd(issueID, prompt string, handle *agent.CodexMCPHandle) tea.Cmd {
+func codexReplyCmd(issueID, prompt string, handle *agent.CodexAppHandle) tea.Cmd {
 	return func() tea.Msg {
 		// Use a generous context for the reply tools/call. Like the initial
 		// launch, the session itself uses context.Background() internally so
@@ -235,7 +272,7 @@ func codexReplyCmd(issueID, prompt string, handle *agent.CodexMCPHandle) tea.Cmd
 	}
 }
 
-// codexLaunchCmd kicks off the LaunchCodexMCP call in a goroutine. Codex's
+// codexLaunchCmd kicks off the LaunchCodexApp call in a goroutine. Codex's
 // initial handshake (the mcp_startup of sub-MCP servers) can take many
 // seconds — return codexLaunchedMsg only after the session is ready to
 // stream events.
@@ -243,7 +280,7 @@ func codexLaunchCmd(issueID, prompt, projectDir, clientVersion, approvalPolicy s
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
-		handle, err := agent.LaunchCodexMCP(ctx, agent.LaunchCodexMCPOptions{
+		handle, err := agent.LaunchCodexApp(ctx, agent.LaunchCodexAppOptions{
 			Prompt:         prompt,
 			ProjectDir:     projectDir,
 			ClientVersion:  clientVersion,
@@ -341,7 +378,7 @@ func (m *Model) codexReplyToast(text string) tea.Cmd {
 
 // applyCodexEvent updates a session's transcript state when an event lands.
 // Returns true if the event was actually consumed (display-worthy).
-func applyCodexEvent(sess *codexSession, ev codexmcp.CodexEvent) bool {
+func applyCodexEvent(sess *codexSession, ev codexapp.CodexEvent) bool {
 	if sess == nil || sess.state == nil {
 		return false
 	}
@@ -350,7 +387,7 @@ func applyCodexEvent(sess *codexSession, ev codexmcp.CodexEvent) bool {
 
 // finalizeCodexSession marks a session as terminated and copies relevant
 // fields from the SessionResult into the transcript state.
-func finalizeCodexSession(sess *codexSession, res codexmcp.SessionResult) {
+func finalizeCodexSession(sess *codexSession, res codexapp.SessionResult) {
 	if sess == nil || sess.state == nil {
 		return
 	}
@@ -380,7 +417,7 @@ func finalizeCodexSession(sess *codexSession, res codexmcp.SessionResult) {
 	}
 }
 
-// closeAllCodexSessions terminates every active codex MCP subprocess. Called
+// closeAllCodexSessions terminates every active codex app-server subprocess. Called
 // on app quit so we don't leak background processes.
 func closeAllCodexSessions(sessions map[string]*codexSession) {
 	for _, sess := range sessions {
@@ -391,7 +428,7 @@ func closeAllCodexSessions(sessions map[string]*codexSession) {
 	}
 }
 
-// Cleanup terminates all codex MCP subprocesses owned by this model. Safe to
+// Cleanup terminates all codex app-server subprocesses owned by this model. Safe to
 // call after tea.Program.Run returns. Idempotent.
 func (m *Model) Cleanup() {
 	closeAllCodexSessions(m.codexSessions)
@@ -457,7 +494,7 @@ func codexRestartable(sess *codexSession) bool {
 }
 
 // startCodexSession is enter in the transcript: it launches codex
-// mcp-server on the selected issue.
+// app-server on the selected issue.
 func (m Model) startCodexSession() (tea.Model, tea.Cmd) {
 	issue := m.parade.SelectedIssue
 	if issue == nil {
@@ -495,7 +532,7 @@ func (m Model) startCodexSession() (tea.Model, tea.Cmd) {
 }
 
 // stopCodexSession is K in the transcript: it shuts down the selected
-// issue's codex mcp-server.
+// issue's codex app-server.
 func (m Model) stopCodexSession() (tea.Model, tea.Cmd) {
 	issue := m.parade.SelectedIssue
 	if issue == nil {

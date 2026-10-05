@@ -1,4 +1,4 @@
-package codexmcp
+package codexapp
 
 import (
 	"errors"
@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// SubprocessTransport runs `codex mcp-server` as a child process and proxies
+// SubprocessTransport runs `codex app-server` as a child process and proxies
 // stdio for the Client. Stderr is captured into Logs for inclusion in error
 // messages; it is intentionally not echoed to mg's terminal since the parent
 // is a fullscreen TUI.
@@ -42,7 +42,7 @@ func WithBinary(path string) SubprocessOption {
 	return func(o *subprocessOptions) { o.binary = path }
 }
 
-// WithExtraArgs appends arguments to `codex mcp-server`.
+// WithExtraArgs appends arguments to `codex app-server`.
 func WithExtraArgs(args ...string) SubprocessOption {
 	return func(o *subprocessOptions) { o.args = append(o.args, args...) }
 }
@@ -58,12 +58,12 @@ func WithEnv(env []string) SubprocessOption {
 	return func(o *subprocessOptions) { o.env = env }
 }
 
-// SpawnSubprocess launches `codex mcp-server` and returns a Transport wired
+// SpawnSubprocess launches `codex app-server` and returns a Transport wired
 // to its stdio.
 func SpawnSubprocess(opts ...SubprocessOption) (*SubprocessTransport, error) {
 	o := subprocessOptions{
 		binary: "codex",
-		args:   []string{"mcp-server"},
+		args:   []string{"app-server"},
 	}
 	for _, opt := range opts {
 		opt(&o)

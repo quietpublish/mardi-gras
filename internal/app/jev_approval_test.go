@@ -8,7 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/matt-wright86/mardi-gras/internal/codexmcp"
+	"github.com/matt-wright86/mardi-gras/internal/codexapp"
 	"github.com/matt-wright86/mardi-gras/internal/data"
 	"github.com/matt-wright86/mardi-gras/internal/jev"
 )
@@ -36,8 +36,8 @@ func riskJudge(nouls map[string]float64, risk float64, intent string, conf float
 func execApproval(id string, argv ...string) codexApprovalRequestMsg {
 	return codexApprovalRequestMsg{
 		issueID:  "mg-1",
-		req:      codexmcp.ServerRequest{RawID: json.RawMessage(id)},
-		approval: codexmcp.ElicitApproval{Kind: "exec", Command: argv, Cwd: "/work/mg", Reason: "running the tests"},
+		req:      codexapp.ServerRequest{RawID: json.RawMessage(id)},
+		approval: codexapp.Approval{Kind: "exec", Command: argv, Cwd: "/work/mg", Reason: "running the tests"},
 		ok:       true,
 	}
 }
@@ -206,8 +206,8 @@ func TestApprovalAdvicePatchQuestions(t *testing.T) {
 	judge := riskJudge(map[string]float64{"sensitive": 0, "deletes_tests": 0, "in_scope": 0.9}, 1, "", 0.9)
 	m := newApprovalModel(t, judge)
 	msg := codexApprovalRequestMsg{
-		issueID: "mg-1", req: codexmcp.ServerRequest{RawID: json.RawMessage(`"p1"`)}, ok: true,
-		approval: codexmcp.ElicitApproval{Kind: "patch", Cwd: "/work/mg", Changes: map[string]json.RawMessage{
+		issueID: "mg-1", req: codexapp.ServerRequest{RawID: json.RawMessage(`"p1"`)}, ok: true,
+		approval: codexapp.Approval{Kind: "patch", Cwd: "/work/mg", Changes: map[string]json.RawMessage{
 			"/work/mg/internal/app/app.go": json.RawMessage(`{"unified_diff":"secret contents"}`),
 			"internal/app/app_test.go":     json.RawMessage(`{}`),
 		}},

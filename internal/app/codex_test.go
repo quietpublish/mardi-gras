@@ -11,7 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/matt-wright86/mardi-gras/internal/agent"
-	"github.com/matt-wright86/mardi-gras/internal/codexmcp"
+	"github.com/matt-wright86/mardi-gras/internal/codexapp"
 	"github.com/matt-wright86/mardi-gras/internal/views"
 )
 
@@ -68,7 +68,7 @@ func TestCodexEventMsgAppendsToTranscript(t *testing.T) {
 		"type":    "agent_message",
 		"message": "hi from codex",
 	})
-	ev := codexmcp.CodexEvent{Msg: raw}
+	ev := codexapp.CodexEvent{Msg: raw}
 	model, _ := got.Update(codexEventMsg{issueID: issueID, ev: ev})
 	got = model.(Model)
 
@@ -95,7 +95,7 @@ func TestKeyRGate(t *testing.T) {
 			overlay: true,
 			sess: &codexSession{
 				state:  &views.CodexTranscriptState{IssueID: issueID, ThreadID: "thr-test", Status: "done"},
-				handle: &agent.CodexMCPHandle{},
+				handle: &agent.CodexAppHandle{},
 			},
 			wantReplying: true,
 		},
@@ -104,7 +104,7 @@ func TestKeyRGate(t *testing.T) {
 			overlay: true,
 			sess: &codexSession{
 				state:  &views.CodexTranscriptState{IssueID: issueID, ThreadID: "thr-test", Status: "running"},
-				handle: &agent.CodexMCPHandle{},
+				handle: &agent.CodexAppHandle{},
 			},
 			wantReplying: false,
 		},
@@ -113,7 +113,7 @@ func TestKeyRGate(t *testing.T) {
 			overlay: true,
 			sess: &codexSession{
 				state:  &views.CodexTranscriptState{IssueID: issueID, Status: "done"},
-				handle: &agent.CodexMCPHandle{},
+				handle: &agent.CodexAppHandle{},
 			},
 			wantReplying: false,
 		},
@@ -160,7 +160,7 @@ func TestCodexReplyEnterDispatchesAndFlipsStatus(t *testing.T) {
 			Status:   "done",
 			StartAt:  time.Now(),
 		},
-		handle: &agent.CodexMCPHandle{},
+		handle: &agent.CodexAppHandle{},
 	}
 
 	model, _ := got.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
@@ -213,7 +213,7 @@ func TestCodexDoneMsgMarksSessionTerminal(t *testing.T) {
 
 	model, _ := got.Update(codexDoneMsg{
 		issueID: issueID,
-		result:  codexmcp.SessionResult{ThreadID: "tid", Content: "all done"},
+		result:  codexapp.SessionResult{ThreadID: "tid", Content: "all done"},
 	})
 	got = model.(Model)
 	sess := got.codexSessions[issueID]
@@ -314,7 +314,7 @@ func TestCodexKStopsSession(t *testing.T) {
 	got := setupModel(t)
 	issueID := got.parade.SelectedIssue.ID
 	got.codexSessions[issueID] = &codexSession{
-		handle:  &agent.CodexMCPHandle{},
+		handle:  &agent.CodexAppHandle{},
 		state:   &views.CodexTranscriptState{IssueID: issueID, Status: "running", StartAt: time.Now()},
 		pumping: true,
 	}
@@ -335,7 +335,7 @@ func TestCodexKStopsSession(t *testing.T) {
 	}
 
 	// The drained pump arrives; the stop sticks and a restart is now safe.
-	model, _ = got.Update(codexDoneMsg{issueID: issueID, result: codexmcp.SessionResult{Err: errors.New("canceled")}})
+	model, _ = got.Update(codexDoneMsg{issueID: issueID, result: codexapp.SessionResult{Err: errors.New("canceled")}})
 	got = model.(Model)
 	sess = got.codexSessions[issueID]
 	if sess.state.Status != "canceled" || !codexRestartable(sess) {
@@ -361,5 +361,40 @@ func TestApprovalDialogEnterClosesModal(t *testing.T) {
 		if model.(Model).approving {
 			t.Fatalf("%s: modal still open after its result", key.String())
 		}
+	}
+}
+
+func TestCodexApprovalDecisionValues(t *testing.T) {
+	// app-server's decisions, not codex MCP's (mg-xge.2).
+	for in, want := range map[string]string{
+		"approved": "accept", "approved_for_session": "acceptForSession",
+		"denied": "decline", "abort": "cancel", "": "decline", "bogus": "decline",
+	} {
+		if got := codexApprovalDecisionResult(in)["decision"]; got != want {
+			t.Errorf("%q -> %v, want %s", in, got, want)
+		}
+	}
+}
+
+func TestResolvedApprovalClosesModalAndQueue(t *testing.T) {
+	// When the server stops waiting (turn interrupted, answered elsewhere),
+	// a modal for that request would answer into the void (mg-xge.2).
+	got := setupModel(t)
+	issueID := got.parade.SelectedIssue.ID
+	got.codexSessions[issueID] = &codexSession{state: &views.CodexTranscriptState{IssueID: issueID}}
+	first := execApproval(`7`, "curl", "x")
+	first.issueID = issueID
+	second := execApproval(`"s8"`, "ls")
+	second.issueID = issueID
+	got.openApprovalDialog(first)
+	got.pendingApprovals = append(got.pendingApprovals, second)
+
+	got.dropResolvedApproval(issueID, json.RawMessage(`"s8"`))
+	if len(got.pendingApprovals) != 0 || !got.approving {
+		t.Fatalf("queued request should go, the open one stay: pending %d approving %v", len(got.pendingApprovals), got.approving)
+	}
+	got.dropResolvedApproval(issueID, json.RawMessage(`7`))
+	if got.approving {
+		t.Fatal("the open modal should close when its request is resolved")
 	}
 }
