@@ -1,5 +1,5 @@
 {
-  description = "BubbleTea TUI for Beads issue tracking";
+  description = "TUI for Beads issue tracking presented as a parade";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -18,7 +18,7 @@
             pname = "mg";
             inherit version;
             src = ./.;
-            vendorHash = "sha256-t6079kO6VE8Rn28TzTWbtIQSxFKv6/+n3ff8t/ZIDMc=";
+            vendorHash = "sha256-Ji7ij19/4akUex2gabqrnWFQlr+XvDlHKVg8FxZQ97A=";
 
             ldflags = [
               "-s"
@@ -29,8 +29,8 @@
             subPackages = [ "cmd/mg" ];
 
             meta = with pkgs.lib; {
-              description = "BubbleTea TUI for Beads issue tracking";
-              homepage = "https://github.com/matt-wright86/mardi-gras";
+              description = "TUI for Beads issue tracking presented as a parade";
+              homepage = "https://github.com/quiet-publish/mardi-gras";
               license = licenses.mit;
               mainProgram = "mg";
             };
