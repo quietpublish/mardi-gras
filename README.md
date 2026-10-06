@@ -134,6 +134,17 @@ mg picks a backend from evidence on the machine:
 
 `MG_GC_API=auto` discovers the running supervisor; `MG_GC_CITY` pins which city to drive. The [Gas Town guide](docs/gastown.md) and [Gas City guide](docs/gascity.md) cover each feature set, and the Gas City guide includes the capability matrix.
 
+### Judge with Jev (optional)
+
+[Jev](https://docs.typesafe.ai) is TypeSafe AI's System One model. It answers typed questions about a JSON snapshot (yes or no, pick one, a point on a scale) with a calibrated confidence, in well under a second. Set `MG_JEV_API_KEY` and mg uses it as a fast judge in places that are otherwise hand-written heuristics:
+
+- **Duplicate check on create.** Submitting `N` asks whether the new issue is the same work as an existing one with an overlapping title. A strong match opens a dialog: jump to the existing issue, create anyway, or create and mark it a duplicate.
+- **Focus order.** Focus mode (`f`) orders the ready list by how soon each issue should start and whether it can start now. A verdict without confidence never jumps the queue.
+- **Formula choice.** With an orchestrator, the FORMULA suggestion and the `s` picker rank the formulas actually installed.
+- **Codex approval advice.** The approval modal shows Jev's risk reading of each command or patch. A static deny-list runs first and no verdict can soften it. Neither answers for you; there is no auto-approve.
+
+Nothing is sent until you set the key, and with Jev off, slow, or down every feature reads exactly as it does without it. For an issue, what leaves the machine is a redacted snapshot (title, type, status, priority, labels, ages in days, and the start of the description), never people, notes, timestamps, or dependency IDs, with token-shaped strings scrubbed. Verdicts are cached per snapshot, so judging a 200-issue backlog costs about a fifth of a cent once. `MG_JEV_URL` points mg at a self-hosted, API-compatible server instead. The [Jev guide](docs/jev.md) covers each feature, exactly what is sent, cost, and what happens when Jev misbehaves.
+
 ## Options
 
 ```bash
@@ -147,11 +158,12 @@ mg --agent codex                        # claude | cursor | codex
 mg --agent-cmd ~/bin/agent-launcher     # launch through a wrapper instead of the binary
 mg --cmd-timeout 60                     # seconds; scales every external command (default 30)
 mg --no-animations                      # calm header, no confetti; good over SSH
+mg --no-jev                             # skip the Jev judge even with MG_JEV_API_KEY set
 mg --status                             # tmux status-line summary, then exit
 mg --version
 ```
 
-Every option has an environment variable so you can set it once: `MG_BLOCK_TYPES`, `MG_THEME`, `MG_AGENT_RUNTIME`, `MG_AGENT_CMD`, `MG_CMD_TIMEOUT`, `MG_NO_ANIMATIONS=1`. `MG_EVENTS=off` keeps plain polling even when the bd events journal is on, and `MG_BD_SERVE` follows it through a running `bd serve` (see [Live updates](#live-updates)). `MG_DEBUG=1` writes `mg-debug.log` in the current directory. `MG_GC_API` and `MG_GC_CITY` select the Gas City backend, as above.
+Every option has an environment variable so you can set it once: `MG_BLOCK_TYPES`, `MG_THEME`, `MG_AGENT_RUNTIME`, `MG_AGENT_CMD`, `MG_CMD_TIMEOUT`, `MG_NO_ANIMATIONS=1`. `MG_EVENTS=off` keeps plain polling even when the bd events journal is on, and `MG_BD_SERVE` follows it through a running `bd serve` (see [Live updates](#live-updates)). `MG_DEBUG=1` writes `mg-debug.log` in the current directory. `MG_GC_API` and `MG_GC_CITY` select the Gas City backend, as above. `MG_JEV_API_KEY` turns on the [Jev judge](#judge-with-jev-optional), and `MG_JEV=off` is the same as `--no-jev`.
 
 ## Live updates
 
