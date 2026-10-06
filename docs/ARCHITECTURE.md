@@ -13,7 +13,7 @@ cmd/mg/
 internal/
   app/
     app.go                Root BubbleTea model (lifecycle, routing, layout)
-    codex.go              Codex MCP session lifecycle, transcript + approval routing
+    codex.go              Codex app-server session lifecycle, transcript + approval routing
     confetti.go           Confetti celebration animation on issue close
     deferred_keys.go      Short-delay key staging so the OSC guard can spot fragments
     oscguard.go           Filters terminal capability-reply traffic out of the key stream
@@ -230,7 +230,7 @@ type Model struct {
     agentAvail    bool
     agentRuntime  agent.Runtime
     activeAgents  map[string]string  // issueID -> tmux pane ID
-    codexSessions map[string]*codexSession // issueID -> live Codex MCP session
+    codexSessions map[string]*codexSession // issueID -> live Codex app-server session
     inTmux        bool
     projectDir    string
 
@@ -664,7 +664,7 @@ Pressing `a` on a selected issue launches an agent with a context-rich prompt (t
 
 `A` stops the agent: with an orchestrator it calls `Driver.Unsling` (a backend that cannot returns `ErrUnsupported`, which is a truthful message); only with no orchestrator at all does it kill the tmux pane directly.
 
-`agent.DetectRuntime()` picks the runtime at startup: `MG_AGENT_RUNTIME` / `--agent` wins if the named binary is on PATH (or a wrapper is configured), otherwise the order is `claude` → `cursor-agent` → `codex`, and a wrapper with nothing on PATH means `claude`. Each gets its own launch flags, built in one place by `agentArgv()` (`claude --teammate-mode tmux`, `cursor-agent -f -p`, `codex --sandbox workspace-write -a on-request -C <dir>`, plus `--no-alt-screen` in tmux). `MG_AGENT_CMD` / `--agent-cmd` replaces the binary those flags are given, so a session can be routed through a wrapper. It is a single executable, resolved once at startup to an absolute path (`agent.ResolveAgentCommand`, called from `cmd/mg`), because the tmux dispatch path hands the command to the tmux *server*, which resolves it against the server's own PATH; mg refuses to start if it is not executable. `agentCommand()` and `codexCommand()` fail closed — an error, never a fallback to the bare binary — and Codex resume and the `M` MCP transport go through `codexCommand()`, which uses the wrapper only when it stands in for codex and refuses otherwise. When Codex is the runtime, mg propagates `--agent codex` into `gt sling`. The app polls for agent state: tmux panes (when in tmux) or orchestrator status (when available). Status badges appear in the header, parade list, and detail view, and the detail pane tails the agent's pane via `agent.CapturePane(id, 15)`.
+`agent.DetectRuntime()` picks the runtime at startup: `MG_AGENT_RUNTIME` / `--agent` wins if the named binary is on PATH (or a wrapper is configured), otherwise the order is `claude` → `cursor-agent` → `codex`, and a wrapper with nothing on PATH means `claude`. Each gets its own launch flags, built in one place by `agentArgv()` (`claude --teammate-mode tmux`, `cursor-agent -f -p`, `codex --sandbox workspace-write -a on-request -C <dir>`, plus `--no-alt-screen` in tmux). `MG_AGENT_CMD` / `--agent-cmd` replaces the binary those flags are given, so a session can be routed through a wrapper. It is a single executable, resolved once at startup to an absolute path (`agent.ResolveAgentCommand`, called from `cmd/mg`), because the tmux dispatch path hands the command to the tmux *server*, which resolves it against the server's own PATH; mg refuses to start if it is not executable. `agentCommand()` and `codexCommand()` fail closed — an error, never a fallback to the bare binary — and Codex resume and the `M` app-server session go through `codexCommand()`, which uses the wrapper only when it stands in for codex and refuses otherwise. When Codex is the runtime, mg propagates `--agent codex` into `gt sling`. The app polls for agent state: tmux panes (when in tmux) or orchestrator status (when available). Status badges appear in the header, parade list, and detail view, and the detail pane tails the agent's pane via `agent.CapturePane(id, 15)`.
 
 `M` (show the transcript) then `enter` (start) is a separate dispatch path entirely: it runs a Codex session **inside** mg over `codex app-server` (`internal/codexapp` + `agent.LaunchCodexApp`; codex 0.115+, since `mcp-server` was removed in 0.154), streaming events into `views.CodexTranscript` and routing command and file-change approvals to a modal. The approvals reviewer is pinned to the user and verified, so a config.toml reviewer cannot approve on its own. It uses approval policy `on-request` because a human is watching; the tmux and orchestrator paths use `never`.
 

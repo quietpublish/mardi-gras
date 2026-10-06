@@ -48,7 +48,7 @@ type ApprovalVerdict struct {
 
 // ApprovalDialog prompts the user to approve or deny a codex action (a shell
 // command or a patch). It mirrors RecoveryDialog's Update/View shape and is
-// decoupled from codexmcp — the app passes plain fields.
+// decoupled from codexapp — the app passes plain fields.
 type ApprovalDialog struct {
 	kind    string // "exec" | "patch"
 	message string
