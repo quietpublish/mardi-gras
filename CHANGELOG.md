@@ -2,6 +2,38 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.34.0 (2026-10-05)
+
+An optional judge, a working in-app Codex again, and a round of fixes from driving mg for real. Jev, TypeSafe's System One model, can now weigh in on duplicates, formulas, focus order and Codex approvals when you opt in with a key. The in-app Codex session runs on `codex app-server`, since Codex removed the `mcp-server` it used to speak. And an interactive audit — mg driven key by key in tmux against sample data, fake orchestrators and this repo's own backlog — turned up 29 issues, all fixed here. Thanks to [@tillo](https://github.com/tillo) for `MG_AGENT_CMD`.
+
+### Added
+- **Jev, an optional judge** ([#142](https://github.com/quietpublish/mardi-gras/pull/142)–[#147](https://github.com/quietpublish/mardi-gras/pull/147), [#150](https://github.com/quietpublish/mardi-gras/pull/150)). Off unless `MG_JEV_API_KEY` is set; every feature reads exactly as before when Jev is off, slow or wrong. Only a redacted snapshot is sent: no people, notes, timestamps or dependency IDs. See [docs/jev.md](docs/jev.md).
+  - **Duplicate check on create:** submitting `N` asks whether the new issue is the same work as an existing one with an overlapping title; a strong match opens a dialog to jump to it, create anyway, or create and mark it a duplicate.
+  - **Formula choice:** with an orchestrator, the FORMULA suggestion and the `s` picker rank the formulas actually installed.
+  - **Focus order:** focus mode (`f`) orders the ready list by how soon each issue should start. Snapshots say whether an issue is yours or someone else's (never who), so your own work isn't rated "Park".
+  - **Codex approval advice:** the approval modal shows a static deny-list banner for clearly destructive requests and Jev's risk reading for the rest. Neither answers for you.
+- **Launch agents through a wrapper** ([#141](https://github.com/quietpublish/mardi-gras/pull/141), by [@tillo](https://github.com/tillo)). `--agent-cmd` / `MG_AGENT_CMD` names an executable to launch in place of the runtime's binary — a gateway, a sandbox, a credential broker — on every launch path, including tmux. It is resolved once at startup and fails closed.
+- **Edit every field** ([#152](https://github.com/quietpublish/mardi-gras/pull/152)). `e` now edits type, status and the description as well as title and priority. Type, priority and status are one-line selectors so the description fits on 80×24; `enter` or `ctrl+s` saves, and only changed fields are written.
+- **Completion in the quick prompts** ([#152](https://github.com/quietpublish/mardi-gras/pull/152)). `y` completes known assignees, `t` labels the issue doesn't have yet, `l` other issue IDs (and shows the title it would link to). `tab` accepts.
+- **Section counts in the corner** ([#151](https://github.com/quietpublish/mardi-gras/pull/151)): `╭─ ● Rolling ──────── 3 ╮` replaces the hard-to-read `Rolling³`.
+
+### Fixed
+- **The in-app Codex session works on current Codex** ([#153](https://github.com/quietpublish/mardi-gras/pull/153)). Codex removed `codex mcp-server` in 0.154.0, so `M`'s transcript, the approval modal and everything on it could not start. mg now speaks `codex app-server` (codex 0.115+).
+  - **Approvals reach you:** a `config.toml` that sets `approvals_reviewer` to Codex's own reviewer used to approve escalations mg never saw. mg now pins the reviewer to the user and refuses the session if Codex applies another ([#148](https://github.com/quietpublish/mardi-gras/pull/148), [#153](https://github.com/quietpublish/mardi-gras/pull/153)).
+  - **The approval modal closes:** enter and esc did nothing, so only quitting mg escaped it ([#148](https://github.com/quietpublish/mardi-gras/pull/148)).
+  - **`M` only shows the transcript:** it used to start a Codex agent on the selected issue with one keystroke. `enter` starts a session and `K` stops it ([#148](https://github.com/quietpublish/mardi-gras/pull/148)).
+- **Keys say what they do** ([#148](https://github.com/quietpublish/mardi-gras/pull/148)). `1` claims (it takes the assignee) and `3` closes then claims the next ready issue; help and the palette said "Set status" and "Close issue". Help and the palette now list `e`, `r`, `y`, `t`, `l` and `D`.
+- **Fast typing reaches text fields** ([#148](https://github.com/quietpublish/mardi-gras/pull/148)). The guard against leaked terminal replies dropped dictation, macros and unbracketed paste after the first character; it now stands down while a text field has focus.
+- **Gas Town failures say why** instead of only "exit status 1" ([#148](https://github.com/quietpublish/mardi-gras/pull/148)).
+- **The filter matches words** ([#149](https://github.com/quietpublish/mardi-gras/pull/149)). A fuzzy match over every field let "auth" match "Evaluate new caching layer". Words must now appear (any order), sections keep priority order, `esc` clears an applied filter, the counter reads `11 of 21`, and paste works.
+- **Forms create on enter** and say "Title is required" instead of failing silently ([#149](https://github.com/quietpublish/mardi-gras/pull/149)); **a new issue is named and selected** after you create it.
+- **Beads-only machines don't see orchestration** ([#149](https://github.com/quietpublish/mardi-gras/pull/149)): no FORMULA suggestions, no Gas Town help pages, and orchestrator keys say they need one. **Gas City is called Gas City.** **80×24 is readable**: titles get about 30 characters instead of 9.
+- **Polish** ([#151](https://github.com/quietpublish/mardi-gras/pull/151)): dialogs size their content to the box (no stray `──`), help shows its banner on page 1 only, empty lists say what to do next, skipped malformed lines and missing timestamps are no longer silent, the Gas Town roster stays aligned with emoji states and runtime tags, and `enter` on a problem jumps to its issue.
+
+### Changed
+- **`internal/codexmcp` is now `internal/codexapp`** ([#153](https://github.com/quietpublish/mardi-gras/pull/153)).
+- **`make contract-jev`** checks the Jev client against a real System One endpoint ([#142](https://github.com/quietpublish/mardi-gras/pull/142)).
+
 ## v0.33.0 (2026-09-27)
 
 Live updates. When a workspace has bd's events journal on, mg reloads when something changes instead of on a timer, and shows you what changed and who changed it. Thanks to [@csells](https://github.com/csells) of the Beads team, whose suggestion in [#124](https://github.com/quietpublish/mardi-gras/issues/124) started this.
