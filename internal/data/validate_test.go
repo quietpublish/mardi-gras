@@ -11,6 +11,14 @@ func TestValidateIssueID(t *testing.T) {
 		"bd-a1b2",
 		"my-app-xyz123",
 		"a-1",
+		// Child issues: beads ids its children by appending a dotted segment,
+		// so anything that cannot be said here cannot be edited in mg at all.
+		"infra-h0xb.9",
+		"infra-h0xb.16",
+		"infra-qfam",
+		"a-b.c",
+		// Grandchildren nest the same way.
+		"infra-h0xb.9.1",
 	}
 	for _, id := range valid {
 		if err := ValidateIssueID(id); err != nil {
@@ -28,6 +36,15 @@ func TestValidateIssueID(t *testing.T) {
 		"--delete-all",
 		"../../../etc/passwd",
 		strings.Repeat("a", 65) + "-1",
+		// Accepting the dot must not have opened a way in for these.
+		"-x",
+		"../etc",
+		"a/../b",
+		".hidden",
+		"a.",
+		"a..b",
+		"a.-b",
+		"a_b",
 	}
 	for _, id := range invalid {
 		if err := ValidateIssueID(id); err == nil {
@@ -94,5 +111,23 @@ func TestSetStatusRejectsInvalidID(t *testing.T) {
 	err := SetStatus("../etc", StatusOpen)
 	if err == nil {
 		t.Fatal("expected validation error")
+	}
+}
+
+// A child issue's dotted id has to reach bd verbatim. This is the path the TUI
+// edit form takes (editIssueCmd -> SetStatus/UpdateTitle/...), so a rejected
+// dot here is not a cosmetic problem: it is mg refusing to edit any child issue.
+func TestMutatorsPassDottedChildIDToBd(t *testing.T) {
+	for _, id := range []string{"infra-h0xb.9", "infra-h0xb.16", "infra-h0xb.9.1"} {
+		calls, restore := mockExecCapture(nil)
+		err := SetStatus(id, StatusOpen)
+		got := *calls
+		restore()
+		if err != nil {
+			t.Fatalf("SetStatus(%q) = %v, want nil", id, err)
+		}
+		if len(got) != 1 || len(got[0]) != 4 || got[0][1] != "update" || got[0][2] != id {
+			t.Errorf("SetStatus(%q) ran %v, want bd update %s --status=open", id, got, id)
+		}
 	}
 }

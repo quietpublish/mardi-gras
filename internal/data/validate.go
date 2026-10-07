@@ -6,9 +6,23 @@ import (
 	"strings"
 )
 
-// issueIDPattern matches beads issue IDs: lowercase prefix (possibly hyphenated) + hyphen + alphanumeric hash.
-// Examples: mg-42, bd-a1b2, my-app-xyz123
-var issueIDPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)+$`)
+// issueIDPattern matches beads issue IDs: a lowercase prefix (possibly
+// hyphenated) followed by one or more separator+segment pairs, where the
+// separator is a hyphen or a dot, and a segment is alphanumeric.
+//
+// The dot is not decoration: beads gives every child issue a dotted id
+// (`infra-h0xb.9` for child 9 of `infra-h0xb`), and those ids are handed
+// straight back to bd by the mutators in mutate.go, so rejecting them leaves mg
+// unable to touch any child issue at all. Nesting is allowed for the same
+// reason (`infra-h0xb.9.1`).
+//
+// Allowing the dot does not widen this guard, which exists to stop a
+// user-supplied id becoming a flag or a second argument: the id must START with
+// a letter and a separator is only accepted between alphanumerics, so a flag
+// (`--delete-all`), a path (`../etc`, `a/../b`) and a trailing separator (`a.`)
+// are all still rejected.
+// Examples: mg-42, bd-a1b2, my-app-xyz123, infra-h0xb.9, infra-h0xb.9.1
+var issueIDPattern = regexp.MustCompile(`^[a-z][a-z0-9]*([-.][a-z0-9]+)+$`)
 
 const (
 	maxIssueIDLen = 64
