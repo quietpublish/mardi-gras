@@ -18,6 +18,13 @@ func TestValidateIssueID(t *testing.T) {
 		"infra-qfam",
 		"a-b.c",
 		"infra-h0xb.9.1",
+		// bd's prefix may carry underscores and upper case: the default prefix
+		// is the directory name (`my_project`), and `--prefix MyApp` is legal.
+		"my_project-hbu",
+		"my_project-hbu.1",
+		"MyApp-d0g",
+		"MG-42",
+		"web_app-api-x1",
 	}
 	for _, id := range valid {
 		if err := validateIssueID(id); err != nil {
@@ -29,7 +36,6 @@ func TestValidateIssueID(t *testing.T) {
 		"",
 		"mg",
 		"-mg-42",
-		"MG-42",
 		"--delete-all",
 		strings.Repeat("a", 65) + "-1",
 		// Accepting the dot must not have opened a way in for these.
@@ -40,7 +46,14 @@ func TestValidateIssueID(t *testing.T) {
 		"a.",
 		"a..b",
 		"a.-b",
+		// No separator, so no hash: a bare prefix is not an id.
 		"a_b",
+		// Widening the character set must not admit these either.
+		"_a-1",
+		"9a-1",
+		"Ä-1",
+		"a-1;rm",
+		"a-1 b",
 	}
 	for _, id := range invalid {
 		if err := validateIssueID(id); err == nil {

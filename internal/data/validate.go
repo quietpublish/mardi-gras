@@ -6,9 +6,15 @@ import (
 	"strings"
 )
 
-// issueIDPattern matches beads issue IDs: a lowercase prefix (possibly
-// hyphenated) followed by one or more separator+segment pairs, where the
-// separator is a hyphen or a dot, and a segment is alphanumeric.
+// issueIDPattern matches beads issue IDs: a prefix (possibly hyphenated)
+// followed by one or more separator+segment pairs, where the separator is a
+// hyphen or a dot, and a segment is letters, digits and underscores.
+//
+// The character set is bd's own definition of a valid prefix (bd doctor checks
+// `^[a-zA-Z][a-zA-Z0-9_-]*$`). bd derives the default prefix from the directory
+// name, so a repo named `my_project` gets `my_project-hbu`, and `--prefix MyApp`
+// gives `MyApp-d0g`; a narrower set leaves mg unable to write to any issue in
+// such a workspace.
 //
 // The dot is not decoration: beads gives every child issue a dotted id
 // (`infra-h0xb.9` for child 9 of `infra-h0xb`), and those ids are handed
@@ -18,11 +24,13 @@ import (
 //
 // Allowing the dot does not widen this guard, which exists to stop a
 // user-supplied id becoming a flag or a second argument: the id must START with
-// a letter and a separator is only accepted between alphanumerics, so a flag
+// a letter and a separator is only accepted between segments, so a flag
 // (`--delete-all`), a path (`../etc`, `a/../b`) and a trailing separator (`a.`)
-// are all still rejected.
-// Examples: mg-42, bd-a1b2, my-app-xyz123, infra-h0xb.9, infra-h0xb.9.1
-var issueIDPattern = regexp.MustCompile(`^[a-z][a-z0-9]*([-.][a-z0-9]+)+$`)
+// are all still rejected. Neither the underscore nor upper case can form a flag
+// or a path, and the id reaches bd as a single argv element with no shell.
+// Examples: mg-42, bd-a1b2, my-app-xyz123, infra-h0xb.9, infra-h0xb.9.1,
+// my_project-hbu, MyApp-d0g
+var issueIDPattern = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]*([-.][a-zA-Z0-9_]+)+$`)
 
 const (
 	maxIssueIDLen = 64

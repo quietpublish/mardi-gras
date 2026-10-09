@@ -6,13 +6,15 @@ import (
 	"strings"
 )
 
-// issueIDPattern matches beads issue IDs: a lowercase prefix (possibly
-// hyphenated) followed by one or more separator+segment pairs, where the
-// separator is a hyphen or a dot, and a segment is alphanumeric. The dot
-// matters — beads gives child issues dotted ids (`infra-h0xb.9`), and rejecting
-// those makes every child issue untouchable. See internal/data/validate.go for
-// why allowing it does not widen the anti-injection guard.
-var issueIDPattern = regexp.MustCompile(`^[a-z][a-z0-9]*([-.][a-z0-9]+)+$`)
+// issueIDPattern matches beads issue IDs: a prefix (possibly hyphenated)
+// followed by one or more separator+segment pairs, where the separator is a
+// hyphen or a dot, and a segment is letters, digits and underscores. The dot
+// matters — beads gives child issues dotted ids (`infra-h0xb.9`) — and so does
+// the character set, which is bd's own (`my_project-hbu`, `MyApp-d0g`).
+// Rejecting either makes those issues untouchable. Keep in sync with
+// internal/data/validate.go, which explains why neither widens the
+// anti-injection guard.
+var issueIDPattern = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]*([-.][a-zA-Z0-9_]+)+$`)
 
 const (
 	maxIssueIDLen = 64
