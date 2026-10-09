@@ -6,8 +6,13 @@ import (
 	"strings"
 )
 
-// issueIDPattern matches beads issue IDs: lowercase prefix (possibly hyphenated) + hyphen + alphanumeric hash.
-var issueIDPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)+$`)
+// issueIDPattern matches beads issue IDs: a lowercase prefix (possibly
+// hyphenated) followed by one or more separator+segment pairs, where the
+// separator is a hyphen or a dot, and a segment is alphanumeric. The dot
+// matters — beads gives child issues dotted ids (`infra-h0xb.9`), and rejecting
+// those makes every child issue untouchable. See internal/data/validate.go for
+// why allowing it does not widen the anti-injection guard.
+var issueIDPattern = regexp.MustCompile(`^[a-z][a-z0-9]*([-.][a-z0-9]+)+$`)
 
 const (
 	maxIssueIDLen = 64

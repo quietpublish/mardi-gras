@@ -11,6 +11,13 @@ func TestValidateIssueID(t *testing.T) {
 		"bd-a1b2",
 		"my-app-xyz123",
 		"a-1",
+		// Parented beads issues carry a dotted id (`infra-h0xb.9`) and must be
+		// accepted, or every child issue is unreachable from the gastown side.
+		"infra-h0xb.9",
+		"infra-h0xb.16",
+		"infra-qfam",
+		"a-b.c",
+		"infra-h0xb.9.1",
 	}
 	for _, id := range valid {
 		if err := validateIssueID(id); err != nil {
@@ -25,6 +32,15 @@ func TestValidateIssueID(t *testing.T) {
 		"MG-42",
 		"--delete-all",
 		strings.Repeat("a", 65) + "-1",
+		// Accepting the dot must not have opened a way in for these.
+		"-x",
+		"../etc",
+		"a/../b",
+		".hidden",
+		"a.",
+		"a..b",
+		"a.-b",
+		"a_b",
 	}
 	for _, id := range invalid {
 		if err := validateIssueID(id); err == nil {
