@@ -4,7 +4,7 @@ Thanks for your interest in making the parade better! This guide covers everythi
 
 ## Prerequisites
 
-- **Go 1.25+** ([install](https://go.dev/doc/install)) — `go.mod` declares `go 1.25.0`, and CI builds on 1.25.x
+- **Go 1.26+** ([install](https://go.dev/doc/install)) — `go.mod` declares `go 1.26.0`, and CI builds on 1.26.x
 - **Git**
 - **golangci-lint** for linting ([install](https://golangci-lint.run/welcome/install/)) — CI pins v2.11
 - A Beads project, or use the included `testdata/sample.jsonl`
