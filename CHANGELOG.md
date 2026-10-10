@@ -2,6 +2,19 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.34.1 (2026-10-09)
+
+A patch release: mg could show issues it could not write to, and release binaries move to a supported Go. Thanks to [@tillo](https://github.com/tillo) for finding and fixing the child-issue half.
+
+### Fixed
+- **Child issues can be edited** ([#158](https://github.com/quietpublish/mardi-gras/pull/158), by [@tillo](https://github.com/tillo)). Beads gives a child issue a dotted ID (`mg-42.1`, and `mg-42.1.1` for a grandchild). mg's ID check allowed only hyphens, so editing, claiming, closing, commenting on, linking or slinging a child issue failed with `invalid issue ID` before mg ever ran `bd`. Reading never checked IDs, so the issue still showed up and opened normally.
+- **Workspaces with an underscore or capitals in their prefix can be edited** ([#159](https://github.com/quietpublish/mardi-gras/pull/159)). `bd` names the prefix after the directory by default, so a repo called `my_project` gets IDs like `my_project-hbu`, and `--prefix MyApp` gives `MyApp-d0g`. mg rejected both, so no issue in such a workspace could be changed from mg. mg now accepts every prefix `bd` itself considers valid.
+  - **Still guarded:** the check exists to keep an ID from turning into a flag or a second argument. An ID must still start with a letter, and `-` and `.` may only appear between other characters, so anything shaped like a flag or a path is still refused.
+
+### Changed
+- **Built with Go 1.26** ([#160](https://github.com/quietpublish/mardi-gras/pull/160)). Go 1.25 stopped getting security fixes when Go 1.27 shipped, and nine newly published standard library advisories in `net/http`, `net/textproto` and `crypto/tls` are fixed only in 1.26.9. Release binaries are now built with the latest Go 1.26, `golang.org/x/net` moves to v0.60.0, and building from source needs Go 1.26 or newer.
+- **Docs:** the README documents the optional Jev judge ([#156](https://github.com/quietpublish/mardi-gras/pull/156)), and says app-server, not MCP, for the in-app Codex session ([#157](https://github.com/quietpublish/mardi-gras/pull/157)).
+
 ## v0.34.0 (2026-10-05)
 
 An optional judge, a working in-app Codex again, and a round of fixes from driving mg for real. Jev, TypeSafe's System One model, can now weigh in on duplicates, formulas, focus order and Codex approvals when you opt in with a key. The in-app Codex session runs on `codex app-server`, since Codex removed the `mcp-server` it used to speak. And an interactive audit — mg driven key by key in tmux against sample data, fake orchestrators and this repo's own backlog — turned up 29 issues, all fixed here. Thanks to [@tillo](https://github.com/tillo) for `MG_AGENT_CMD`.
