@@ -19,6 +19,13 @@ func TestValidateIssueID(t *testing.T) {
 		"a-b.c",
 		// Grandchildren nest the same way.
 		"infra-h0xb.9.1",
+		// bd's prefix may carry underscores and upper case: the default prefix
+		// is the directory name (`my_project`), and `--prefix MyApp` is legal.
+		"my_project-hbu",
+		"my_project-hbu.1",
+		"MyApp-d0g",
+		"MG-42",
+		"web_app-api-x1",
 	}
 	for _, id := range valid {
 		if err := ValidateIssueID(id); err != nil {
@@ -30,7 +37,6 @@ func TestValidateIssueID(t *testing.T) {
 		"",
 		"mg",
 		"-mg-42",
-		"MG-42",
 		"mg-",
 		"mg 42",
 		"--delete-all",
@@ -44,7 +50,14 @@ func TestValidateIssueID(t *testing.T) {
 		"a.",
 		"a..b",
 		"a.-b",
+		// No separator, so no hash: a bare prefix is not an id.
 		"a_b",
+		// Widening the character set must not admit these either.
+		"_a-1",
+		"9a-1",
+		"Ä-1",
+		"a-1;rm",
+		"a-1 b",
 	}
 	for _, id := range invalid {
 		if err := ValidateIssueID(id); err == nil {
@@ -91,7 +104,7 @@ func TestAddCommentRejectsInvalidID(t *testing.T) {
 func TestAddLabelRejectsInvalidID(t *testing.T) {
 	err := AddLabel("INVALID", "backend")
 	if err == nil {
-		t.Fatal("expected validation error for uppercase issue ID")
+		t.Fatal("expected validation error for issue ID with no separator")
 	}
 }
 
@@ -118,7 +131,7 @@ func TestSetStatusRejectsInvalidID(t *testing.T) {
 // edit form takes (editIssueCmd -> SetStatus/UpdateTitle/...), so a rejected
 // dot here is not a cosmetic problem: it is mg refusing to edit any child issue.
 func TestMutatorsPassDottedChildIDToBd(t *testing.T) {
-	for _, id := range []string{"infra-h0xb.9", "infra-h0xb.16", "infra-h0xb.9.1"} {
+	for _, id := range []string{"infra-h0xb.9", "infra-h0xb.16", "infra-h0xb.9.1", "my_project-hbu.1", "MyApp-d0g"} {
 		calls, restore := mockExecCapture(nil)
 		err := SetStatus(id, StatusOpen)
 		got := *calls
