@@ -222,8 +222,47 @@ const accidentalSkewSchema = 65
 // message, e.g. "database is at v65, binary knows up to v53".
 var schemaSkewVersionRe = regexp.MustCompile(`database is at v(\d+)`)
 
-// SchemaSkewHint returns remediation text when err carries bd's schema-version
-// mismatch signature, or "" for any other failure.
+// migrateConsentRe extracts both schema versions from bd's migration-consent
+// refusal. bd words it two ways: the error and --json refusal ("database schema
+// is at v66; this bd requires v69") and the operator text ("This database is at
+// schema v66; this bd release uses schema v69").
+var migrateConsentRe = regexp.MustCompile(`(?i)database (?:schema )?is at (?:schema )?v(\d+); this bd (?:requires|release uses schema) v(\d+)`)
+
+// migrateConsentHint covers the direction SchemaSkewHint's other cases do not:
+// the bd binary is NEWER than the database, and bd (from the release after
+// v1.3.x) no longer migrates a database without explicit consent. In embedded
+// mode it refuses reads too, so mg cannot even load. The remedy is a choice
+// only the operator can make, because the migration is one-way, so this lays
+// out both options and runs neither. It deliberately does not mention bd's
+// consent environment variable: bd keeps that out of its own refusal so that
+// nothing scripts its way past the decision.
+func migrateConsentHint(msg string) string {
+	lower := strings.ToLower(msg)
+	m := migrateConsentRe.FindStringSubmatch(msg)
+	if m == nil && !strings.Contains(lower, "without explicit consent") {
+		return ""
+	}
+	dbV, binV := "an older schema", "a newer one"
+	if m != nil {
+		dbV, binV = "schema v"+m[1], "v"+m[2]
+	}
+	return "This is a Beads schema gap, not a connection problem — this bd is NEWER\n" +
+		"than the database (" + dbV + ", this bd uses " + binV + "), and bd no longer\n" +
+		"upgrades a database without your consent. mg will not do it for you.\n\n" +
+		"Choose one:\n\n" +
+		"  • Upgrade the database: run `bd migrate schema` in this workspace. It is\n" +
+		"    ONE-WAY — bd releases built for the older schema cannot open it again,\n" +
+		"    so first upgrade every other bd install, clone and agent sharing it.\n" +
+		"  • Keep the database as it is: use the bd release that matches its schema\n" +
+		"    (the one the rest of your setup runs) instead of this one.\n"
+}
+
+// SchemaSkewHint returns remediation text when err carries one of bd's
+// schema-version refusals, or "" for any other failure.
+//
+// A newer bd refusing to migrate an older database without consent gets its own
+// advice (migrateConsentHint). The rest of this comment is about the opposite
+// direction, bd's "schema version mismatch", where the database is AHEAD.
 //
 // Two different causes produce this error and they want OPPOSITE remedies, so
 // the hint keys on the database version bd reports:
@@ -236,7 +275,13 @@ var schemaSkewVersionRe = regexp.MustCompile(`database is at v(\d+)`)
 // Telling a v1.3.0 fleet to roll its schema back would corrupt a healthy
 // upgrade, which is why this is not one generic message.
 func SchemaSkewHint(err error) string {
-	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "schema version mismatch") {
+	if err == nil {
+		return ""
+	}
+	if hint := migrateConsentHint(err.Error()); hint != "" {
+		return hint
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "schema version mismatch") {
 		return ""
 	}
 
