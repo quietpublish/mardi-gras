@@ -132,11 +132,14 @@ make gc-client
 
 The spec is OpenAPI 3.1; `downgrade.jq` rewrites it to 3.0 first (oapi-codegen does not yet fully support 3.1). Generation is scoped to the endpoints mg uses.
 
-The committed spec is currently **Gas City v1.4.1** (127 paths), and that is
-the current pin. v1.4.2 (2026-09-18) is fixes only, and a full contract diff
-against gascity `main` came back additive-only, so **there is nothing to bump
-today.** The events stream mg reads is in the v1.4.1 spec but deliberately not
-generated (see the SSE row above). When a newer release does land, fetch its spec with:
+The committed spec is **Gas City v1.5.0** (127 paths). Going from v1.4.1, the
+operations mg generates and every schema they reference changed only
+additively: `BeadGraphResponse` gained a `membership` field and `ErrorModel` a
+new error type, neither of which mg reads. (v1.4.2's spec was byte-identical to
+v1.4.1's.) The status endpoint is no longer generated, because mg never called
+it; the roster comes from `/agents`. The events stream mg reads is in the spec
+but deliberately not generated (see the SSE row above). When a newer release
+lands, fetch its spec with:
 
 ```bash
 gh api "repos/gastownhall/gascity/contents/docs/reference/schema/openapi.json?ref=<tag>" \

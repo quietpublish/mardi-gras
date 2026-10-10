@@ -17,6 +17,24 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for BeadGraphResponseMembership.
+const (
+	DirectRootIdParentClosure              BeadGraphResponseMembership = "direct-root-id+parent-closure"
+	DirectRootIdParentClosureConvoyMembers BeadGraphResponseMembership = "direct-root-id+parent-closure+convoy-members"
+)
+
+// Valid indicates whether the value is a known member of the BeadGraphResponseMembership enum.
+func (e BeadGraphResponseMembership) Valid() bool {
+	switch e {
+	case DirectRootIdParentClosure:
+		return true
+	case DirectRootIdParentClosureConvoyMembers:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RunRefKind.
 const (
 	Order RunRefKind = "order"
@@ -37,142 +55,34 @@ func (e RunRefKind) Valid() bool {
 
 // Defines values for RunStatus.
 const (
-	RunStatusActive    RunStatus = "active"
-	RunStatusCanceled  RunStatus = "canceled"
-	RunStatusCanceling RunStatus = "canceling"
-	RunStatusCompleted RunStatus = "completed"
-	RunStatusFailed    RunStatus = "failed"
-	RunStatusPending   RunStatus = "pending"
-	RunStatusSkipped   RunStatus = "skipped"
-	RunStatusWaiting   RunStatus = "waiting"
+	Active    RunStatus = "active"
+	Canceled  RunStatus = "canceled"
+	Canceling RunStatus = "canceling"
+	Completed RunStatus = "completed"
+	Failed    RunStatus = "failed"
+	Pending   RunStatus = "pending"
+	Skipped   RunStatus = "skipped"
+	Waiting   RunStatus = "waiting"
 )
 
 // Valid indicates whether the value is a known member of the RunStatus enum.
 func (e RunStatus) Valid() bool {
 	switch e {
-	case RunStatusActive:
+	case Active:
 		return true
-	case RunStatusCanceled:
+	case Canceled:
 		return true
-	case RunStatusCanceling:
+	case Canceling:
 		return true
-	case RunStatusCompleted:
+	case Completed:
 		return true
-	case RunStatusFailed:
+	case Failed:
 		return true
-	case RunStatusPending:
+	case Pending:
 		return true
-	case RunStatusSkipped:
+	case Skipped:
 		return true
-	case RunStatusWaiting:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for StatusConditionalWriteStoreVerdictLatch.
-const (
-	StatusConditionalWriteStoreVerdictLatchIncapable StatusConditionalWriteStoreVerdictLatch = "incapable"
-	StatusConditionalWriteStoreVerdictLatchUnlatched StatusConditionalWriteStoreVerdictLatch = "unlatched"
-)
-
-// Valid indicates whether the value is a known member of the StatusConditionalWriteStoreVerdictLatch enum.
-func (e StatusConditionalWriteStoreVerdictLatch) Valid() bool {
-	switch e {
-	case StatusConditionalWriteStoreVerdictLatchIncapable:
-		return true
-	case StatusConditionalWriteStoreVerdictLatchUnlatched:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for StatusConditionalWriteStoreVerdictProbe.
-const (
-	StatusConditionalWriteStoreVerdictProbeCapable   StatusConditionalWriteStoreVerdictProbe = "capable"
-	StatusConditionalWriteStoreVerdictProbeIncapable StatusConditionalWriteStoreVerdictProbe = "incapable"
-	StatusConditionalWriteStoreVerdictProbeUnprobed  StatusConditionalWriteStoreVerdictProbe = "unprobed"
-)
-
-// Valid indicates whether the value is a known member of the StatusConditionalWriteStoreVerdictProbe enum.
-func (e StatusConditionalWriteStoreVerdictProbe) Valid() bool {
-	switch e {
-	case StatusConditionalWriteStoreVerdictProbeCapable:
-		return true
-	case StatusConditionalWriteStoreVerdictProbeIncapable:
-		return true
-	case StatusConditionalWriteStoreVerdictProbeUnprobed:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for StatusConditionalWritesEffective.
-const (
-	StatusConditionalWritesEffectiveActive         StatusConditionalWritesEffective = "active"
-	StatusConditionalWritesEffectiveDegraded       StatusConditionalWritesEffective = "degraded"
-	StatusConditionalWritesEffectiveFailClosed     StatusConditionalWritesEffective = "fail_closed"
-	StatusConditionalWritesEffectiveOff            StatusConditionalWritesEffective = "off"
-	StatusConditionalWritesEffectivePendingRestart StatusConditionalWritesEffective = "pending_restart"
-)
-
-// Valid indicates whether the value is a known member of the StatusConditionalWritesEffective enum.
-func (e StatusConditionalWritesEffective) Valid() bool {
-	switch e {
-	case StatusConditionalWritesEffectiveActive:
-		return true
-	case StatusConditionalWritesEffectiveDegraded:
-		return true
-	case StatusConditionalWritesEffectiveFailClosed:
-		return true
-	case StatusConditionalWritesEffectiveOff:
-		return true
-	case StatusConditionalWritesEffectivePendingRestart:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for StatusConditionalWritesMode.
-const (
-	Auto    StatusConditionalWritesMode = "auto"
-	Off     StatusConditionalWritesMode = "off"
-	Require StatusConditionalWritesMode = "require"
-)
-
-// Valid indicates whether the value is a known member of the StatusConditionalWritesMode enum.
-func (e StatusConditionalWritesMode) Valid() bool {
-	switch e {
-	case Auto:
-		return true
-	case Off:
-		return true
-	case Require:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for StatusConditionalWritesOrigin.
-const (
-	Builtin StatusConditionalWritesOrigin = "builtin"
-	Config  StatusConditionalWritesOrigin = "config"
-	Env     StatusConditionalWritesOrigin = "env"
-)
-
-// Valid indicates whether the value is a known member of the StatusConditionalWritesOrigin enum.
-func (e StatusConditionalWritesOrigin) Valid() bool {
-	switch e {
-	case Builtin:
-		return true
-	case Config:
-		return true
-	case Env:
+	case Waiting:
 		return true
 	default:
 		return false
@@ -315,16 +225,14 @@ type BeadCreateInputBody struct {
 type BeadGraphResponse struct {
 	Beads *[]Bead                `json:"beads"`
 	Deps  *[]WorkflowDepResponse `json:"deps"`
-	Root  Bead                   `json:"root"`
+
+	// Membership Rule that decided which beads are in Beads: the root, everything carrying gc.root_bead_id == root, plus the root's convoy members when the root is a convoy, and then the transitive parent-child closure taken over all of those — a convoy member brings its own subtree. Both storage tiers are in scope, so a wisp molecule (whose beads are all ephemeral) returns its members rather than reading as empty. Never dependency reachability, which drops dependency-isolated members such as gc.kind=spec sidecars.
+	Membership BeadGraphResponseMembership `json:"membership"`
+	Root       Bead                        `json:"root"`
 }
 
-// BeadsDiagnostic defines model for BeadsDiagnostic.
-type BeadsDiagnostic struct {
-	BeadsStore          string  `json:"beads_store"`
-	NativeStoreEligible bool    `json:"native_store_eligible"`
-	PreflightGate       *string `json:"preflight_gate,omitempty"`
-	PreflightReason     *string `json:"preflight_reason,omitempty"`
-}
+// BeadGraphResponseMembership Rule that decided which beads are in Beads: the root, everything carrying gc.root_bead_id == root, plus the root's convoy members when the root is a convoy, and then the transitive parent-child closure taken over all of those — a convoy member brings its own subtree. Both storage tiers are in scope, so a wisp molecule (whose beads are all ephemeral) returns its members rather than reading as empty. Never dependency reachability, which drops dependency-isolated members such as gc.kind=spec sidecars.
+type BeadGraphResponseMembership string
 
 // CityInfo defines model for CityInfo.
 type CityInfo struct {
@@ -714,275 +622,6 @@ type SlingResponse struct {
 	WorkflowId   *string   `json:"workflow_id,omitempty"`
 }
 
-// StatusAgentCounts defines model for StatusAgentCounts.
-type StatusAgentCounts struct {
-	// Quarantined Number of quarantined agents.
-	Quarantined int64 `json:"quarantined"`
-
-	// Running Number of running agents.
-	Running int64 `json:"running"`
-
-	// Suspended Number of suspended agents.
-	Suspended int64 `json:"suspended"`
-
-	// Total Total number of agents.
-	Total int64 `json:"total"`
-}
-
-// StatusAgentDetail defines model for StatusAgentDetail.
-type StatusAgentDetail struct {
-	// Draining True when the pool is draining this instance.
-	Draining *bool `json:"draining,omitempty"`
-
-	// Expanded True when this row is a pool-expanded instance (renderer indents differently).
-	Expanded *bool `json:"expanded,omitempty"`
-
-	// GroupName Pool group label for expanded rows; same as QualifiedName for singletons.
-	GroupName *string `json:"group_name,omitempty"`
-
-	// Name Unqualified agent name (for pool instances, the per-instance short name like 'polecat-1').
-	Name string `json:"name"`
-
-	// QualifiedName Rig-qualified name when applicable, else the bare agent name.
-	QualifiedName string `json:"qualified_name"`
-
-	// Running Observed running state of the agent's session.
-	Running bool `json:"running"`
-
-	// ScaleLabel 'scaled (min=N, max=M)' header emitted once per pool group.
-	ScaleLabel *string `json:"scale_label,omitempty"`
-
-	// Scope city or rig.
-	Scope string `json:"scope"`
-
-	// SessionName tmux session name CLI drain-ops key on.
-	SessionName *string `json:"session_name,omitempty"`
-
-	// Suspended Whether the agent (or its rig) is suspended.
-	Suspended bool `json:"suspended"`
-}
-
-// StatusBody defines model for StatusBody.
-type StatusBody struct {
-	// AgentCount Total agent count (deprecated, use agents.total).
-	AgentCount int64 `json:"agent_count"`
-
-	// AgentDetails Per-agent state (for CLI status views). Empty when none.
-	AgentDetails *[]StatusAgentDetail `json:"agent_details,omitempty"`
-	Agents       StatusAgentCounts    `json:"agents"`
-	Beads        *BeadsDiagnostic     `json:"beads,omitempty"`
-
-	// BeadsVersion Version of the bd (beads) CLI the supervisor drives. Omitted when the probe failed or the binary is unavailable.
-	BeadsVersion      *string                  `json:"beads_version,omitempty"`
-	ConditionalWrites *StatusConditionalWrites `json:"conditional_writes,omitempty"`
-
-	// DoltVersion Version of the dolt engine binary the supervisor drives. Omitted when the probe failed or the binary is unavailable.
-	DoltVersion *string          `json:"dolt_version,omitempty"`
-	Mail        StatusMailCounts `json:"mail"`
-
-	// Name City name.
-	Name string `json:"name"`
-
-	// NamedSessionDetails Per-named-session detail. Empty when none configured.
-	NamedSessionDetails *[]StatusNamedSessionDetail `json:"named_session_details,omitempty"`
-
-	// Partial True when one or more status backing reads returned incomplete data.
-	Partial *bool `json:"partial,omitempty"`
-
-	// PartialErrors Human-readable errors from incomplete status backing reads.
-	PartialErrors *[]string `json:"partial_errors,omitempty"`
-
-	// Path City directory path.
-	Path string `json:"path"`
-
-	// RigCount Total rig count (deprecated, use rigs.total).
-	RigCount int64 `json:"rig_count"`
-
-	// RigDetails Per-rig detail (for CLI status views). Empty when none.
-	RigDetails *[]StatusRigDetail `json:"rig_details,omitempty"`
-	Rigs       StatusRigCounts    `json:"rigs"`
-
-	// Running Number of running agent processes.
-	Running             int64                      `json:"running"`
-	SessionCountsDetail *StatusSessionCountsDetail `json:"session_counts_detail,omitempty"`
-	StoreHealth         *StatusStoreHealth         `json:"store_health,omitempty"`
-
-	// Suspended Whether the city is suspended.
-	Suspended bool `json:"suspended"`
-
-	// UptimeSec Server uptime in seconds.
-	UptimeSec int64 `json:"uptime_sec"`
-
-	// Version Server version.
-	Version *string          `json:"version,omitempty"`
-	Work    StatusWorkCounts `json:"work"`
-}
-
-// StatusConditionalWriteStoreVerdict defines model for StatusConditionalWriteStoreVerdict.
-type StatusConditionalWriteStoreVerdict struct {
-	// Capable What the write path uses today: false only on a definitive incapable verdict.
-	Capable bool `json:"capable"`
-
-	// Kind Store kind in the degraded-event wire vocabulary (bd, native, caching, mem, file).
-	Kind string `json:"kind"`
-
-	// Latch Runtime unsupported latch: incapable after the store rejected a real fenced write; cleared only by restart.
-	Latch StatusConditionalWriteStoreVerdictLatch `json:"latch"`
-
-	// Probe Memoized capability-probe verdict. unprobed means no fenced write has exercised this store yet.
-	Probe StatusConditionalWriteStoreVerdictProbe `json:"probe"`
-
-	// Reason Incapable cause, verbatim from the probe or latch.
-	Reason *string `json:"reason,omitempty"`
-
-	// StoreId Store scope: city, or rig/<name>.
-	StoreId string `json:"store_id"`
-}
-
-// StatusConditionalWriteStoreVerdictLatch Runtime unsupported latch: incapable after the store rejected a real fenced write; cleared only by restart.
-type StatusConditionalWriteStoreVerdictLatch string
-
-// StatusConditionalWriteStoreVerdictProbe Memoized capability-probe verdict. unprobed means no fenced write has exercised this store yet.
-type StatusConditionalWriteStoreVerdictProbe string
-
-// StatusConditionalWrites defines model for StatusConditionalWrites.
-type StatusConditionalWrites struct {
-	// Effective Aggregate verdict: off (gate off), active (every store capable), degraded (auto with at least one incapable store), fail_closed (require with at least one incapable store — fenced writes on it refuse), pending_restart (on-disk config drifted from the latched mode).
-	Effective StatusConditionalWritesEffective `json:"effective"`
-
-	// Mode Boot-latched beads.conditional_writes mode.
-	Mode StatusConditionalWritesMode `json:"mode"`
-
-	// Notices Retained rollout notices (env overrides, drift, invalid spellings).
-	Notices *[]StatusRolloutNotice `json:"notices,omitempty"`
-
-	// Origin Where the latched mode came from.
-	Origin StatusConditionalWritesOrigin `json:"origin"`
-
-	// Stores Per-store verdicts, one row per controller-owned store.
-	Stores *[]StatusConditionalWriteStoreVerdict `json:"stores,omitempty"`
-}
-
-// StatusConditionalWritesEffective Aggregate verdict: off (gate off), active (every store capable), degraded (auto with at least one incapable store), fail_closed (require with at least one incapable store — fenced writes on it refuse), pending_restart (on-disk config drifted from the latched mode).
-type StatusConditionalWritesEffective string
-
-// StatusConditionalWritesMode Boot-latched beads.conditional_writes mode.
-type StatusConditionalWritesMode string
-
-// StatusConditionalWritesOrigin Where the latched mode came from.
-type StatusConditionalWritesOrigin string
-
-// StatusMailCounts defines model for StatusMailCounts.
-type StatusMailCounts struct {
-	// Total Total number of messages.
-	Total int64 `json:"total"`
-
-	// Unread Number of unread messages.
-	Unread int64 `json:"unread"`
-}
-
-// StatusNamedSessionDetail defines model for StatusNamedSessionDetail.
-type StatusNamedSessionDetail struct {
-	// Identity Qualified named-session identity.
-	Identity string `json:"identity"`
-
-	// Mode Named-session mode (on-demand, always, etc.).
-	Mode string `json:"mode"`
-
-	// Status Lifecycle status string (materialized, reserved-unmaterialized, etc.).
-	Status string `json:"status"`
-}
-
-// StatusRigCounts defines model for StatusRigCounts.
-type StatusRigCounts struct {
-	// Suspended Number of suspended rigs.
-	Suspended int64 `json:"suspended"`
-
-	// Total Total number of rigs.
-	Total int64 `json:"total"`
-}
-
-// StatusRigDetail defines model for StatusRigDetail.
-type StatusRigDetail struct {
-	// Name Rig name.
-	Name string `json:"name"`
-
-	// Path Rig directory path.
-	Path string `json:"path"`
-
-	// Suspended Whether the rig is suspended (either explicitly or because all its agents are suspended).
-	Suspended bool `json:"suspended"`
-}
-
-// StatusRolloutNotice defines model for StatusRolloutNotice.
-type StatusRolloutNotice struct {
-	// ConfigValue Raw config spelling; empty when unset.
-	ConfigValue *string `json:"config_value,omitempty"`
-
-	// EnvValue Raw env spelling as found.
-	EnvValue *string `json:"env_value,omitempty"`
-
-	// EnvVar Environment variable involved, when env-related.
-	EnvVar *string `json:"env_var,omitempty"`
-
-	// FlagKey Rollout gate key the notice is about.
-	FlagKey string `json:"flag_key"`
-
-	// Kind Notice kind (env_overrides_config, pending_restart, invalid_value, ...).
-	Kind string `json:"kind"`
-
-	// Message Human-readable line carrying the gate and the outcome.
-	Message string `json:"message"`
-}
-
-// StatusSessionCountsDetail defines model for StatusSessionCountsDetail.
-type StatusSessionCountsDetail struct {
-	// Active Number of active sessions.
-	Active int64 `json:"active"`
-
-	// Suspended Number of suspended sessions.
-	Suspended int64 `json:"suspended"`
-}
-
-// StatusStoreHealth defines model for StatusStoreHealth.
-type StatusStoreHealth struct {
-	// LastGcAt RFC3339 timestamp of last maintenance run.
-	LastGcAt *string `json:"last_gc_at,omitempty"`
-
-	// LastGcStatus Status of last maintenance run ('success' or 'failed').
-	LastGcStatus *string `json:"last_gc_status,omitempty"`
-
-	// LiveRows Retained bead row count used as the denominator, including open and closed beads.
-	LiveRows int64 `json:"live_rows"`
-
-	// Path On-disk path of the Dolt store.
-	Path string `json:"path"`
-
-	// RatioMbPerRow Derived megabytes per retained row, including open and closed beads.
-	RatioMbPerRow float64 `json:"ratio_mb_per_row"`
-
-	// SizeBytes Total bytes of the store directory.
-	SizeBytes int64 `json:"size_bytes"`
-
-	// ThresholdMbPerRow Ratio threshold; a ratio above this trips warning.
-	ThresholdMbPerRow float64 `json:"threshold_mb_per_row"`
-
-	// Warning True when maintenance is overdue.
-	Warning bool `json:"warning"`
-}
-
-// StatusWorkCounts defines model for StatusWorkCounts.
-type StatusWorkCounts struct {
-	// InProgress Number of in-progress work items.
-	InProgress int64 `json:"in_progress"`
-
-	// Open Number of open work items.
-	Open int64 `json:"open"`
-
-	// Ready Number of ready work items.
-	Ready int64 `json:"ready"`
-}
-
 // SubmissionCapabilities defines model for SubmissionCapabilities.
 type SubmissionCapabilities struct {
 	SupportsFollowUp     bool `json:"supports_follow_up"`
@@ -1185,18 +824,6 @@ type PostV0CityByCityNameSlingParams struct {
 	XGCRequest string `json:"X-GC-Request"`
 }
 
-// GetV0CityByCityNameStatusParams defines parameters for GetV0CityByCityNameStatus.
-type GetV0CityByCityNameStatusParams struct {
-	// Index Event sequence number; when provided, blocks until a newer event arrives.
-	Index *string `form:"index,omitempty" json:"index,omitempty"`
-
-	// Wait How long to block waiting for changes (Go duration string, e.g. 30s). Default 30s, max 2m.
-	Wait *string `form:"wait,omitempty" json:"wait,omitempty"`
-
-	// Lite When true, omit the expensive store-health, session-count, and work-count blocks for low-cost dashboard polls.
-	Lite *bool `form:"lite,omitempty" json:"lite,omitempty"`
-}
-
 // CreateBeadJSONRequestBody defines body for CreateBead for application/json ContentType.
 type CreateBeadJSONRequestBody = BeadCreateInputBody
 
@@ -1356,9 +983,6 @@ type ClientInterface interface {
 	PostV0CityByCityNameSlingWithBody(ctx context.Context, cityName string, params *PostV0CityByCityNameSlingParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PostV0CityByCityNameSling(ctx context.Context, cityName string, params *PostV0CityByCityNameSlingParams, body PostV0CityByCityNameSlingJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetV0CityByCityNameStatus request
-	GetV0CityByCityNameStatus(ctx context.Context, cityName string, params *GetV0CityByCityNameStatusParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) GetV0Cities(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -1651,18 +1275,6 @@ func (c *Client) PostV0CityByCityNameSlingWithBody(ctx context.Context, cityName
 
 func (c *Client) PostV0CityByCityNameSling(ctx context.Context, cityName string, params *PostV0CityByCityNameSlingParams, body PostV0CityByCityNameSlingJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostV0CityByCityNameSlingRequest(c.Server, cityName, params, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetV0CityByCityNameStatus(ctx context.Context, cityName string, params *GetV0CityByCityNameStatusParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetV0CityByCityNameStatusRequest(c.Server, cityName, params)
 	if err != nil {
 		return nil, err
 	}
@@ -3098,91 +2710,6 @@ func NewPostV0CityByCityNameSlingRequestWithBody(server string, cityName string,
 	return req, nil
 }
 
-// NewGetV0CityByCityNameStatusRequest generates requests for GetV0CityByCityNameStatus
-func NewGetV0CityByCityNameStatusRequest(server string, cityName string, params *GetV0CityByCityNameStatusParams) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "cityName", cityName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v0/city/%s/status", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		// queryValues collects non-styled parameters (passthrough, JSON)
-		// that are safe to round-trip through url.Values.Encode().
-		queryValues := queryURL.Query()
-		// rawQueryFragments collects pre-encoded query fragments from
-		// styled parameters, preserving literal commas as delimiters
-		// per the OpenAPI spec (e.g. "color=blue,black,brown").
-		var rawQueryFragments []string
-
-		if params.Index != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "index", *params.Index, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if params.Wait != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "wait", *params.Wait, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if params.Lite != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "lite", *params.Lite, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if encoded := queryValues.Encode(); encoded != "" {
-			rawQueryFragments = append(rawQueryFragments, encoded)
-		}
-		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -3294,9 +2821,6 @@ type ClientWithResponsesInterface interface {
 	PostV0CityByCityNameSlingWithBodyWithResponse(ctx context.Context, cityName string, params *PostV0CityByCityNameSlingParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostV0CityByCityNameSlingResponse, error)
 
 	PostV0CityByCityNameSlingWithResponse(ctx context.Context, cityName string, params *PostV0CityByCityNameSlingParams, body PostV0CityByCityNameSlingJSONRequestBody, reqEditors ...RequestEditorFn) (*PostV0CityByCityNameSlingResponse, error)
-
-	// GetV0CityByCityNameStatusWithResponse request
-	GetV0CityByCityNameStatusWithResponse(ctx context.Context, cityName string, params *GetV0CityByCityNameStatusParams, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameStatusResponse, error)
 }
 
 type GetV0CitiesResponse struct {
@@ -3968,40 +3492,6 @@ func (r PostV0CityByCityNameSlingResponse) ContentType() string {
 	return ""
 }
 
-type GetV0CityByCityNameStatusResponse struct {
-	Body                      []byte
-	HTTPResponse              *http.Response
-	JSON200                   *StatusBody
-	ApplicationproblemJSON404 *ErrorModel
-	ApplicationproblemJSON422 *ErrorModel
-	ApplicationproblemJSON500 *ErrorModel
-	ApplicationproblemJSON503 *ErrorModel
-}
-
-// Status returns HTTPResponse.Status
-func (r GetV0CityByCityNameStatusResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetV0CityByCityNameStatusResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r GetV0CityByCityNameStatusResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
 // GetV0CitiesWithResponse request returning *GetV0CitiesResponse
 func (c *ClientWithResponses) GetV0CitiesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetV0CitiesResponse, error) {
 	rsp, err := c.GetV0Cities(ctx, reqEditors...)
@@ -4219,15 +3709,6 @@ func (c *ClientWithResponses) PostV0CityByCityNameSlingWithResponse(ctx context.
 		return nil, err
 	}
 	return ParsePostV0CityByCityNameSlingResponse(rsp)
-}
-
-// GetV0CityByCityNameStatusWithResponse request returning *GetV0CityByCityNameStatusResponse
-func (c *ClientWithResponses) GetV0CityByCityNameStatusWithResponse(ctx context.Context, cityName string, params *GetV0CityByCityNameStatusParams, reqEditors ...RequestEditorFn) (*GetV0CityByCityNameStatusResponse, error) {
-	rsp, err := c.GetV0CityByCityNameStatus(ctx, cityName, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetV0CityByCityNameStatusResponse(rsp)
 }
 
 // ParseGetV0CitiesResponse parses an HTTP response from a GetV0CitiesWithResponse call
@@ -5411,60 +4892,6 @@ func ParsePostV0CityByCityNameSlingResponse(rsp *http.Response) (*PostV0CityByCi
 			return nil, err
 		}
 		response.ApplicationproblemJSON500 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetV0CityByCityNameStatusResponse parses an HTTP response from a GetV0CityByCityNameStatusWithResponse call
-func ParseGetV0CityByCityNameStatusResponse(rsp *http.Response) (*GetV0CityByCityNameStatusResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetV0CityByCityNameStatusResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest StatusBody
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorModel
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
-		var dest ErrorModel
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSON422 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest ErrorModel
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSON500 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ErrorModel
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSON503 = &dest
 
 	}
 
