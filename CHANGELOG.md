@@ -2,6 +2,15 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.36.0 (2026-10-09)
+
+Fold the parade. A parent issue can hide the children listed under it, so a long epic takes one row until you want its detail. This closes [#110](https://github.com/quietpublish/mardi-gras/issues/110), the last part of what [@dcaixinha](https://github.com/dcaixinha) asked for in [#102](https://github.com/quietpublish/mardi-gras/issues/102).
+
+### Added
+- **Collapse and expand parent issues** ([#168](https://github.com/quietpublish/mardi-gras/pull/168)). `z` folds or unfolds the children listed under the selected parent; `Z` folds every parent, or unfolds them all when every one is already folded. A folded parent shows how many rows it hides, e.g. `▸+3`. Both keys are in the command palette and the help overlay.
+  - **Work in progress stays visible:** a fold hides only the children listed under the parent in its own section. A child in another section (the parent Lined Up, the child Rolling) is listed there on its own and stays put.
+  - **Folds stay folded** when the list reloads, pause while a filter or focus mode is on so no match is hidden, and open when mg selects an issue inside one, such as an issue you just claimed or created.
+
 ## v0.35.0 (2026-10-09)
 
 mg stops overwriting changes it hasn't seen, and gets ready for the next Beads release. Status changes and assigns now check that the issue still looks the way mg showed it, so mg no longer takes an issue away from an agent that just claimed it. Everything here came out of an upstream check against Beads 1.3.1 and Gas City 1.5.0.
