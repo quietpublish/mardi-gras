@@ -2,6 +2,23 @@
 
 All notable changes to Mardi Gras are documented here. For full release details including binaries and install instructions, see the [Releases](https://github.com/quietpublish/mardi-gras/releases) page.
 
+## v0.35.0 (2026-10-09)
+
+mg stops overwriting changes it hasn't seen, and gets ready for the next Beads release. Status changes and assigns now check that the issue still looks the way mg showed it, so mg no longer takes an issue away from an agent that just claimed it. Everything here came out of an upstream check against Beads 1.3.1 and Gas City 1.5.0.
+
+### Added
+- **Writes don't overwrite changes mg hasn't seen** ([#165](https://github.com/quietpublish/mardi-gras/pull/165)). Changing a status, assigning with `y`, and the edit form's status field now tell bd what mg last showed. If an agent or another terminal changed the issue since, bd writes nothing and mg shows "changed elsewhere — not saved, reloaded" with the issue as it is now.
+  - **Needs bd 1.3.0 or newer.** On an older bd, mg writes as it always did.
+  - **Claims are unchanged:** `1` and claim-next were already atomic.
+- **A hint when bd's ready list has gone stale** ([#166](https://github.com/quietpublish/mardi-gras/pull/166)). On bd 1.3.0 and 1.3.1, a database migration can mark issues as blocked when they aren't ([beads #7037](https://github.com/gastownhall/beads/issues/7037)), so they disappear from `bd ready`. mg's list works blockedness out itself, so it still shows them. When claim-next or `3` finds nothing to claim but mg can see claimable issues, the toast says so and suggests `bd recompute-blocked`.
+
+### Fixed
+- **A clear message when a newer bd won't migrate your database** ([#162](https://github.com/quietpublish/mardi-gras/pull/162)). The next Beads release stops upgrading a database automatically and refuses to open an older one until you choose. mg used to answer that with "Ensure the Dolt server is running", which is the wrong fix. It now explains the two choices: run `bd migrate schema` (one-way, so upgrade every other bd that shares the database first), or keep using the bd release that matches the database.
+- **Faster updates when a Gas City claim changes hands** ([#163](https://github.com/quietpublish/mardi-gras/pull/163)). A claim an agent gives back, takes over from a stalled session, or loses when its session dies now shows up within a couple of seconds instead of on the next 5-second poll.
+
+### Changed
+- **The Gas City API client targets Gas City 1.5.0** ([#164](https://github.com/quietpublish/mardi-gras/pull/164)). The change is additive for everything mg uses. mg no longer generates the status endpoint it never called.
+
 ## v0.34.1 (2026-10-09)
 
 A patch release: mg could show issues it could not write to, and release binaries move to a supported Go. Thanks to [@tillo](https://github.com/tillo) for finding and fixing the child-issue half.
