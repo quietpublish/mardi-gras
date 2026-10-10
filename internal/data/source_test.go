@@ -469,3 +469,14 @@ func TestFetchIssueDetailRealErrorDoesNotRetry(t *testing.T) {
 		t.Errorf("made %d calls, want 1 — a real error must not trigger the fallback", len(*calls))
 	}
 }
+
+func TestBdHasRecomputeBlocked(t *testing.T) {
+	for v, want := range map[string]bool{
+		"1.3.0": true, "v1.3.1": true, "1.3.2-rc.1": true, "2.0.0": true,
+		"1.2.2": false, "1.1.0": false, "": false, "dev": false,
+	} {
+		if got := BdHasRecomputeBlocked(v); got != want {
+			t.Errorf("BdHasRecomputeBlocked(%q) = %v, want %v", v, got, want)
+		}
+	}
+}

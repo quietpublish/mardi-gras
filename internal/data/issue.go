@@ -170,6 +170,30 @@ func (i *Issue) EvaluateDependencies(issueMap map[string]*Issue, blockingTypes m
 	return eval
 }
 
+// CountClaimable counts the issues `bd ready --claim` should be able to take,
+// judged by mg's own dependency evaluation: open, unassigned, not deferred
+// past now, and with no unresolved blocker. bd judges blockedness by a stored
+// flag instead, so when bd finds nothing to claim while this is non-zero, that
+// flag may be stale (beads #7037).
+func CountClaimable(issues []Issue, blockingTypes map[string]bool, now time.Time) int {
+	issueMap := BuildIssueMap(issues)
+	n := 0
+	for i := range issues {
+		iss := &issues[i]
+		if iss.Status != StatusOpen || iss.Assignee != "" {
+			continue
+		}
+		if iss.DeferUntil != nil && iss.DeferUntil.After(now) {
+			continue
+		}
+		if iss.EvaluateDependencies(issueMap, blockingTypes).IsBlocked {
+			continue
+		}
+		n++
+	}
+	return n
+}
+
 // IsBlocked returns true if this issue depends on an unclosed blocker.
 // Delegates to EvaluateDependencies with DefaultBlockingTypes.
 func (i *Issue) IsBlocked(issueMap map[string]*Issue) bool {

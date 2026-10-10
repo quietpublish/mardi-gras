@@ -38,6 +38,36 @@ func TestToastDismissMsg(t *testing.T) {
 // TestMutateResultSuccess
 // ---------------------------------------------------------------------------
 
+// TestStaleBlockedHint: when bd finds nothing to claim but mg, judging
+// dependencies itself, sees claimable work, point at bd recompute-blocked
+// (beads #7037) — but only on a bd that has the command.
+func TestStaleBlockedHint(t *testing.T) {
+	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
+	if got := m.staleBlockedHint(m.issues); got != "" {
+		t.Errorf("no bd version known: hint = %q, want none", got)
+	}
+	m.beadsContext = &data.BeadsContext{BdVersion: "1.1.0"}
+	if got := m.staleBlockedHint(m.issues); got != "" {
+		t.Errorf("bd 1.1.0 has no recompute-blocked: hint = %q, want none", got)
+	}
+	m.beadsContext = &data.BeadsContext{BdVersion: "1.3.1"}
+	if got := m.staleBlockedHint(m.issues); !strings.Contains(got, "1 look ready") || !strings.Contains(got, "bd recompute-blocked") {
+		t.Errorf("bd 1.3.1: hint = %q, want the recompute-blocked advice", got)
+	}
+
+	model, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 20})
+	m = model.(Model)
+	model, _ = m.Update(claimNextReadyMsg{stale: m.staleBlockedHint(m.issues)})
+	if got := model.(Model).toast; got.Level != components.ToastWarn || !strings.Contains(got.Message, "recompute-blocked") {
+		t.Errorf("toast = %q (level %v), want the warning", got.Message, got.Level)
+	}
+	model, _ = m.Update(claimNextReadyMsg{})
+	if got := model.(Model).toast; got.Level != components.ToastInfo || got.Message != "No ready work to claim" {
+		t.Errorf("toast = %q, want the plain info", got.Message)
+	}
+}
+
 func TestMutateResultSuccess(t *testing.T) {
 	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
 	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
