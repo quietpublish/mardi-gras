@@ -194,6 +194,10 @@ func TestParseGCBeadEvent(t *testing.T) {
 		{"other type", "event", `{"type":"session.woke","subject":"s"}`, false, ""},
 		{"claim rejected", "event", `{"type":"bead.claim_rejected","subject":"b"}`, false, ""},
 		{"deleted", "event", `{"type":"bead.deleted","subject":"b-1"}`, true, "b-1"},
+		{"claim released", "event", `{"type":"bead.claim_released","subject":"b-4","payload":{"bead_id":"b-4","assignee":"w","reason":"r"}}`, true, "b-4"},
+		{"stale claim reclaimed", "event", `{"type":"hook.claim.reclaimed_stale","subject":"b-5"}`, true, "b-5"},
+		{"dead assignee reopened", "event", `{"type":"bead.dead_assignee_reopened","subject":"b-6"}`, true, "b-6"},
+		{"worktree reaped", "event", `{"type":"bead.worktree.reaped","subject":"b"}`, false, ""},
 		{"id from payload", "event", `{"type":"bead.updated","payload":{"bead":{"id":"b-2"}}}`, true, "b-2"},
 		{"long description", "event", `{"type":"bead.updated","subject":"b-3","payload":{"bead":{"description":"` + long + `"}}}`, true, "b-3"},
 	}
