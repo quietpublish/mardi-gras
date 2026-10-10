@@ -2204,6 +2204,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.syncSelection()
 		return m, nil
 
+	case "z":
+		return m.toggleFold()
+	case "Z":
+		return m.toggleAllFolds()
+
 	// Quick actions: status changes (6.1)
 	case "1":
 		return m.quickAction(data.StatusInProgress, "in_progress")
@@ -2893,6 +2898,8 @@ func (m Model) buildPaletteCommands() []components.PaletteCommand {
 		{Name: "Add note", Desc: "Add a note to the selected issue", Key: "", Action: components.ActionAddNote},
 		{Name: "Toggle focus mode", Desc: "Show only my work + top priority", Key: "f", Action: components.ActionToggleFocus},
 		{Name: "Toggle closed issues", Desc: "Show/hide past the stand", Key: "c", Action: components.ActionToggleClosed},
+		{Name: "Collapse/expand children", Desc: "Fold the selected parent's nested issues", Key: "z", Action: components.ActionToggleFold},
+		{Name: "Collapse/expand all", Desc: "Fold or unfold every parent", Key: "Z", Action: components.ActionToggleAllFolds},
 		{Name: "Doctor diagnostics", Desc: "Run bd doctor", Key: "D", Action: components.ActionToggleDoctor},
 		{Name: "Recent changes", Desc: "bd events journal", Key: "E", Action: components.ActionToggleChanges},
 		{Name: "Filter", Desc: "Fuzzy filter the parade list", Key: "/", Action: components.ActionFilter},
@@ -2985,6 +2992,10 @@ func (m Model) executePaletteAction(action components.PaletteAction) (tea.Model,
 		m.parade.ToggleClosed()
 		m.syncSelection()
 		return m, nil
+	case components.ActionToggleFold:
+		return m.toggleFold()
+	case components.ActionToggleAllFolds:
+		return m.toggleAllFolds()
 	case components.ActionFilter:
 		m.filtering = true
 		m.filterInput.Focus()
@@ -3581,6 +3592,7 @@ func (m *Model) rebuildParade() {
 		oldSelectedID = m.parade.SelectedIssue.ID
 	}
 	oldShowClosed := m.parade.ShowClosed
+	oldCollapsed := m.parade.Collapsed
 
 	paradeW := m.parade.Width
 	bodyH := m.parade.Height
@@ -3624,6 +3636,9 @@ func (m *Model) rebuildParade() {
 	m.parade = views.NewParadeWithData(filteredIssues, groups, paradeIssueMap, paradeW, bodyH, m.blockingTypes)
 	m.parade.MatchHighlights = highlights
 	m.parade.Ranks = ranks
+	// Folds outlive the rebuild; a filter or focus mode suspends them so no
+	// match is folded away.
+	m.parade.SetFolds(oldCollapsed, m.filterInput.Value() != "" || m.focusMode)
 	if oldShowClosed {
 		m.parade.ToggleClosed()
 	}
@@ -3650,12 +3665,56 @@ func (m *Model) rebuildParade() {
 	m.syncSelection()
 }
 
+// toggleFold collapses or expands the selected parent's nested children (z).
+// An issue with nothing nested under it, or a parade whose folds a filter or
+// focus mode suspends, says why instead of doing nothing silently.
+func (m Model) toggleFold() (tea.Model, tea.Cmd) {
+	if m.parade.SelectedIssue == nil {
+		return m, nil
+	}
+	if !m.parade.ToggleFold() {
+		text := m.parade.SelectedIssue.ID + " has no children to fold here"
+		if m.parade.FoldsSuspended {
+			text = "Folds are off while filtering or in focus mode"
+		}
+		toast, cmd := components.ShowToast(text, components.ToastInfo, toastDuration)
+		m.toast = toast
+		return m, cmd
+	}
+	m.syncSelection()
+	return m, nil
+}
+
+// toggleAllFolds collapses every parent, or expands them all when every one
+// is already collapsed (Z).
+func (m Model) toggleAllFolds() (tea.Model, tea.Cmd) {
+	collapsed, ok := m.parade.ToggleAllFolds()
+	text := "Expanded all"
+	switch {
+	case !ok && m.parade.FoldsSuspended:
+		text = "Folds are off while filtering or in focus mode"
+	case !ok:
+		text = "No issues with children to fold"
+	case collapsed:
+		text = "Collapsed all"
+	}
+	if ok {
+		m.syncSelection()
+	}
+	toast, cmd := components.ShowToast(text, components.ToastInfo, toastDuration)
+	m.toast = toast
+	return m, cmd
+}
+
 // restoreParadeSelection restores selection by issue ID when possible.
 // Returns true if the ID was found and selection was restored, false if not found.
 func (m *Model) restoreParadeSelection(issueID string) bool {
 	if issueID == "" {
 		return false
 	}
+	// An issue folded under a collapsed parent (one just claimed or created,
+	// say) is unfolded so it can be selected and seen.
+	m.parade.RevealIssue(issueID)
 	for i, item := range m.parade.Items {
 		if item.IsHeader || item.Issue == nil || item.Issue.ID != issueID {
 			continue

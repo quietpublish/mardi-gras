@@ -75,6 +75,7 @@ var (
 	DueSoonBadge  lipgloss.Style
 	DeferredStyle lipgloss.Style
 	CommentBadge  lipgloss.Style
+	FoldBadge     lipgloss.Style
 
 	// Rich dependency styles
 	DepRelated    lipgloss.Style
@@ -309,6 +310,10 @@ func rebuildStyles() {
 
 	// Comment count — muted so discussion reads as context, not urgency.
 	CommentBadge = lipgloss.NewStyle().
+		Foreground(Muted)
+
+	// Folded-children count on a collapsed parent — context, like comments.
+	FoldBadge = lipgloss.NewStyle().
 		Foreground(Muted)
 
 	// Rich dependency styles

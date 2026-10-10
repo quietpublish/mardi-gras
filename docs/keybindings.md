@@ -33,10 +33,14 @@ Keys marked **(orch)** need a live orchestrator — Gas Town (`gt`) or Gas City.
 | `g` / `G`    | Jump to top / bottom                     |
 | `enter`      | Focus detail pane                         |
 | `c`          | Toggle closed issues                      |
+| `z`          | Collapse/expand the selected parent's children |
+| `Z`          | Collapse/expand every parent              |
 | `/`          | Enter filter mode                         |
 | `f`          | Toggle focus mode (my work + top priority)|
 | `a`          | Launch agent (tmux: new pane; orchestrator: sling) |
 | `A`          | Stop the active agent on the issue         |
+
+`z` folds away the issues nested under the selected parent in its section, and the parent shows how many with `▸+3`. A child that sits in another section (its parent Lined Up, the child Rolling) is listed on its own there and stays visible, so folding never hides work in progress. Folds survive reloads, pause while a filter or focus mode is on, and open up again when mg selects an issue inside one, such as a claim or a new issue.
 
 `a` picks its dispatch path from the environment: with an orchestrator it slings, on the Gas City backend it first prompts for a target agent, in tmux without an orchestrator it opens an agent pane, and outside tmux it suspends the TUI. Pressing `a` on an issue that already has a tmux agent switches to that pane instead of launching a second one. `A` asks the orchestrator to unsling when one is present and only falls back to killing the tmux pane when there is none.
 

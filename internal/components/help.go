@@ -131,6 +131,7 @@ func allSections() []helpSection {
 				{key: "g / G", desc: "Jump to top/bottom"},
 				{key: "enter", desc: "Focus detail pane"},
 				{key: "c", desc: "Toggle closed issues"},
+				{key: "z / Z", desc: "Collapse/expand a parent's children / all"},
 				{key: "/", desc: "Enter filter mode (fuzzy)"},
 				{key: "f", desc: "Toggle focus mode (my work + top priority)"},
 				{key: "a", desc: "Launch agent (tmux: split pane)"},
