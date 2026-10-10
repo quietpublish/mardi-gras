@@ -682,9 +682,12 @@ func (d *GCDriver) Assign(ctx context.Context, crewMember, title, issueType, pri
 }
 
 // ConvoyCreateFromEpic creates a convoy from an epic's members. Gas City has no
-// --from-epic flag, so this walks the epic's dependency graph
+// --from-epic flag, so this reads the epic's bead graph
 // (GET /v0/city/{city}/beads/graph/{rootID}) and creates a convoy from the beads
-// it returns, excluding the epic itself.
+// it returns, excluding the epic itself. The graph is the epic's parent-child
+// tree (plus beads stamped with it as their root), not its dependency graph: a
+// child the epic does not depend on is still a member, and a bead the epic
+// merely depends on is not.
 func (d *GCDriver) ConvoyCreateFromEpic(ctx context.Context, name, epicID string) (string, error) {
 	city, err := d.resolveCity(ctx)
 	if err != nil {

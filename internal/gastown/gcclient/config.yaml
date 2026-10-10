@@ -14,7 +14,6 @@ output-options:
     # Phase 2 — read path / roster
     - get-v0-cities
     - get-v0-city-by-city-name-agents
-    - get-v0-city-by-city-name-status
     # Phase 3 — mail + formulas
     - get-v0-city-by-city-name-formulas
     - get-v0-city-by-city-name-mail
@@ -35,6 +34,6 @@ output-options:
     # Sling
     - post-v0-city-by-city-name-sling
     # Assign (create a bead already hooked to a crew member) + convoy-from-epic
-    # (walk the epic's dependency graph, then create a convoy from its members)
+    # (read the epic's parent-child tree, then create a convoy from its members)
     - create-bead
     - get-v0-city-by-city-name-beads-graph-by-root-id
