@@ -17,11 +17,14 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.25"
+          go-version: "1.26"
           # Without this, setup-go serves the runner's cached patch release,
-          # which lags real 1.25.x releases — CI built with 1.25.12 while
+          # which lags real releases — CI once built with 1.25.12 while
           # 1.25.13 was out, so vulncheck flagged five stdlib advisories that
-          # were already fixed upstream.
+          # were already fixed upstream. check-latest cannot help once the
+          # line itself is out of support: Go fixes only the two newest minor
+          # lines, so move this when a new Go minor ships (1.25 was left behind
+          # by 1.27, and vulncheck went red on every PR).
           check-latest: true
 
       - name: Build
@@ -71,11 +74,14 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.25"
+          go-version: "1.26"
           # Without this, setup-go serves the runner's cached patch release,
-          # which lags real 1.25.x releases — CI built with 1.25.12 while
+          # which lags real releases — CI once built with 1.25.12 while
           # 1.25.13 was out, so vulncheck flagged five stdlib advisories that
-          # were already fixed upstream.
+          # were already fixed upstream. check-latest cannot help once the
+          # line itself is out of support: Go fixes only the two newest minor
+          # lines, so move this when a new Go minor ships (1.25 was left behind
+          # by 1.27, and vulncheck went red on every PR).
           check-latest: true
 
       - name: Test
@@ -88,11 +94,14 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.25"
+          go-version: "1.26"
           # Without this, setup-go serves the runner's cached patch release,
-          # which lags real 1.25.x releases — CI built with 1.25.12 while
+          # which lags real releases — CI once built with 1.25.12 while
           # 1.25.13 was out, so vulncheck flagged five stdlib advisories that
-          # were already fixed upstream.
+          # were already fixed upstream. check-latest cannot help once the
+          # line itself is out of support: Go fixes only the two newest minor
+          # lines, so move this when a new Go minor ships (1.25 was left behind
+          # by 1.27, and vulncheck went red on every PR).
           check-latest: true
 
       - uses: golangci/golangci-lint-action@v9
@@ -106,18 +115,22 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.25"
+          go-version: "1.26"
           # Without this, setup-go serves the runner's cached patch release,
-          # which lags real 1.25.x releases — CI built with 1.25.12 while
+          # which lags real releases — CI once built with 1.25.12 while
           # 1.25.13 was out, so vulncheck flagged five stdlib advisories that
-          # were already fixed upstream.
+          # were already fixed upstream. check-latest cannot help once the
+          # line itself is out of support: Go fixes only the two newest minor
+          # lines, so move this when a new Go minor ships (1.25 was left behind
+          # by 1.27, and vulncheck went red on every PR).
           check-latest: true
 
       - name: Install govulncheck
-        # Pinned, not @latest: x/vuln v1.8.0 (2026-09-08) requires Go 1.26, and
-        # with go-version "1.25" + GOTOOLCHAIN=local the install itself fails
-        # before any scan runs. Bump this alongside the Go line above.
-        run: go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+        # Pinned, not @latest: a new x/vuln can require a newer Go than the
+        # line above (v1.8.0 needed 1.26 while CI was on 1.25), and with
+        # GOTOOLCHAIN=local the install then fails before any scan runs.
+        # Bump this alongside the Go line above.
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
 
       - name: Run govulncheck
         run: govulncheck ./...
