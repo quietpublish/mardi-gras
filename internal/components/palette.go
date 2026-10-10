@@ -28,6 +28,8 @@ const (
 	ActionAddNote
 	ActionToggleFocus
 	ActionToggleClosed
+	ActionToggleFold
+	ActionToggleAllFolds
 	ActionFilter
 	ActionLaunchAgent
 	ActionKillAgent

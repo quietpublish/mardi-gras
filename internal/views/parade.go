@@ -46,6 +46,7 @@ type ParadeItem struct {
 	Eval       *data.DepEval
 	RenderedID string // cached styled ID (heat color)
 	Depth      int    // indent level within this section (see data.OrderHierarchically)
+	Hidden     int    // descendants folded away under this row (0 unless collapsed)
 }
 
 // isSelectable returns true if this item can receive the cursor.
@@ -78,6 +79,19 @@ type Parade struct {
 	Selected        map[string]bool    // multi-selected issue IDs
 	MatchHighlights map[string][]int   // issueID -> matched char indices in title (fuzzy search)
 	Ranks           map[string]float64 // issueID -> judge's urgency (0 Park … 3 Do now); focus mode only
+
+	// Collapsed holds the parents whose nested children are folded away (z).
+	// It is keyed by issue ID so it survives the app rebuilding the parade on
+	// every reload. A fold hides only the children nested under the parent in
+	// its own section: a child that sits in another section renders as a root
+	// there and stays visible, so collapsing never hides work in progress.
+	Collapsed map[string]bool
+	// FoldsSuspended shows every row regardless of Collapsed. The app sets it
+	// while a filter or focus mode is on, so a match is never folded away.
+	FoldsSuspended bool
+
+	parents  map[string]bool   // issues with children nested under them in their section
+	hiddenBy map[string]string // folded-away issue -> the collapsed ancestor hiding it
 }
 
 // NewParade creates a parade view from a set of issues.
@@ -128,6 +142,8 @@ func NewParadeWithData(
 // rebuildItems flattens groups into the renderable item list.
 func (p *Parade) rebuildItems() {
 	p.Items = nil
+	p.parents = make(map[string]bool)
+	p.hiddenBy = make(map[string]string)
 	for _, sec := range sections() {
 		issues := p.Groups[sec.Status]
 		if len(issues) == 0 {
@@ -137,43 +153,162 @@ func (p *Parade) rebuildItems() {
 		// Header (top border)
 		p.Items = append(p.Items, ParadeItem{IsHeader: true, Section: sec})
 
-		// Closed section: show collapsed count or expanded list
-		if sec.Status == data.ParadePastTheStand {
-			if p.ShowClosed {
-				ordered, depth := data.OrderHierarchically(issues)
-				for _, iss := range ordered {
-					eval := iss.EvaluateDependencies(p.issueMap, p.blockingTypes)
-					ageDays := int(iss.Age().Hours() / 24)
-					agePct := min(ageDays*100/30, 100)
-					idStyle := ui.GradientHeat.At(agePct)
-					p.Items = append(p.Items, ParadeItem{
-						Issue:      iss,
-						Section:    sec,
-						Eval:       &eval,
-						RenderedID: idStyle.Render(iss.ID),
-						Depth:      depth[iss.ID],
-					})
-				}
-			}
-		} else {
-			ordered, depth := data.OrderHierarchically(issues)
-			for _, iss := range ordered {
-				eval := iss.EvaluateDependencies(p.issueMap, p.blockingTypes)
-				ageDays := int(iss.Age().Hours() / 24)
-				agePct := min(ageDays*100/30, 100)
-				idStyle := ui.GradientHeat.At(agePct)
-				p.Items = append(p.Items, ParadeItem{
-					Issue:      iss,
-					Section:    sec,
-					Eval:       &eval,
-					RenderedID: idStyle.Render(iss.ID),
-					Depth:      depth[iss.ID],
-				})
-			}
+		// The closed section lists its issues only when expanded (c).
+		if sec.Status != data.ParadePastTheStand || p.ShowClosed {
+			p.appendSectionIssues(sec, issues)
 		}
 
 		// Footer (bottom border)
 		p.Items = append(p.Items, ParadeItem{IsFooter: true, Section: sec})
+	}
+}
+
+// appendSectionIssues adds one section's issues in hierarchical order,
+// folding away the children of collapsed parents. data.OrderHierarchically
+// puts every child directly beneath its parent, so a parent's nested children
+// are exactly the run of deeper rows that follows it.
+func (p *Parade) appendSectionIssues(sec paradeSection, issues []data.Issue) {
+	ordered, depth := data.OrderHierarchically(issues)
+	for i := 0; i < len(ordered); i++ {
+		iss := ordered[i]
+		d := depth[iss.ID]
+		end := i + 1
+		for end < len(ordered) && depth[ordered[end].ID] > d {
+			end++
+		}
+		if end > i+1 {
+			p.parents[iss.ID] = true
+		}
+
+		eval := iss.EvaluateDependencies(p.issueMap, p.blockingTypes)
+		ageDays := int(iss.Age().Hours() / 24)
+		agePct := min(ageDays*100/30, 100)
+		item := ParadeItem{
+			Issue:      iss,
+			Section:    sec,
+			Eval:       &eval,
+			RenderedID: ui.GradientHeat.At(agePct).Render(iss.ID),
+			Depth:      d,
+		}
+		if end > i+1 && p.Collapsed[iss.ID] && !p.FoldsSuspended {
+			item.Hidden = end - (i + 1)
+			for _, child := range ordered[i+1 : end] {
+				p.hiddenBy[child.ID] = iss.ID
+			}
+			i = end - 1
+		}
+		p.Items = append(p.Items, item)
+	}
+}
+
+// SetFolds installs fold state carried over from a previous parade and
+// rebuilds the rows with it. The app rebuilds the parade on every reload, so
+// without this a fold would undo itself within seconds.
+func (p *Parade) SetFolds(collapsed map[string]bool, suspended bool) {
+	p.Collapsed = collapsed
+	p.FoldsSuspended = suspended
+	if len(collapsed) == 0 || suspended {
+		return // nothing folds, so the rows built already stand
+	}
+	p.rebuildItems()
+	p.clampScroll()
+	p.Cursor, p.SelectedIssue = 0, nil
+	for i, item := range p.Items {
+		if item.isSelectable() {
+			p.Cursor, p.SelectedIssue = i, item.Issue
+			break
+		}
+	}
+}
+
+// ToggleFold collapses or expands the nested children of the issue at the
+// cursor. It reports false, changing nothing, when that issue has no children
+// in its section (or folds are suspended) — the caller says so.
+func (p *Parade) ToggleFold() bool {
+	if p.FoldsSuspended || p.SelectedIssue == nil {
+		return false
+	}
+	id := p.SelectedIssue.ID
+	if !p.parents[id] {
+		return false
+	}
+	if p.Collapsed == nil {
+		p.Collapsed = make(map[string]bool)
+	}
+	if p.Collapsed[id] {
+		delete(p.Collapsed, id)
+	} else {
+		p.Collapsed[id] = true
+	}
+	p.refold(id)
+	return true
+}
+
+// ToggleAllFolds collapses every parent when any is open, and otherwise
+// expands them all. It reports whether the parade now shows folds, and false
+// with nothing changed when there are no parents (or folds are suspended).
+func (p *Parade) ToggleAllFolds() (collapsed, ok bool) {
+	if p.FoldsSuspended || len(p.parents) == 0 {
+		return false, false
+	}
+	anyOpen := false
+	for id := range p.parents {
+		if !p.Collapsed[id] {
+			anyOpen = true
+			break
+		}
+	}
+	if anyOpen {
+		if p.Collapsed == nil {
+			p.Collapsed = make(map[string]bool)
+		}
+		for id := range p.parents {
+			p.Collapsed[id] = true
+		}
+	} else {
+		p.Collapsed = nil
+	}
+	selectedID := ""
+	if p.SelectedIssue != nil {
+		selectedID = p.SelectedIssue.ID
+	}
+	p.refold(selectedID)
+	return anyOpen, true
+}
+
+// RevealIssue expands whichever collapsed ancestors hide id, so the app can
+// select an issue that was folded away (one it just claimed or created).
+// It reports whether anything changed; the caller re-selects afterwards.
+func (p *Parade) RevealIssue(id string) bool {
+	changed := false
+	for {
+		anc, hidden := p.hiddenBy[id]
+		if !hidden {
+			return changed
+		}
+		delete(p.Collapsed, anc)
+		p.rebuildItems()
+		p.clampScroll()
+		changed = true
+	}
+}
+
+// refold rebuilds the rows after a fold change and puts the cursor back on
+// keepID — or, when that row was just folded away, on the collapsed parent
+// that now stands in for it.
+func (p *Parade) refold(keepID string) {
+	p.rebuildItems()
+	p.clampScroll()
+	if anc, hidden := p.hiddenBy[keepID]; hidden {
+		keepID = anc
+	}
+	for i, item := range p.Items {
+		if item.isSelectable() && item.Issue.ID == keepID {
+			p.Cursor = i
+			p.SelectedIssue = item.Issue
+			p.ensureVisible()
+			return
+		}
 	}
 }
 
@@ -646,6 +781,14 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 		commentWidth = lipgloss.Width(commentBadge)
 	}
 
+	// Fold badge — a collapsed parent says how many rows it hides (z).
+	foldBadge := ""
+	foldWidth := 0
+	if item.Hidden > 0 {
+		foldBadge = " " + ui.FoldBadge.Render(ui.SymFolded+"+"+strconv.Itoa(item.Hidden))
+		foldWidth = lipgloss.Width(foldBadge)
+	}
+
 	// Build the "next blocker" hint for stalled issues
 	var rawHint string
 	hintStyle := lipgloss.NewStyle().Foreground(ui.Muted)
@@ -661,7 +804,7 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 	// hint: the issue's own title is the primary scent, the hint is context
 	// (audit #2). The hint degrades to id-only before character truncation.
 	titleFloor := min(lipgloss.Width(issue.Title), max(innerWidth/3, 12))
-	maxHint := innerWidth - 16 - titleFloor - agentWidth - rankWidth - indentWidth - dueWidth - deferWidth - commentWidth - orphanWidth - zombieWidth
+	maxHint := innerWidth - 16 - titleFloor - agentWidth - rankWidth - indentWidth - dueWidth - deferWidth - commentWidth - foldWidth - orphanWidth - zombieWidth
 	if maxHint < 0 {
 		maxHint = 0
 	}
@@ -685,7 +828,7 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 	}
 
 	hintLen := lipgloss.Width(hint)
-	maxTitle := innerWidth - 16 - hintLen - agentWidth - rankWidth - changeWidth - selectWidth - indentWidth - dueWidth - deferWidth - commentWidth - orphanWidth - zombieWidth
+	maxTitle := innerWidth - 16 - hintLen - agentWidth - rankWidth - changeWidth - selectWidth - indentWidth - dueWidth - deferWidth - commentWidth - foldWidth - orphanWidth - zombieWidth
 	if maxTitle < 0 {
 		maxTitle = 0
 	}
@@ -732,7 +875,7 @@ func (p *Parade) renderIssue(item ParadeItem, selected bool, distFromCursor int)
 		renderedTitle,
 		prioStr,
 	)
-	line += dueBadge + deferBadge + commentBadge + hint
+	line += foldBadge + dueBadge + deferBadge + commentBadge + hint
 
 	leftBorder := sec.BorderVertical
 	rightBorder := sec.BorderVertical

@@ -44,6 +44,9 @@ const (
 	// Comments
 	SymComment = "💬"
 
+	// Hierarchy: a collapsed parent (z) shows how many rows it folds away
+	SymFolded = "▸"
+
 	// Due dates
 	SymOverdue  = "▲"
 	SymDeferred = "⏸"
