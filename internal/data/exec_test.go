@@ -105,6 +105,49 @@ func TestSchemaSkewHintUnknownVersion(t *testing.T) {
 	}
 }
 
+// TestSchemaSkewHintMigrateConsent pins the opposite direction from the other
+// cases: a bd newer than the database that refuses to migrate it without
+// consent (beads main after v1.3.x, schema v69). The first case is the real
+// --json stderr payload going through wrapExitError, the path a bd list
+// failure takes at startup.
+func TestSchemaSkewHintMigrateConsent(t *testing.T) {
+	jsonStderr := `{
+  "error": "database schema is at v66; this bd requires v69 (3 pending migration(s)), and bd no longer migrates a database without explicit consent",
+  "hint": "Operator decision required: this database is at schema v66 and this bd requires v69. Migrating is ONE-WAY.",
+  "migrate_consent": {"current_version": 66, "required_version": 69, "pending": 3, "severity": "blocking"},
+  "schema_version": 1
+}`
+	cases := map[string]error{
+		"json stderr": wrapExitError("bd list --json", &exec.ExitError{Stderr: []byte(jsonStderr)}),
+		"error text": errors.New("bd list --json: database schema is at v66; this bd requires v69 (3 pending migration(s)), " +
+			"and bd no longer migrates a database without explicit consent — run `bd migrate schema`, or keep using a bd release that matches schema v66"),
+		"operator text": errors.New("bd list --json: This database is at schema v66; this bd release uses schema v69."),
+	}
+	for name, err := range cases {
+		got := SchemaSkewHint(err)
+		for _, want := range []string{"bd migrate schema", "schema v66", "v69", "ONE-WAY", "matches its schema"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("%s: SchemaSkewHint = %q, want it to mention %q", name, got, want)
+			}
+		}
+		// The rollback recovery and the skew stopgap belong to the database-ahead
+		// direction; here they would be wrong. bd keeps its consent variable out
+		// of the refusal, and so does mg.
+		for _, bad := range []string{"RECOVERY-1.2.1", "BD_IGNORE_SCHEMA_SKEW", "BD_ALLOW_MIGRATE"} {
+			if strings.Contains(got, bad) {
+				t.Errorf("%s: SchemaSkewHint = %q, must not mention %q", name, got, bad)
+			}
+		}
+	}
+}
+
+func TestSchemaSkewHintMigrateConsentUnparsedVersions(t *testing.T) {
+	got := SchemaSkewHint(errors.New("bd list --json: bd no longer migrates a database without explicit consent"))
+	if !strings.Contains(got, "bd migrate schema") || !strings.Contains(got, "an older schema") {
+		t.Errorf("SchemaSkewHint(no versions) = %q, want the consent advice without version numbers", got)
+	}
+}
+
 func TestSchemaSkewHintUnrelatedErrors(t *testing.T) {
 	// Anything else must fall through to the generic Dolt-server advice.
 	cases := []error{
