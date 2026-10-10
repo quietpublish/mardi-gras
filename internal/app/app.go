@@ -145,6 +145,7 @@ type Model struct {
 	qaMode  string // "comment", "note", "assign", "label", "link"
 	qaInput textinput.Model
 	qaID    string // issue ID for the action
+	qaFrom  string // the issue's assignee when an assign prompt opened, for bd's --if-assignee guard
 
 	// Convoy creation state
 	convoyCreating bool
@@ -386,7 +387,7 @@ func editIssueCmd(r components.EditFormResult) tea.Cmd {
 			{"title", func() error { return data.UpdateTitle(id, r.Title) }},
 			{"type", func() error { return data.SetType(id, data.IssueType(r.Type)) }},
 			{"priority", func() error { return data.SetPriority(id, components.ParsePriority(r.Priority)) }},
-			{"status", func() error { return data.SetStatus(id, data.Status(r.Status)) }},
+			{"status", func() error { return data.SetStatus(id, data.Status(r.FromStatus), data.Status(r.Status)) }},
 			{"description", func() error { return data.UpdateDescription(id, r.Description) }},
 		}
 		for _, s := range steps {
@@ -547,6 +548,13 @@ func (m Model) allProblems() []gastown.Problem {
 func (m *Model) startQuickAction(mode, issueID, prompt, placeholder string) tea.Cmd {
 	m.qaMode = mode
 	m.qaID = issueID
+	m.qaFrom = ""
+	for _, iss := range m.issues {
+		if iss.ID == issueID {
+			m.qaFrom = iss.Assignee
+			break
+		}
+	}
 	m.qaInput = textinput.New()
 	m.qaInput.Prompt = ui.InputPrompt.Render(prompt)
 	m.qaInput.Placeholder = placeholder
@@ -1139,6 +1147,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				mode := m.qaMode
 				id := m.qaID
+				from := m.qaFrom
 				value := m.qaInput.Value()
 				m.qaMode = ""
 				if value == "" {
@@ -1155,7 +1164,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						err = data.AddNote(id, value)
 						action = "noted"
 					case "assign":
-						err = data.SetAssignee(id, value)
+						err = data.SetAssignee(id, from, value)
 						action = "assigned to " + value
 					case "label":
 						err = data.AddLabel(id, value)
@@ -1822,6 +1831,17 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(toastCmd, refresh)
 
 	case mutateResultMsg:
+		if errors.Is(msg.err, data.ErrChangedElsewhere) {
+			// bd's guard caught a change mg never saw, so nothing was written.
+			// Show the issue as it is now rather than an error to retry.
+			toast, toastCmd := components.ShowToast(
+				fmt.Sprintf("%s changed elsewhere \u2014 %s not saved, reloaded", msg.issueID, msg.action),
+				components.ToastWarn, toastDuration,
+			)
+			m.toast = toast
+			m.lastFileMod = time.Time{}
+			return m, tea.Batch(toastCmd, m.refreshAfterMutation(msg.issueID))
+		}
 		if msg.err != nil {
 			toast, cmd := components.ShowToast(
 				fmt.Sprintf("Failed: %s %s \u2014 %s", msg.action, msg.issueID, msg.err),
@@ -2561,7 +2581,7 @@ func (m Model) quickAction(status data.Status, label string) (tea.Model, tea.Cmd
 			var lastErr error
 			for _, iss := range issues {
 				if iss.Status != status {
-					if err := data.SetStatus(iss.ID, status); err != nil {
+					if err := data.SetStatus(iss.ID, iss.Status, status); err != nil {
 						lastErr = err
 					}
 				}
@@ -2582,6 +2602,7 @@ func (m Model) quickAction(status data.Status, label string) (tea.Model, tea.Cmd
 		return m, nil
 	}
 	issueID := issue.ID
+	from := issue.Status
 	return m, func() tea.Msg {
 		var err error
 		action := label
@@ -2590,7 +2611,7 @@ func (m Model) quickAction(status data.Status, label string) (tea.Model, tea.Cmd
 			err = data.ClaimIssue(issueID)
 			action = "claimed · " + label
 		} else {
-			err = data.SetStatus(issueID, status)
+			err = data.SetStatus(issueID, from, status)
 		}
 		return mutateResultMsg{issueID: issueID, action: action, err: err}
 	}
