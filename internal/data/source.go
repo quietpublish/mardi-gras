@@ -58,6 +58,18 @@ func BdVersionWarning(version string) string {
 	return ""
 }
 
+// BdHasRecomputeBlocked reports whether a bd version, as `bd context --json`
+// reports it, has `bd recompute-blocked` (added in v1.3.0). An unparseable or
+// unknown version reports false, so mg never suggests a command that may not
+// exist.
+func BdHasRecomputeBlocked(version string) bool {
+	var major, minor int
+	if _, err := fmt.Sscanf(strings.TrimPrefix(strings.TrimSpace(version), "v"), "%d.%d", &major, &minor); err != nil {
+		return false
+	}
+	return major > 1 || (major == 1 && minor >= 3)
+}
+
 // parseBdVersionWarning returns a warning string if the version is known-broken,
 // or "" otherwise. Accepts output like "bd version 0.59.0".
 func parseBdVersionWarning(output string) string {

@@ -846,6 +846,7 @@ type pruneResultMsg struct {
 type claimNextReadyMsg struct {
 	issue *data.Issue // nil when nothing was claimable
 	err   error
+	stale string // set when bd found nothing but mg sees claimable work (staleBlockedHint)
 }
 
 // changeIndicatorExpiredMsg clears change indicators after timeout.
@@ -1803,10 +1804,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		if msg.issue == nil {
-			toast, cmd := components.ShowToast(
-				"No ready work to claim",
-				components.ToastInfo, toastDuration,
-			)
+			text, level := "No ready work to claim", components.ToastInfo
+			if msg.stale != "" {
+				text, level = "bd found no ready work, but "+msg.stale, components.ToastWarn
+			}
+			toast, cmd := components.ShowToast(text, level, toastDuration)
 			m.toast = toast
 			return m, cmd
 		}
@@ -2628,6 +2630,15 @@ func (m Model) closeSelectedIssue() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	issueID := issue.ID
+	// Judge what's claimable as it will be after the close: the closed issue
+	// drops out, and anything it blocked may come free.
+	after := slices.Clone(m.issues)
+	for i := range after {
+		if after[i].ID == issueID {
+			after[i].Status = data.StatusClosed
+		}
+	}
+	stale := m.staleBlockedHint(after)
 	return m, func() tea.Msg {
 		claimedID, err := data.CloseAndClaimNext(issueID)
 		if errors.Is(err, data.ErrClaimUnreadable) {
@@ -2640,6 +2651,9 @@ func (m Model) closeSelectedIssue() (tea.Model, tea.Cmd) {
 			action = fmt.Sprintf("closed → claimed %s", claimedID)
 		} else if err == nil {
 			action = "closed (no ready work)"
+			if stale != "" {
+				return mutateResultMsg{issueID: issueID, action: action, warn: stale}
+			}
 		}
 		return mutateResultMsg{issueID: issueID, action: action, claimedID: claimedID, err: err}
 	}
@@ -2682,10 +2696,35 @@ func (m Model) runPrune(dryRun bool) (tea.Model, tea.Cmd) {
 // runClaimNextReady atomically claims the highest-priority ready issue via
 // `bd ready --claim --json` and selects the result in the parade.
 func (m Model) runClaimNextReady() (tea.Model, tea.Cmd) {
+	stale := m.staleBlockedHint(m.issues)
 	return m, func() tea.Msg {
 		issue, err := data.ClaimNextReady()
-		return claimNextReadyMsg{issue: issue, err: err}
+		msg := claimNextReadyMsg{issue: issue, err: err}
+		if issue == nil && err == nil {
+			msg.stale = stale
+		}
+		return msg
 	}
+}
+
+// staleBlockedHint returns a short note for when bd finds nothing to claim
+// although mg, judging dependencies itself, sees claimable issues in issues,
+// or "" when it doesn't. bd judges by a stored is_blocked flag, which
+// migration 0059 (bd 1.3.0 and 1.3.1, on the embedded engine and Dolt servers
+// before 2.4.0) can leave set on issues that aren't blocked; they then vanish
+// from bd ready until `bd recompute-blocked` repairs the flag (beads #7037).
+// mg's own parade is unaffected, so the disagreement is visible here. It is
+// worked out when the key is pressed, from the issues mg showed, and only
+// offered on a bd that has the command.
+func (m Model) staleBlockedHint(issues []data.Issue) string {
+	if m.beadsContext == nil || !data.BdHasRecomputeBlocked(m.beadsContext.BdVersion) {
+		return ""
+	}
+	n := data.CountClaimable(issues, m.blockingTypes, time.Now())
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d look ready here — try bd recompute-blocked", n)
 }
 
 // resumeCodexSession launches `codex resume --last` in a new tmux pane,

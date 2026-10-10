@@ -342,3 +342,22 @@ func TestAgeLabelEdgeCaseNoCreatedAt(t *testing.T) {
 		t.Fatalf("snapshot ages = %d/%d, want 0 for an unknown timestamp", s.AgeDays, s.SinceUpdateDays)
 	}
 }
+
+func TestCountClaimable(t *testing.T) {
+	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	later, earlier := now.Add(24*time.Hour), now.Add(-24*time.Hour)
+	issues := []Issue{
+		{ID: "a-1", Status: StatusOpen},                                                                   // claimable
+		{ID: "a-2", Status: StatusOpen, Assignee: "alice"},                                                // held
+		{ID: "a-3", Status: StatusInProgress},                                                             // not open
+		{ID: "a-4", Status: StatusOpen, DeferUntil: &later},                                               // deferred
+		{ID: "a-5", Status: StatusOpen, DeferUntil: &earlier},                                             // deferral over: claimable
+		{ID: "a-6", Status: StatusOpen, Dependencies: []Dependency{{DependsOnID: "a-3", Type: "blocks"}}}, // blocked
+		{ID: "a-7", Status: StatusOpen, Dependencies: []Dependency{{DependsOnID: "a-8", Type: "blocks"}}}, // blocker closed: claimable
+		{ID: "a-8", Status: StatusClosed},
+		{ID: "a-9", Status: StatusOpen, Dependencies: []Dependency{{DependsOnID: "a-3", Type: "related"}}}, // non-blocking edge: claimable
+	}
+	if got := CountClaimable(issues, DefaultBlockingTypes, now); got != 4 {
+		t.Errorf("CountClaimable = %d, want 4 (a-1, a-5, a-7, a-9)", got)
+	}
+}
