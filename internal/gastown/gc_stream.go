@@ -32,12 +32,27 @@ import (
 // endpoint's models would add thousands of generated lines for one URL.
 
 // gcBeadEventTypes are the stream event types that change what bd list
-// returns. The other bead.* types (claim rejections, worktree reaping) don't.
+// returns. Claim rejections and worktree reaping don't, so they are left out.
+//
+// The last three each move an assignee, and all carry the bead ID as subject:
+//   - bead.claim_released (Gas City v1.5.0+): gc hook --claim gave back a claim
+//     it won. The release is a write through the agent's own bd context, which
+//     reaches the stream as bead.updated only when the supervisor rescans, so
+//     this is the only prompt signal for it.
+//   - hook.claim.reclaimed_stale: gc hook --claim took over a lease-expired
+//     claim, through the same bd context.
+//   - bead.dead_assignee_reopened: the reconciler reopened a bead whose
+//     assignee's session is gone. The controller's store usually announces the
+//     write as bead.updated as well; a duplicate trigger costs nothing, because
+//     a waiting trigger absorbs the next one (send).
 var gcBeadEventTypes = map[string]bool{
-	"bead.created": true,
-	"bead.updated": true,
-	"bead.closed":  true,
-	"bead.deleted": true,
+	"bead.created":                true,
+	"bead.updated":                true,
+	"bead.closed":                 true,
+	"bead.deleted":                true,
+	"bead.claim_released":         true,
+	"hook.claim.reclaimed_stale":  true,
+	"bead.dead_assignee_reopened": true,
 }
 
 // Stream tuning. Variables so tests can shorten them; each watch copies them
