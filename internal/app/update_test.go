@@ -52,6 +52,29 @@ func TestMutateResultSuccess(t *testing.T) {
 	}
 }
 
+// TestMutateResultChangedElsewhere: when bd's guard refuses a write because the
+// issue moved on, mg warns (not an error to retry) and reloads to show it.
+func TestMutateResultChangedElsewhere(t *testing.T) {
+	issues := []data.Issue{testIssue("open-1", data.StatusOpen)}
+	m := New(issues, data.Source{}, data.DefaultBlockingTypes)
+	model, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	got := model.(Model)
+
+	err := fmt.Errorf("%w: bd update: status mismatch", data.ErrChangedElsewhere)
+	model, cmd := got.Update(mutateResultMsg{issueID: "open-1", action: "in_progress", err: err})
+	got = model.(Model)
+
+	if !strings.Contains(got.toast.Message, "open-1 changed elsewhere") || strings.Contains(got.toast.Message, "Failed") {
+		t.Errorf("toast = %q, want the changed-elsewhere warning", got.toast.Message)
+	}
+	if got.toast.Level != components.ToastWarn {
+		t.Errorf("toast level = %v, want a warning", got.toast.Level)
+	}
+	if cmd == nil {
+		t.Error("want a reload command after a refused write")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // TestMutateResultClosed
 // ---------------------------------------------------------------------------

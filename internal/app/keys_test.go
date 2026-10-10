@@ -794,6 +794,17 @@ func TestPromptsSuggestFromTheBacklog(t *testing.T) {
 		t.Fatalf("link suggestions = %v, want other issues", got)
 	}
 
+	// The assign prompt remembers who held each issue when it opened, for bd's
+	// --if-assignee guard.
+	m.startQuickAction("assign", "mg-1", "assign> ", "Assignee name...")
+	if m.qaFrom != "alice" {
+		t.Fatalf("qaFrom = %q, want mg-1's assignee", m.qaFrom)
+	}
+	m.startQuickAction("assign", "mg-2", "assign> ", "Assignee name...")
+	if m.qaFrom != "" {
+		t.Fatalf("qaFrom = %q, want empty for unassigned mg-2", m.qaFrom)
+	}
+
 	m.startQuickAction("label", "mg-1", "label> ", "Label name...")
 	for _, k := range []tea.KeyPressMsg{{Code: 'b', Text: "b"}, {Code: tea.KeyTab}} {
 		model, _ := m.Update(k)

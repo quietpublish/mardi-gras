@@ -21,8 +21,12 @@ type EditFormResult struct {
 	Priority    string
 	Status      string
 	Description string
-	Changed     []string
-	Cancelled   bool
+	// FromStatus is the issue's status when the form opened, verbatim. Status
+	// can't stand in for it: the selector offers only open, in progress and
+	// closed, so any other status opens as Open.
+	FromStatus string
+	Changed    []string
+	Cancelled  bool
 }
 
 // Has reports whether field was changed.
@@ -69,7 +73,8 @@ type EditForm struct {
 	width       int
 	height      int
 
-	orig EditFormResult // the issue as opened, to work out what changed
+	orig       EditFormResult // the issue as opened, to work out what changed
+	fromStatus string         // the issue's status as opened, for bd's --if-status guard
 }
 
 // NewEditForm creates an edit form pre-populated from an existing issue.
@@ -113,6 +118,7 @@ func NewEditForm(width, height int, issue *data.Issue) EditForm {
 		height:      height,
 	}
 	ef.orig = ef.values()
+	ef.fromStatus = string(issue.Status)
 	return ef
 }
 
@@ -237,6 +243,7 @@ func (ef *EditForm) focus(field int) {
 // save validates the title and reports what changed.
 func (ef EditForm) save() (EditForm, tea.Cmd) {
 	res := ef.values()
+	res.FromStatus = ef.fromStatus
 	if res.Title == "" {
 		ef.err = "Title is required"
 		ef.focus(editFieldTitle)

@@ -2,6 +2,9 @@ package data
 
 import (
 	"errors"
+	"os/exec"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -74,14 +77,105 @@ func TestSlugify(t *testing.T) {
 func TestSetStatusArgs(t *testing.T) {
 	calls, restore := mockExecCapture(nil)
 	defer restore()
-	err := SetStatus("mg-42", StatusInProgress)
+	err := SetStatus("mg-42", "", StatusInProgress)
 	if err != nil {
 		t.Fatalf("SetStatus() error = %v", err)
 	}
 	args := (*calls)[0]
-	// Should be: bd update mg-42 --status=in_progress
+	// No known prior status, so no guard: bd update mg-42 --status=in_progress
 	if len(args) != 4 || args[0] != "bd" || args[1] != "update" || args[2] != "mg-42" || args[3] != "--status=in_progress" {
 		t.Errorf("args = %v", args)
+	}
+}
+
+func TestSetStatusGuardedArgs(t *testing.T) {
+	calls, restore := mockRunCapture(nil, nil)
+	defer restore()
+	if err := SetStatus("mg-42", StatusOpen, StatusInProgress); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
+	want := "bd update mg-42 --status=in_progress --if-status=open"
+	if got := strings.Join((*calls)[0], " "); got != want {
+		t.Errorf("ran %q, want %q", got, want)
+	}
+}
+
+// bdExit produces a real *exec.ExitError carrying stderr and an exit code,
+// the shape runWithTimeout returns when bd fails.
+func bdExit(t *testing.T, code int, stderr string) error {
+	t.Helper()
+	// A constant script with the values as positional arguments, so nothing
+	// is spliced into the shell source.
+	_, err := exec.Command("sh", "-c", `printf '%s\n' "$1" >&2; exit "$2"`, "sh", stderr, strconv.Itoa(code)).Output()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != code {
+		t.Fatalf("bdExit: got %v, want an ExitError with code %d", err, code)
+	}
+	return err
+}
+
+// A guard mismatch (bd exit 13) must come back as ErrChangedElsewhere with bd's
+// reason, and must not fall back to the unguarded write, which would overwrite
+// the change the guard just caught.
+func TestGuardedUpdateMismatch(t *testing.T) {
+	t.Cleanup(func() { casGuardsUnsupported.Store(false) })
+	runCalls, restoreRun := mockRunCapture(nil, bdExit(t, 13, `Error updating mg-42: status mismatch: mg-42 has status "closed", expected "open"`))
+	defer restoreRun()
+	execCalls, restoreExec := mockExecCapture(nil)
+	defer restoreExec()
+
+	err := SetStatus("mg-42", StatusOpen, StatusInProgress)
+	if !errors.Is(err, ErrChangedElsewhere) {
+		t.Fatalf("err = %v, want ErrChangedElsewhere", err)
+	}
+	if !strings.Contains(err.Error(), `has status "closed"`) {
+		t.Errorf("err = %q, want bd's mismatch reason", err)
+	}
+	if len(*runCalls) != 1 || len(*execCalls) != 0 {
+		t.Errorf("ran %v then %v, want the guarded write only", *runCalls, *execCalls)
+	}
+	if casGuardsUnsupported.Load() {
+		t.Error("a mismatch must not latch the guards off")
+	}
+}
+
+// bd before v1.3.0 rejects the guard flags. mg then writes unguarded, as it
+// always did, and stops probing for the rest of the process.
+func TestGuardedUpdateFallsBackOnOldBd(t *testing.T) {
+	t.Cleanup(func() { casGuardsUnsupported.Store(false) })
+	runCalls, restoreRun := mockRunCapture(nil, bdExit(t, 1, "Error: unknown flag: --if-assignee"))
+	defer restoreRun()
+	execCalls, restoreExec := mockExecCapture(nil)
+	defer restoreExec()
+
+	for range 2 {
+		if err := SetAssignee("mg-42", "", "alice"); err != nil {
+			t.Fatalf("SetAssignee() = %v, want the unguarded fallback to succeed", err)
+		}
+	}
+	if len(*runCalls) != 1 {
+		t.Errorf("guarded probes = %d, want 1 (latched after the first)", len(*runCalls))
+	}
+	want := "bd update mg-42 --assignee=alice"
+	if len(*execCalls) != 2 || strings.Join((*execCalls)[1], " ") != want {
+		t.Errorf("unguarded writes = %v, want two of %q", *execCalls, want)
+	}
+}
+
+// Any other failure is reported as is, without a second, unguarded attempt.
+func TestGuardedUpdateOtherFailure(t *testing.T) {
+	t.Cleanup(func() { casGuardsUnsupported.Store(false) })
+	_, restoreRun := mockRunCapture(nil, bdExit(t, 1, "Error: issue mg-42 not found"))
+	defer restoreRun()
+	execCalls, restoreExec := mockExecCapture(nil)
+	defer restoreExec()
+
+	err := SetAssignee("mg-42", "", "alice")
+	if err == nil || errors.Is(err, ErrChangedElsewhere) || !strings.Contains(err.Error(), "not found") {
+		t.Errorf("err = %v, want bd's not-found error", err)
+	}
+	if len(*execCalls) != 0 {
+		t.Errorf("ran %v, want no unguarded retry", *execCalls)
 	}
 }
 
@@ -284,23 +378,23 @@ func TestAddNoteExecError(t *testing.T) {
 // --- SetAssignee tests ---
 
 func TestSetAssigneeArgs(t *testing.T) {
-	calls, restore := mockExecCapture(nil)
+	calls, restore := mockRunCapture(nil, nil)
 	defer restore()
-	err := SetAssignee("mg-42", "alice")
+	err := SetAssignee("mg-42", "", "alice")
 	if err != nil {
 		t.Fatalf("SetAssignee() error = %v", err)
 	}
-	args := (*calls)[0]
-	// Should be: bd update mg-42 --assignee=alice
-	if len(args) != 4 || args[0] != "bd" || args[1] != "update" || args[2] != "mg-42" || args[3] != "--assignee=alice" {
-		t.Errorf("args = %v", args)
+	// Always guarded; an empty --if-assignee means "expected unassigned".
+	want := "bd update mg-42 --assignee=alice --if-assignee="
+	if got := strings.Join((*calls)[0], " "); got != want {
+		t.Errorf("ran %q, want %q", got, want)
 	}
 }
 
 func TestSetAssigneeError(t *testing.T) {
-	_, restore := mockExecCapture(errors.New("not found"))
+	restore := mockRun(nil, errors.New("not found"))
 	defer restore()
-	err := SetAssignee("mg-42", "alice")
+	err := SetAssignee("mg-42", "", "alice")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

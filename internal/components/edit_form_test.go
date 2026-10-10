@@ -191,6 +191,18 @@ func TestEditFormEnterOnTitleSaves(t *testing.T) {
 	}
 }
 
+// The selector can only show open, in progress or closed, so a blocked issue
+// opens as Open. The guard must still compare against what bd actually has.
+func TestEditFormFromStatusEdgeCaseOffSelector(t *testing.T) {
+	issue := data.Issue{ID: "mg-1", Title: "t", Priority: data.PriorityMedium, Status: data.Status("blocked")}
+	ef := NewEditForm(80, 24, &issue)
+	_, cmd := ef.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	res, ok := cmd().(EditFormResult)
+	if !ok || res.FromStatus != "blocked" {
+		t.Fatalf("FromStatus = %q, want the issue's real status", res.FromStatus)
+	}
+}
+
 func TestEditFormEnterEdgeCaseEmptyTitleSaysWhy(t *testing.T) {
 	issue := data.Issue{ID: "mg-1", Title: "x", Priority: data.PriorityMedium}
 	ef := NewEditForm(80, 24, &issue)

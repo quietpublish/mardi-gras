@@ -121,7 +121,7 @@ func TestAddDependencyRejectsInvalidDependsOn(t *testing.T) {
 }
 
 func TestSetStatusRejectsInvalidID(t *testing.T) {
-	err := SetStatus("../etc", StatusOpen)
+	err := SetStatus("../etc", "", StatusOpen)
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
@@ -133,7 +133,7 @@ func TestSetStatusRejectsInvalidID(t *testing.T) {
 func TestMutatorsPassDottedChildIDToBd(t *testing.T) {
 	for _, id := range []string{"infra-h0xb.9", "infra-h0xb.16", "infra-h0xb.9.1", "my_project-hbu.1", "MyApp-d0g"} {
 		calls, restore := mockExecCapture(nil)
-		err := SetStatus(id, StatusOpen)
+		err := SetStatus(id, "", StatusOpen)
 		got := *calls
 		restore()
 		if err != nil {

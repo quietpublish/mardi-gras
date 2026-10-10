@@ -4,15 +4,64 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
+	"sync/atomic"
 )
 
-// SetStatus runs `bd update <id> --status=<status>` to change an issue's status.
-func SetStatus(issueID string, status Status) error {
+// ErrChangedElsewhere marks a write bd refused because the field no longer
+// held the value mg showed: someone (an agent, another terminal) changed the
+// issue first. Nothing was written. The caller should reload, not retry.
+var ErrChangedElsewhere = errors.New("changed elsewhere")
+
+// exitGuardMismatch is bd's exit code for a failed --if-status/--if-assignee
+// guard (bd v1.3.0+); every other failure exits 1.
+const exitGuardMismatch = 13
+
+// casGuardsUnsupported latches once this bd is known to reject the --if-*
+// guards (anything before v1.3.0), so an older binary costs one wasted probe
+// per process instead of a doubled call on every write.
+var casGuardsUnsupported atomic.Bool
+
+// guardedUpdate runs `bd update <id> <set> <guard>`, where guard is an
+// --if-status or --if-assignee compare-and-swap check: bd applies set only if
+// the field still holds the value mg last showed, and exits 13 otherwise, which
+// becomes ErrChangedElsewhere. On a bd too old for the guards it falls back to
+// the unguarded write, which is what mg always did before.
+func guardedUpdate(issueID, set, guard string) error {
+	if !casGuardsUnsupported.Load() {
+		// runWithTimeout, not execWithTimeout: Output() keeps bd's stderr on the
+		// ExitError, so the mismatch reason reaches the toast.
+		_, err := runWithTimeout(timeoutShort, "bd", "update", issueID, set, guard)
+		if err == nil {
+			return nil
+		}
+		wrapped := wrapExitError("bd update", err)
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == exitGuardMismatch {
+			return fmt.Errorf("%w: %w", ErrChangedElsewhere, wrapped)
+		}
+		if !strings.Contains(wrapped.Error(), "unknown flag") {
+			// A real failure, not a capability gap — don't retry and double the cost.
+			return wrapped
+		}
+		casGuardsUnsupported.Store(true)
+	}
+	return execWithTimeout(timeoutShort, "bd", "update", issueID, set)
+}
+
+// SetStatus runs `bd update <id> --status=<to>` to change an issue's status.
+// from is the status mg showed; when set, bd refuses the write with
+// ErrChangedElsewhere if the issue has moved on since. An empty from writes
+// unguarded.
+func SetStatus(issueID string, from, to Status) error {
 	if err := ValidateIssueID(issueID); err != nil {
 		return err
 	}
-	return execWithTimeout(timeoutShort, "bd", "update", issueID, "--status="+string(status))
+	if from == "" {
+		return execWithTimeout(timeoutShort, "bd", "update", issueID, "--status="+string(to))
+	}
+	return guardedUpdate(issueID, "--status="+string(to), "--if-status="+string(from))
 }
 
 // ClaimIssue runs `bd update <id> --claim` to atomically set assignee and status to in_progress.
@@ -149,13 +198,17 @@ func AddNote(issueID, body string) error {
 	return wrapExitError("bd note", err)
 }
 
-// SetAssignee runs `bd update <id> --assignee=<name>` to assign an issue.
-func SetAssignee(issueID, assignee string) error {
+// SetAssignee runs `bd update <id> --assignee=<to>` to assign an issue. from
+// is the assignee mg showed, "" for unassigned, and is always checked: bd
+// refuses the write with ErrChangedElsewhere if someone else took the issue
+// first, rather than silently taking it from them.
+func SetAssignee(issueID, from, to string) error {
 	if err := ValidateIssueID(issueID); err != nil {
 		return err
 	}
-	assignee = sanitizeText(assignee, maxTextLen)
-	return execWithTimeout(timeoutShort, "bd", "update", issueID, "--assignee="+assignee)
+	to = sanitizeText(to, maxTextLen)
+	from = sanitizeText(from, maxTextLen)
+	return guardedUpdate(issueID, "--assignee="+to, "--if-assignee="+from)
 }
 
 // AddLabel runs `bd label add <id> -- <label>` to add a label to an issue.
