@@ -30,7 +30,9 @@ checksum:
 # Homebrew cask (replaces the deprecated `brews` formula key; removal lands in
 # GoReleaser v2.16). Casks ship the pre-built binary directly. mg's binaries are
 # unsigned, so the post-install hook strips the macOS quarantine xattr to avoid
-# a Gatekeeper block.
+# a Gatekeeper block. The hook uses `install_steps` (GoReleaser v2.19+), which
+# writes Homebrew's `postflight_steps` DSL; the raw-Ruby `install` key writes
+# `postflight`, which Homebrew deprecated and warns about on every brew command.
 homebrew_casks:
   - repository:
       owner: matt-wright86
@@ -44,9 +46,9 @@ homebrew_casks:
       - mg.1
     hooks:
       post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/mg"]
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/mg"]
           end
 
 changelog:

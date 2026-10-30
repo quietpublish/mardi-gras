@@ -46,6 +46,11 @@ jobs:
 
       - uses: goreleaser/goreleaser-action@v7
         with:
+          # Needs v2.19+ for homebrew_casks hooks `install_steps`
+          # (.goreleaser.yaml); older versions reject the key. "~> v2" resolves
+          # to the latest v2, which is already past that. Don't write "~> v2.19":
+          # the action reads it as node-semver ~2.19 (>=2.19.0 <2.20.0) and would
+          # pin releases to 2.19.x.
           version: "~> v2"
           args: release --clean
         env:
