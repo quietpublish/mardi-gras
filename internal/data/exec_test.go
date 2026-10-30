@@ -148,6 +148,47 @@ func TestSchemaSkewHintMigrateConsentUnparsedVersions(t *testing.T) {
 	}
 }
 
+// TestSchemaSkewHintSchemaBehind pins bd's read-only-open refusal of a database
+// BEHIND the binary (beads main, SchemaBehindError). It starts "schema version
+// mismatch" like the database-AHEAD refusal, so it must not get that advice.
+func TestSchemaSkewHintSchemaBehind(t *testing.T) {
+	err := errors.New("bd list --json: schema version mismatch: database is at v66, binary expects v74; " +
+		"bd does not migrate a database without explicit consent — run `bd migrate schema` in that workspace to migrate, " +
+		"keep using a bd release that matches schema v66, or set BD_IGNORE_SCHEMA_SKEW=1 to read anyway (queries touching newer schema may fail)")
+	got := SchemaSkewHint(err)
+	for _, want := range []string{"bd migrate schema", "schema v66", "v74", "ONE-WAY", "this bd is NEWER"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("SchemaSkewHint = %q, want it to mention %q", got, want)
+		}
+	}
+	for _, bad := range []string{"Upgrade THIS bd", "ahead of the bd binary", "RECOVERY-1.2.1"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("SchemaSkewHint = %q, must not mention %q", got, bad)
+		}
+	}
+}
+
+// TestSchemaSkewHintSchemaBehindGateway pins the gateway wording of the same
+// refusal. It carries no consent phrase, so it used to fall through to the
+// database-AHEAD advice and tell the user to upgrade the newer side. The
+// gateway owns the schema, so `bd migrate schema` is not a remedy either.
+func TestSchemaSkewHintSchemaBehindGateway(t *testing.T) {
+	err := errors.New("bd list --json: schema version mismatch: database is at v66, binary expects v74; " +
+		"the gateway server owns this database's schema and bd never migrates it — ask the server administrator " +
+		"to upgrade the database, or keep using a bd release that matches schema v66")
+	got := SchemaSkewHint(err)
+	for _, want := range []string{"gateway server", "administrator", "schema v66", "v74", "this bd is NEWER"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("SchemaSkewHint = %q, want it to mention %q", got, want)
+		}
+	}
+	for _, bad := range []string{"Upgrade THIS bd", "ahead of the bd binary", "bd migrate schema", "RECOVERY-1.2.1"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("SchemaSkewHint = %q, must not mention %q", got, bad)
+		}
+	}
+}
+
 func TestSchemaSkewHintUnrelatedErrors(t *testing.T) {
 	// Anything else must fall through to the generic Dolt-server advice.
 	cases := []error{

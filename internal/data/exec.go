@@ -228,6 +228,13 @@ var schemaSkewVersionRe = regexp.MustCompile(`database is at v(\d+)`)
 // schema v66; this bd release uses schema v69").
 var migrateConsentRe = regexp.MustCompile(`(?i)database (?:schema )?is at (?:schema )?v(\d+); this bd (?:requires|release uses schema) v(\d+)`)
 
+// schemaBehindRe extracts both schema versions from bd's read-only-open refusal
+// of a database BEHIND the binary ("schema version mismatch: database is at
+// v66, binary expects v74; ..."). It shares the "schema version mismatch"
+// prefix with the database-AHEAD refusal, which bd words "binary knows up to"
+// instead, so "binary expects" is what tells the two directions apart.
+var schemaBehindRe = regexp.MustCompile(`(?i)database is at v(\d+), binary expects v(\d+)`)
+
 // migrateConsentHint covers the direction SchemaSkewHint's other cases do not:
 // the bd binary is NEWER than the database, and bd (from the release after
 // v1.3.x) no longer migrates a database without explicit consent. In embedded
@@ -239,6 +246,9 @@ var migrateConsentRe = regexp.MustCompile(`(?i)database (?:schema )?is at (?:sch
 func migrateConsentHint(msg string) string {
 	lower := strings.ToLower(msg)
 	m := migrateConsentRe.FindStringSubmatch(msg)
+	if m == nil {
+		m = schemaBehindRe.FindStringSubmatch(msg)
+	}
 	if m == nil && !strings.Contains(lower, "without explicit consent") {
 		return ""
 	}
@@ -257,12 +267,37 @@ func migrateConsentHint(msg string) string {
 		"    (the one the rest of your setup runs) instead of this one.\n"
 }
 
+// gatewaySchemaHint covers the same direction as migrateConsentHint (bd NEWER
+// than the database) for a database a gateway server serves. The gateway owns
+// that schema and bd never migrates it, so `bd migrate schema` is not an
+// option: the upgrade is the server administrator's to make. bd's wording
+// carries no consent phrase, only "schema version mismatch", so without this
+// case the message falls through to the database-AHEAD advice and tells the
+// user to upgrade a bd that is already the newer side.
+func gatewaySchemaHint(msg string) string {
+	if !strings.Contains(strings.ToLower(msg), "gateway server owns") {
+		return ""
+	}
+	dbV, binV := "an older schema", "a newer one"
+	if m := schemaBehindRe.FindStringSubmatch(msg); m != nil {
+		dbV, binV = "schema v"+m[1], "v"+m[2]
+	}
+	return "This is a Beads schema gap, not a connection problem — this bd is NEWER\n" +
+		"than the database (" + dbV + ", this bd uses " + binV + "). A gateway server\n" +
+		"serves this database and owns its schema, so neither bd nor mg upgrades it.\n\n" +
+		"Choose one:\n\n" +
+		"  • Ask the gateway server's administrator to upgrade the database.\n" +
+		"  • Keep using the bd release that matches its schema instead of this one.\n"
+}
+
 // SchemaSkewHint returns remediation text when err carries one of bd's
 // schema-version refusals, or "" for any other failure.
 //
-// A newer bd refusing to migrate an older database without consent gets its own
-// advice (migrateConsentHint). The rest of this comment is about the opposite
-// direction, bd's "schema version mismatch", where the database is AHEAD.
+// A newer bd refusing an older database gets its own advice: migrateConsentHint,
+// or gatewaySchemaHint when a gateway server owns the schema. Both run first,
+// because bd's read-only refusal in that direction also starts "schema version
+// mismatch". The rest of this comment is about the opposite direction, where
+// the database is AHEAD.
 //
 // Two different causes produce this error and they want OPPOSITE remedies, so
 // the hint keys on the database version bd reports:
@@ -277,6 +312,9 @@ func migrateConsentHint(msg string) string {
 func SchemaSkewHint(err error) string {
 	if err == nil {
 		return ""
+	}
+	if hint := gatewaySchemaHint(err.Error()); hint != "" {
+		return hint
 	}
 	if hint := migrateConsentHint(err.Error()); hint != "" {
 		return hint
