@@ -3801,6 +3801,9 @@ func (m *Model) recomputeVelocity() {
 func (m *Model) propagateAgentState() {
 	m.parade.ActiveAgents = m.activeAgents
 	m.parade.TownStatus = m.townStatus
+	m.parade.OrchestratorAvailable = m.orchestratorAvailable()
+	m.parade.DirectAgent = m.agentAvail
+	m.parade.InTmux = m.inTmux
 	m.detail.ActiveAgents = m.activeAgents
 	m.detail.TownStatus = m.townStatus
 	m.header.AgentCount = len(m.activeAgents)

@@ -80,6 +80,17 @@ type Parade struct {
 	MatchHighlights map[string][]int   // issueID -> matched char indices in title (fuzzy search)
 	Ranks           map[string]float64 // issueID -> judge's urgency (0 Park … 3 Do now); focus mode only
 
+	// OrchestratorAvailable gates the orchestrator-only section hints. The app
+	// sets it from orchestratorAvailable(), so it follows Gas Town and Gas City
+	// alike; the view never inspects the driver itself.
+	OrchestratorAvailable bool
+
+	// DirectAgent and InTmux gate the hints for a machine with no orchestrator:
+	// `a` launches an agent itself when a runtime is installed, and `A` can only
+	// stop one by killing its tmux window.
+	DirectAgent bool
+	InTmux      bool
+
 	// Collapsed holds the parents whose nested children are folded away (z).
 	// It is keyed by issue ID so it survives the app rebuilding the parade on
 	// every reload. A fold hides only the children nested under the parent in
@@ -584,8 +595,67 @@ func (p *Parade) renderBorderTop(sec paradeSection) string {
 
 	fillLen := max(p.Width-prefixW-titleWidth-1-countW, 0)
 	fill := borderStyle.Render(" " + strings.Repeat(ui.BoxHorizontal, fillLen))
+	if hint := p.fitHints(sec, p.Width-prefixW-titleWidth-countW); hint != "" {
+		rest := p.Width - prefixW - titleWidth - countW - 4 - lipgloss.Width(hint) - 1
+		fill = borderStyle.Render(" "+strings.Repeat(ui.BoxHorizontal, 2)+" ") +
+			lipgloss.NewStyle().Foreground(ui.Dim).Render(hint) +
+			borderStyle.Render(" "+strings.Repeat(ui.BoxHorizontal, rest))
+	}
 
 	return prefix + coloredTitle + fill + countPart
+}
+
+// sectionHints lists the keys that act on rows in a section, in the order
+// they are dropped from the right when the header is short of room. Each key
+// is checked against its handler in app.go. Nudge, unsling, sling and formula
+// need an orchestrator; claim, open and close are plain bd mutations. With no
+// orchestrator, `a` launches an agent directly and `A` stops one in tmux.
+func (p *Parade) sectionHints(sec paradeSection) []string {
+	orch := p.OrchestratorAvailable
+	var hints []string
+	switch sec.Status {
+	case data.ParadeRolling:
+		switch {
+		case orch:
+			hints = append(hints, "n nudge", "A unsling")
+		case p.InTmux:
+			hints = append(hints, "A stop")
+		}
+		hints = append(hints, "3 close")
+	case data.ParadeLinedUp:
+		hints = append(hints, p.launchHints()...)
+		hints = append(hints, "1 claim")
+	case data.ParadeStalled:
+		hints = append(hints, p.launchHints()...)
+		hints = append(hints, "2 open")
+	}
+	return hints
+}
+
+// launchHints names what `a` (and `s`) do on a row that has no agent yet.
+func (p *Parade) launchHints() []string {
+	switch {
+	case p.OrchestratorAvailable:
+		return []string{"a sling", "s formula"}
+	case p.DirectAgent:
+		return []string{"a agent"}
+	}
+	return nil
+}
+
+// fitHints joins as many of the section's hints as fit in avail columns (the
+// room between the title and the count), dropping from the right. It returns
+// "" when not even the first fits, so the title and count are never displaced.
+func (p *Parade) fitHints(sec paradeSection, avail int) string {
+	hints := p.sectionHints(sec)
+	for n := len(hints); n > 0; n-- {
+		text := strings.Join(hints[:n], " · ")
+		// " ── " + hint + " " + at least one ─ before the count.
+		if avail >= 4+lipgloss.Width(text)+1+1 {
+			return text
+		}
+	}
+	return ""
 }
 
 // renderBorderBottom builds a bottom border line: ╰────────────────────╯
