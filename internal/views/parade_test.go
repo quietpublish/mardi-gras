@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -355,6 +356,110 @@ func TestRenderBorderTopCountInCornerFitsWidth(t *testing.T) {
 			}
 			if strings.ContainsAny(line, "⁰¹²³⁴⁵⁶⁷⁸⁹") {
 				t.Fatalf("superscript count left in %q", line)
+			}
+		}
+	}
+}
+
+// setOrchestrator flips Parade.OrchestratorAvailable by reflection so a missing
+// field fails the test by assertion rather than by a compile error.
+func setOrchestrator(t *testing.T, p *Parade, on bool) {
+	t.Helper()
+	f := reflect.ValueOf(p).Elem().FieldByName("OrchestratorAvailable")
+	if !f.IsValid() || f.Kind() != reflect.Bool {
+		t.Fatal("Parade has no OrchestratorAvailable bool")
+	}
+	f.SetBool(on)
+}
+
+func sectionHeader(p *Parade, title string) string {
+	for _, sec := range sections() {
+		if sec.Title == title {
+			return ansi.Strip(p.renderBorderTop(sec))
+		}
+	}
+	return ""
+}
+
+func TestSectionHintsOrchestrator(t *testing.T) {
+	p := NewParade(paradeIssues(), 120, 20, data.DefaultBlockingTypes)
+	setOrchestrator(t, &p, true)
+	want := map[string][]string{
+		"Rolling":  {"n nudge", "A unsling", "3 close"},
+		"Lined Up": {"a sling", "s formula", "1 claim"},
+		"Stalled":  {"a sling", "s formula", "2 open"},
+	}
+	for title, hints := range want {
+		line := sectionHeader(&p, title)
+		for _, h := range hints {
+			if !strings.Contains(line, h) {
+				t.Fatalf("%s header %q lacks hint %q", title, line, h)
+			}
+		}
+	}
+}
+
+func TestSectionHintsBeadsOnly(t *testing.T) {
+	p := NewParade(paradeIssues(), 120, 20, data.DefaultBlockingTypes)
+	setOrchestrator(t, &p, false)
+	for _, title := range []string{"Rolling", "Lined Up", "Stalled"} {
+		line := sectionHeader(&p, title)
+		for _, h := range []string{"sling", "formula", "nudge", "unsling"} {
+			if strings.Contains(line, h) {
+				t.Fatalf("%s header %q shows orchestrator hint %q without an orchestrator", title, line, h)
+			}
+		}
+	}
+	if line := sectionHeader(&p, "Lined Up"); !strings.Contains(line, "1 claim") {
+		t.Fatalf("Lined Up header %q should keep the claim hint", line)
+	}
+}
+
+func TestSectionHintsDirectAgentWithoutOrchestrator(t *testing.T) {
+	p := NewParade(paradeIssues(), 120, 20, data.DefaultBlockingTypes)
+	setOrchestrator(t, &p, false)
+	if line := sectionHeader(&p, "Lined Up"); strings.Contains(line, "a agent") {
+		t.Fatalf("Lined Up header %q hints a launch with no agent runtime", line)
+	}
+	if line := sectionHeader(&p, "Rolling"); strings.Contains(line, "A stop") {
+		t.Fatalf("Rolling header %q hints a stop outside tmux", line)
+	}
+	p.DirectAgent, p.InTmux = true, true
+	for _, title := range []string{"Lined Up", "Stalled"} {
+		if line := sectionHeader(&p, title); !strings.Contains(line, "a agent") {
+			t.Fatalf("%s header %q lacks the direct launch hint", title, line)
+		}
+	}
+	if line := sectionHeader(&p, "Rolling"); !strings.Contains(line, "A stop") {
+		t.Fatalf("Rolling header %q lacks the tmux stop hint", line)
+	}
+	setOrchestrator(t, &p, true)
+	if line := sectionHeader(&p, "Rolling"); strings.Contains(line, "A stop") {
+		t.Fatalf("Rolling header %q shows the tmux stop hint under an orchestrator", line)
+	}
+}
+
+func TestSectionHintsPastTheStandKeepsPressC(t *testing.T) {
+	p := NewParade(paradeIssues(), 120, 20, data.DefaultBlockingTypes)
+	setOrchestrator(t, &p, true)
+	if line := sectionHeader(&p, "Past the Stand"); !strings.Contains(line, "press c") {
+		t.Fatalf("Past the Stand header %q lost press c", line)
+	}
+}
+
+func TestSectionHintsNarrowWidths(t *testing.T) {
+	p := NewParade(paradeIssues(), 120, 20, data.DefaultBlockingTypes)
+	setOrchestrator(t, &p, true)
+	for w := 12; w <= 120; w++ {
+		p.Width = w
+		for _, sec := range sections() {
+			line := ansi.Strip(p.renderBorderTop(sec))
+			if got := lipgloss.Width(line); got != w {
+				t.Fatalf("width %d, %s: border is %d wide: %q", w, sec.Title, got, line)
+			}
+			want := fmt.Sprintf(" %d %s", len(p.Groups[sec.Status]), ui.BoxTopRight)
+			if !strings.HasSuffix(line, want) {
+				t.Fatalf("width %d, %s: %q should end with count %q", w, sec.Title, line, want)
 			}
 		}
 	}
